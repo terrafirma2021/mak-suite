@@ -1,0 +1,11 @@
+build/
+build-*/
+out/
+bin/
+obj/
+target/
+__pycache__/
+*.pyc
+.vs/
+*.user
+*.suo

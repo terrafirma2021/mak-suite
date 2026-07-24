@@ -1,0 +1,49 @@
+[package]
+name = "makxd"
+version = "0.3.3"
+edition = "2024"
+rust-version = "1.85"
+description = "Rust library for controlling MAKXD USB HID interceptor devices"
+license = "MIT"
+repository = "https://github.com/terrafirma2021/mak-suite"
+homepage = "https://github.com/terrafirma2021/mak-suite"
+documentation = "https://docs.rs/makxd"
+readme = "README.md"
+keywords = ["makxd", "hid", "mouse", "serial", "usb"]
+categories = ["hardware-support", "api-bindings"]
+
+[lib]
+name = "makxd"
+path = "src/lib.rs"
+
+[features]
+default = []
+async = ["dep:tokio", "dep:tokio-serial"]
+batch = []
+extras = []
+profile = []
+mock = []
+
+[dependencies]
+serialport = "4"
+thiserror = "2"
+crossbeam-channel = "0.5"
+
+# Optional (async feature)
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros"], optional = true }
+tokio-serial = { version = "5", optional = true }
+
+[[example]]
+name = "basic"
+
+[[example]]
+name = "comprehensive"
+required-features = ["async", "batch", "extras", "profile"]
+
+[[example]]
+name = "mock"
+required-features = ["mock"]
+
+[[example]]
+name = "benchmark"
+required-features = ["batch", "extras"]

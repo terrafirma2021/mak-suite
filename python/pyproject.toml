@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "makxd"
+version = "2.3.0"
+description = "Python API for MAKXD USB HID devices"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-only"
+authors = [{ name = "terrafirma2021" }]
+dependencies = [
+    "pyserial>=3.5",
+    "rich>=14",
+]
+
+[project.scripts]
+makxd = "makxd.__main__:main"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["makxd*"]
+exclude = ["build*", "tests*"]
+
+[tool.setuptools.package-data]
+makxd = ["py.typed", "*.pyi"]
