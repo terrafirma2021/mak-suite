@@ -27,7 +27,7 @@ jobs:
       id-token: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -94,10 +94,15 @@ jobs:
       id-token: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Rust
         run: rustup update stable --no-self-update
+
+      - name: Install Linux serial dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libudev-dev
 
       - name: Test Rust crate
         run: cargo test --manifest-path rust/Cargo.toml --all-features
