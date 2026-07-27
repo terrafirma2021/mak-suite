@@ -18,7 +18,10 @@
 #endif
 
 #include <string>
+#include <string_view>
 #include <vector>
+#include <array>
+#include <memory>
 #include <atomic>
 #include <cstdint>
 #include <mutex>
@@ -47,6 +50,8 @@ typedef SSIZE_T ssize_t;
 
 namespace makxd {
 
+    class TransportEncryption;
+
     struct PendingCommand {
         std::string command;
         std::promise<std::string> promise;
@@ -54,16 +59,22 @@ namespace makxd {
         std::chrono::milliseconds timeout;
         int command_id;
         bool expect_response;
+        bool encrypted;
+        std::array<uint8_t, 12> transaction_nonce{};
 
-        PendingCommand(int id, const std::string& cmd, bool expect_resp, std::chrono::milliseconds to)
-            : command(cmd), expect_response(expect_resp), timeout(to), command_id(id) {
+        PendingCommand(int id, const std::string& cmd, bool expect_resp,
+            std::chrono::milliseconds to, bool encrypted_transport,
+            const std::array<uint8_t, 12>& nonce)
+            : command(cmd), expect_response(expect_resp), timeout(to), command_id(id),
+              encrypted(encrypted_transport), transaction_nonce(nonce) {
             timestamp = std::chrono::steady_clock::now();
         }
     };
 
     class MAKXD_API SerialPort {
     public:
-        SerialPort();
+        SerialPort(bool encryptionEnabled = false,
+            std::string_view encryptionKey = {});
         ~SerialPort();
 
         [[nodiscard]] bool open(const std::string& port, uint32_t baudRate);
@@ -116,6 +127,7 @@ namespace makxd {
         std::atomic<uint32_t> m_baudRate;
         std::atomic<uint32_t> m_timeout;
         std::atomic<bool> m_isOpen;
+        std::unique_ptr<TransportEncryption> m_transportEncryption;
         mutable std::mutex m_mutex;
         mutable std::mutex m_nativeHandleMutex;
 
@@ -152,7 +164,8 @@ namespace makxd {
         void listenerLoop(std::stop_token stopToken);
         void processIncomingData();
         void handleButtonData(uint8_t data);
-        void processResponse(const std::string& response);
+        void processResponse(const std::string& response,
+            const std::array<uint8_t, 12>* transactionNonce = nullptr);
         void cleanupTimedOutCommands();
         int generateCommandId();
 

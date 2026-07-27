@@ -44,6 +44,8 @@ async fn main() -> Result<()> {
         reconnect: true,
         reconnect_backoff: Duration::from_millis(100),
         fire_and_forget: false,
+        encryption_enabled: false,
+        encryption_key: None,
     };
     println!(
         "  DeviceConfig: timeout={:?}, reconnect={}, ff={}",

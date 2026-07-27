@@ -37,13 +37,17 @@ class MakxdController:
     
     def __init__(self, fallback_com_port: str = "", debug: bool = False, 
                  send_init: bool = True, auto_reconnect: bool = True, 
-                 override_port: bool = False) -> None:
+                 override_port: bool = False,
+                 encryption_enabled: bool = False,
+                 encryption_key: str = "") -> None:
         self.transport = SerialTransport(
             fallback_com_port, 
             debug=debug, 
             send_init=send_init,
             auto_reconnect=auto_reconnect,
-            override_port=override_port
+            override_port=override_port,
+            encryption_enabled=encryption_enabled,
+            encryption_key=encryption_key,
         )
         self.mouse = Mouse(self.transport)
         self.keyboard = Keyboard(self.transport)
@@ -530,14 +534,18 @@ class MakxdController:
 
 def create_controller(fallback_com_port: str = "", debug: bool = False, 
                      send_init: bool = True, auto_reconnect: bool = True, 
-                     override_port: bool = False) -> MakxdController:
+                     override_port: bool = False,
+                     encryption_enabled: bool = False,
+                     encryption_key: str = "") -> MakxdController:
     """Create and connect a controller synchronously"""
     makxd = MakxdController(
         fallback_com_port, 
         debug=debug, 
         send_init=send_init,
         auto_reconnect=auto_reconnect,
-        override_port=override_port
+        override_port=override_port,
+        encryption_enabled=encryption_enabled,
+        encryption_key=encryption_key,
     )
     makxd.connect()
     return makxd
@@ -545,14 +553,18 @@ def create_controller(fallback_com_port: str = "", debug: bool = False,
 
 async def create_async_controller(fallback_com_port: str = "", debug: bool = False,
                                  send_init: bool = True, auto_reconnect: bool = True, 
-                                 override_port: bool = False) -> MakxdController:
+                                 override_port: bool = False,
+                                 encryption_enabled: bool = False,
+                                 encryption_key: str = "") -> MakxdController:
     """Create and connect a controller asynchronously"""
     makxd = MakxdController(
         fallback_com_port,
         debug=debug,
         send_init=send_init,
         auto_reconnect=auto_reconnect,
-        override_port=override_port
+        override_port=override_port,
+        encryption_enabled=encryption_enabled,
+        encryption_key=encryption_key,
     )
     await makxd.connect()
     return makxd

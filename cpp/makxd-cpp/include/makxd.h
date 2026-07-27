@@ -137,7 +137,8 @@ namespace makxd {
         using ConnectionCallback = std::function<void(bool)>;
 
         // Constructor and destructor
-        Device();
+        Device(bool encryptionEnabled = false,
+            std::string_view encryptionKey = {});
         ~Device();
 
         // Static methods

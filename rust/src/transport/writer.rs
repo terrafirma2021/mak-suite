@@ -5,18 +5,21 @@ use std::sync::{Arc, Mutex};
 use crossbeam_channel as channel;
 use serialport::SerialPort;
 
+use super::PendingResponse;
+
 pub(crate) struct WritePayload {
     pub data: Vec<u8>,
     pub response_tx: Option<channel::Sender<Vec<u8>>>,
+    pub expected_nonce: Option<[u8; 12]>,
 }
 
 pub(crate) fn writer_thread(
     mut port: Box<dyn SerialPort>,
     rx: channel::Receiver<WritePayload>,
-    pending_responses: Arc<Mutex<VecDeque<channel::Sender<Vec<u8>>>>>,
+    pending_responses: Arc<Mutex<VecDeque<PendingResponse>>>,
 ) {
     let mut coalesced = Vec::with_capacity(512);
-    let mut response_txs: Vec<channel::Sender<Vec<u8>>> = Vec::new();
+    let mut responses: Vec<PendingResponse> = Vec::new();
 
     loop {
         // Block on first payload.
@@ -26,28 +29,34 @@ pub(crate) fn writer_thread(
         };
 
         coalesced.clear();
-        response_txs.clear();
+        responses.clear();
 
         coalesced.extend_from_slice(&payload.data);
         if let Some(tx) = payload.response_tx {
-            response_txs.push(tx);
+            responses.push(PendingResponse {
+                response_tx: tx,
+                expected_nonce: payload.expected_nonce,
+            });
         }
 
         // Drain additional pending payloads for coalescing.
         while let Ok(payload) = rx.try_recv() {
             coalesced.extend_from_slice(&payload.data);
             if let Some(tx) = payload.response_tx {
-                response_txs.push(tx);
+                responses.push(PendingResponse {
+                    response_tx: tx,
+                    expected_nonce: payload.expected_nonce,
+                });
             }
         }
 
         // Register response receivers BEFORE writing — at 4 Mbaud the device
         // can respond before write_all returns, and the reader must already
         // have the sender in the queue to deliver the response.
-        if !response_txs.is_empty() {
+        if !responses.is_empty() {
             let mut pending = pending_responses.lock().unwrap();
-            for tx in response_txs.drain(..) {
-                pending.push_back(tx);
+            for response in responses.drain(..) {
+                pending.push_back(response);
             }
         }
 

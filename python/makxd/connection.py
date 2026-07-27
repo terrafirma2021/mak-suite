@@ -10,6 +10,7 @@ import logging
 import asyncio
 from .errors import MakxdConnectionError, MakxdTimeoutError
 from .enums import MouseButton
+from .transport_encryption import EncryptedFrameDecoder, TransportEncryption
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class PendingCommand:
     timestamp: float
     expect_response: bool = True
     timeout: float = 0.1
+    transaction_nonce: bytes = b""
 
 @dataclass
 class ParsedResponse:
@@ -69,13 +71,22 @@ class SerialTransport:
 
     def __init__(self, fallback: str = "", debug: bool = False, 
                  send_init: bool = True, auto_reconnect: bool = True, 
-                 override_port: bool = False) -> None:
+                 override_port: bool = False,
+                 encryption_enabled: bool = False,
+                 encryption_key: str = "") -> None:
 
         self._fallback_com_port = fallback
         self.debug = debug
         self.send_init = send_init
         self.auto_reconnect = auto_reconnect
         self.override_port = override_port
+        self._transport_encryption = TransportEncryption(
+            encryption_enabled,
+            encryption_key,
+        )
+        self._encrypted_frame_decoder = EncryptedFrameDecoder(
+            self._transport_encryption,
+        )
         
         if not hasattr(SerialTransport, '_thread_counter'):
             SerialTransport._thread_counter = 0
@@ -199,17 +210,44 @@ class SerialTransport:
 
         self._last_button_mask = byte_val
 
-    def _process_ascii_response(self, body: bytes) -> None:
+    def _process_ascii_response(
+        self,
+        body: bytes,
+        transaction_nonce: bytes = b"",
+    ) -> None:
         content = parse_ascii_response_body(body)
         if content:
-            self._process_pending_commands(content)
+            self._process_pending_commands(content, transaction_nonce)
 
-    def _process_pending_commands(self, content: str) -> None:
+    def _process_pending_commands(
+        self,
+        content: str,
+        transaction_nonce: bytes = b"",
+    ) -> None:
         if not self._pending_commands:
             return
 
         with self._command_lock:
             if not self._pending_commands:
+                return
+
+            if self._transport_encryption.enabled:
+                matching_id = next(
+                    (
+                        command_id
+                        for command_id, pending_command in self._pending_commands.items()
+                        if pending_command.transaction_nonce == transaction_nonce
+                    ),
+                    None,
+                )
+                if matching_id is None:
+                    return
+                pending = self._pending_commands[matching_id]
+                if pending.future.done():
+                    return
+                result = pending.command if content == pending.command else content
+                pending.future.set_result(result)
+                del self._pending_commands[matching_id]
                 return
 
             oldest_id = next(iter(self._pending_commands))
@@ -221,6 +259,38 @@ class SerialTransport:
             result = pending.command if content == pending.command else content
             pending.future.set_result(result)
             del self._pending_commands[oldest_id]
+
+    def _wire_command(self, command: str) -> tuple[bytes, bytes]:
+        plaintext = f"{command}\r\n".encode("ascii")
+        return self._transport_encryption.encode_command(plaintext)
+
+    def _process_encrypted_frames(self, data: bytes) -> None:
+        try:
+            decoded_frames = self._encrypted_frame_decoder.feed(data)
+        except Exception as error:
+            self._fail_oldest_pending(
+                MakxdConnectionError(f"Encrypted response rejected: {error}")
+            )
+            return
+        for plaintext, transaction_nonce in decoded_frames:
+            if not plaintext.endswith(ASCII_PROMPT):
+                self._fail_oldest_pending(
+                    MakxdConnectionError("Encrypted response is missing the command prompt")
+                )
+                continue
+            self._process_ascii_response(
+                plaintext[:-len(ASCII_PROMPT)],
+                transaction_nonce,
+            )
+
+    def _fail_oldest_pending(self, error: Exception) -> None:
+        with self._command_lock:
+            if not self._pending_commands:
+                return
+            oldest_id = next(iter(self._pending_commands))
+            pending = self._pending_commands.pop(oldest_id)
+            if not pending.future.done():
+                pending.future.set_exception(error)
 
     def _cleanup_timed_out_commands(self) -> None:
         if not self._pending_commands:
@@ -266,6 +336,9 @@ class SerialTransport:
                     continue
             
                 bytes_read = serial_read(min(bytes_available, 4096))
+                if self._transport_encryption.enabled:
+                    self._process_encrypted_frames(bytes_read)
+                    continue
                 for byte_val in bytes_read:
                     if not response_buffer and button_prefix:
                         expected_prefix = b"km."
@@ -340,7 +413,8 @@ class SerialTransport:
             
             if self.send_init:
                 self._log("Sending init command during reconnect")
-                self.serial.write(b"km.buttons(1)\r\n")
+                init_bytes, _ = self._wire_command("km.buttons(1)")
+                self.serial.write(init_bytes)
                 self.serial.flush()
             
             self._reconnect_attempts = 0
@@ -468,7 +542,8 @@ class SerialTransport:
             raise MakxdConnectionError("Not connected")
         
         if not expect_response:
-            self.serial.write(f"{command}\r\n".encode('ascii'))
+            command_bytes, _ = self._wire_command(command)
+            self.serial.write(command_bytes)
             self.serial.flush()
             send_time = time.time() - command_start
             self._log(f"Command '{command}' written in {send_time:.5f}s (Makxd echo not awaited)")
@@ -477,6 +552,8 @@ class SerialTransport:
         cmd_id = self._generate_command_id()
         future = Future()
         
+        command_bytes, transaction_nonce = self._wire_command(command)
+
         with self._command_lock:
             self._pending_commands[cmd_id] = PendingCommand(
                 command_id=cmd_id,
@@ -484,12 +561,12 @@ class SerialTransport:
                 future=future,
                 timestamp=time.time(),
                 expect_response=expect_response,
-                timeout=timeout
+                timeout=timeout,
+                transaction_nonce=transaction_nonce,
             )
         
         try:
-            cmd_bytes = f"{command}\r\n".encode('ascii')
-            self.serial.write(cmd_bytes)
+            self.serial.write(command_bytes)
             self.serial.flush()
             
             result = future.result(timeout=timeout)

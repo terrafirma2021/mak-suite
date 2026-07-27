@@ -52,7 +52,7 @@ impl Drop for FfGuard {
 const DEFAULT_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// Configuration for connecting to a MAKXD device.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DeviceConfig {
     /// Serial port path. `None` = auto-detect by VID/PID.
     pub port: Option<String>,
@@ -66,6 +66,25 @@ pub struct DeviceConfig {
     pub reconnect_backoff: Duration,
     /// When true, all commands are fire-and-forget by default.
     pub fire_and_forget: bool,
+    /// Encrypt all COM API commands locally. This does not change the HPM setting.
+    pub encryption_enabled: bool,
+    /// Local AES-128 key used only when `encryption_enabled` is true.
+    pub encryption_key: Option<[u8; 16]>,
+}
+
+impl std::fmt::Debug for DeviceConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceConfig")
+            .field("port", &self.port)
+            .field("try_4m_first", &self.try_4m_first)
+            .field("command_timeout", &self.command_timeout)
+            .field("reconnect", &self.reconnect)
+            .field("reconnect_backoff", &self.reconnect_backoff)
+            .field("fire_and_forget", &self.fire_and_forget)
+            .field("encryption_enabled", &self.encryption_enabled)
+            .field("encryption_key_set", &self.encryption_key.is_some())
+            .finish()
+    }
 }
 
 impl Default for DeviceConfig {
@@ -77,6 +96,8 @@ impl Default for DeviceConfig {
             reconnect: true,
             reconnect_backoff: Duration::from_millis(100),
             fire_and_forget: false,
+            encryption_enabled: false,
+            encryption_key: None,
         }
     }
 }
@@ -133,11 +154,16 @@ impl Device {
             None => serial::find_port()?,
         };
 
+        let transport_encryption = crate::transport::encryption::TransportEncryption::from_config(
+            config.encryption_enabled,
+            config.encryption_key,
+        )?;
         let transport = TransportHandle::connect(
             port_name,
             config.try_4m_first,
             config.reconnect,
             config.reconnect_backoff,
+            transport_encryption,
         )?;
 
         Ok(Self { transport, config })
@@ -344,11 +370,17 @@ impl AsyncDevice {
                 Some(p) => p.clone(),
                 None => serial::find_port()?,
             };
+            let transport_encryption =
+                crate::transport::encryption::TransportEncryption::from_config(
+                    cfg.encryption_enabled,
+                    cfg.encryption_key,
+                )?;
             let transport = TransportHandle::connect(
                 port_name,
                 cfg.try_4m_first,
                 cfg.reconnect,
                 cfg.reconnect_backoff,
+                transport_encryption,
             )?;
             Ok((transport, cfg))
         })

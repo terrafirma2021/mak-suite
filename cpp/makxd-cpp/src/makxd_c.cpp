@@ -25,8 +25,11 @@ struct makxd_device {
     std::shared_ptr<makxd_callback_state> callback_state;
     std::shared_ptr<std::atomic<bool>> lifetime_token;
 
-    makxd_device() :
-        cpp_device(std::make_unique<makxd::Device>()),
+    makxd_device(bool encryption_enabled = false,
+                 const char* encryption_key_hex = nullptr) :
+        cpp_device(std::make_unique<makxd::Device>(
+            encryption_enabled,
+            encryption_key_hex ? encryption_key_hex : "")),
         callback_state(std::make_shared<makxd_callback_state>()),
         lifetime_token(std::make_shared<std::atomic<bool>>(true)) {}
 };
@@ -385,6 +388,18 @@ makxd_error_t makxd_mouse_move(makxd_device_t* device, int32_t x, int32_t y) {
         return success ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
+    }
+}
+
+makxd_device_t* makxd_device_create_with_transport(
+    bool encryption_enabled, const char* encryption_key_hex) {
+    if (encryption_enabled && !encryption_key_hex) {
+        return nullptr;
+    }
+    try {
+        return new makxd_device(encryption_enabled, encryption_key_hex);
+    } catch (...) {
+        return nullptr;
     }
 }
 

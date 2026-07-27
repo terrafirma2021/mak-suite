@@ -11,6 +11,14 @@ The separate lightweight [NET C++ client](net/cpp/README.md) is in `net/cpp/`.
 It requires `kmNetMakxdBridge.exe` to be running and exposes only the supported
 Bridge subset documented there.
 
+All four serial APIs support optional AES-128-CCM command transport. The
+application supplies the matching key when it creates the client; every
+`km.*` call is then framed automatically. The APIs cannot change the HPM key
+or enable/disable encryption on the device—those actions remain MAKUI-only.
+When HPM COM encryption is enabled, plaintext clients do not work; when it is
+disabled, encrypted clients do not work.
+See the [public protocol contract](protocol/MAKXD_PROTOCOL.md#optional-encrypted-com-api).
+
 ## Repository
 
 [`terrafirma2021/mak-suite`](https://github.com/terrafirma2021/mak-suite)

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Globalization;
+using System.Security.Cryptography;
 
 
 namespace Mouse
@@ -96,6 +97,9 @@ namespace Mouse
         public static bool connected = false;
         private static SerialPort port = null;
         private static Thread button_inputs;
+        private static readonly object ioLock = new object();
+        private static bool transportEncryptionEnabled = false;
+        private static byte[] transportEncryptionKey = null;
         public static string version = "";
         private static bool runReader = false;
         public static Dictionary<int, bool> bState { get; private set; }
@@ -107,8 +111,13 @@ namespace Mouse
         };
 
         private static Random r = new Random();
-        public static void connect(string com)
+        public static void connect(string com, bool encryptionEnabled = false,
+            string encryptionKey = "")
         {
+            transportEncryptionEnabled = encryptionEnabled;
+            transportEncryptionKey = encryptionEnabled
+                ? ParseTransportKey(encryptionKey)
+                : null;
             if(port == null)
                 port = new SerialPort(com, 115200, Parity.None, 8, StopBits.One);
             try
@@ -124,8 +133,8 @@ namespace Mouse
                 GetVersion();
                 Thread.Sleep(150);
                 Console.WriteLine($"[+] Device connected to {port.PortName} at {port.BaudRate} baudrate");
-                port.Write("km.buttons(1)\r\n");
-                port.Write("km.echo(0)\r\n");
+                WriteCommandInternal("km.buttons(1)", false);
+                WriteCommandInternal("km.echo(0)", false);
                 port.DiscardInBuffer();
                 start_listening();
                 
@@ -148,7 +157,7 @@ namespace Mouse
 
             Console.WriteLine("[!] Closing port...");
             runReader = false;
-            port.Write("km.buttons(0)\r\n");
+            WriteCommandInternal("km.buttons(0)", false);
             Thread.Sleep(10);//Allow time for command to be sent
             port.BaseStream.Flush();
             port.Close();
@@ -167,9 +176,7 @@ namespace Mouse
         
         public static void GetVersion()
         {
-            port.Write("km.version()\r");
-            Thread.Sleep(100);
-            version = port.ReadLine();
+            version = WriteCommandInternal("km.version()", true);
         }
 
         public static void move(int x, int y)
@@ -177,8 +184,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.move({x}, {y})\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.move({x}, {y})");
         }
 
         public static void move_smooth(int x, int y, int segments)
@@ -186,8 +192,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.move({x}, {y}, {segments})\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.move({x}, {y}, {segments})");
         }
 
         public static void move_bezier(int x, int y, int segments, int ctrl_x, int ctrl_y)
@@ -195,8 +200,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.move({x}, {y}, {segments}, {ctrl_x}, {ctrl_y})\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.move({x}, {y}, {segments}, {ctrl_x}, {ctrl_y})");
         }
 
         public static void mouse_wheel(int delta)
@@ -204,8 +208,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.wheel({delta})\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.wheel({delta})");
         }
 
         public static void silent_move(int x, int y)
@@ -213,8 +216,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.silent({x}, {y})\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.silent({x}, {y})");
         }
 
         public static void move_controls(int x, int y, int segments,
@@ -223,8 +225,8 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.move({x}, {y}, {segments}, {ctrl_x1}, {ctrl_y1}, {ctrl_x2}, {ctrl_y2})\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command(
+                $"km.move({x}, {y}, {segments}, {ctrl_x1}, {ctrl_y1}, {ctrl_x2}, {ctrl_y2})");
         }
 
         public static void move_to(int x, int y, int segments = 1,
@@ -238,13 +240,13 @@ namespace Mouse
             {
                 if (!ctrl_x1.HasValue || !ctrl_y1.HasValue || !ctrl_x2.HasValue || !ctrl_y2.HasValue)
                     throw new ArgumentException("All absolute-move control coordinates are required");
-                port.Write($"km.moveto({x}, {y}, {segments}, {ctrl_x1.Value}, {ctrl_y1.Value}, {ctrl_x2.Value}, {ctrl_y2.Value})\r");
+                send_keyboard_command(
+                    $"km.moveto({x}, {y}, {segments}, {ctrl_x1.Value}, {ctrl_y1.Value}, {ctrl_x2.Value}, {ctrl_y2.Value})");
             }
             else
             {
-                port.Write($"km.moveto({x}, {y}, {segments})\r");
+                send_keyboard_command($"km.moveto({x}, {y}, {segments})");
             }
-            port.BaseStream.FlushAsync();
         }
 
         public static string get_position()
@@ -332,8 +334,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write(command + "\r\n");
-            port.BaseStream.Flush();
+            WriteCommandInternal(command, false);
         }
 
         private static string send_keyboard_query(string command)
@@ -343,9 +344,7 @@ namespace Mouse
 
             try
             {
-                port.Write(command + "\r\n");
-                port.BaseStream.Flush();
-                return port.ReadLine().Trim();
+                return WriteCommandInternal(command, true);
             }
             catch (Exception)
             {
@@ -466,8 +465,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.lock_m{axis}({bit})\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.lock_m{axis}({bit})");
         }
 
         public static string catch_button(MouseButton button)
@@ -500,10 +498,9 @@ namespace Mouse
 
             int time = r.Next(10, 100); //use this to randomize press time
             Thread.Sleep(click_delay);
-            port.Write($"km.{button}(1)\r");
+            send_keyboard_command($"km.{button}(1)");
             Thread.Sleep(time);
-            port.Write($"km.{button}(0)\r");
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.{button}(0)");
             Thread.Sleep(ms_delay);
         }
 
@@ -512,9 +509,7 @@ namespace Mouse
             if(!connected)
                 return;
 
-            string cmd = $"km.{MouseButtonToString(button)}({press})\r";
-            port.Write(cmd);
-            port.BaseStream.FlushAsync();
+            send_keyboard_command($"km.{MouseButtonToString(button)}({press})");
         }
         public static void start_listening()
         {
@@ -540,8 +535,10 @@ namespace Mouse
                     }
                     try
                     {
-                        if (port.BytesToRead > 0)
+                        lock (ioLock)
                         {
+                            if (port.BytesToRead <= 0)
+                                continue;
                             int data = port.ReadByte();
                             if (!validBytes.Contains((byte)data))
                                 continue;
@@ -596,8 +593,8 @@ namespace Mouse
                     cmd = $"km.lock_ms2({bit})\r";
                     break;
             }
-            port.Write(cmd);
-            await port.BaseStream.FlushAsync();
+            send_keyboard_command(cmd.TrimEnd('\r', '\n'));
+            await Task.CompletedTask;
         }
 
         public static int MouseButtonToInt(MouseButton button)
@@ -633,7 +630,7 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write($"km.serial({serial})\r");
+            send_keyboard_command($"km.serial({serial})");
         }
 
         public static void resetMouseSerial()
@@ -641,19 +638,333 @@ namespace Mouse
             if (!connected)
                 return;
 
-            port.Write("km.serial(0)\r");
+            send_keyboard_command("km.serial(0)");
         }
 
         public static void unlock_all_buttons()
         {
             if(port.IsOpen)
             {
-                port.Write($"km.lock_ml(0)\r");
-                port.Write($"km.lock_mr(0)\r");
-                port.Write($"km.lock_mm(0)\r");
-                port.Write($"km.lock_ms1(0)\r");
-                port.Write($"km.lock_ms2(0)\r");
+                send_keyboard_command("km.lock_ml(0)");
+                send_keyboard_command("km.lock_mr(0)");
+                send_keyboard_command("km.lock_mm(0)");
+                send_keyboard_command("km.lock_ms1(0)");
+                send_keyboard_command("km.lock_ms2(0)");
             }
+        }
+
+        private static byte[] ParseTransportKey(string keyHex)
+        {
+            if (keyHex == null || keyHex.Length != 32)
+                throw new ArgumentException(
+                    "Encryption key must contain exactly 32 hexadecimal characters",
+                    nameof(keyHex));
+            var key = new byte[16];
+            for (int index = 0; index < key.Length; index++)
+            {
+                if (!byte.TryParse(
+                        keyHex.Substring(index * 2, 2),
+                        NumberStyles.HexNumber,
+                        CultureInfo.InvariantCulture,
+                        out key[index]))
+                    throw new ArgumentException(
+                        "Encryption key must contain only hexadecimal characters",
+                        nameof(keyHex));
+            }
+            return key;
+        }
+
+        private static string WriteCommandInternal(string command, bool returnValue)
+        {
+            byte[] plaintext = Encoding.ASCII.GetBytes(
+                command.TrimEnd('\r', '\n') + "\r\n");
+            lock (ioLock)
+            {
+                if (!transportEncryptionEnabled)
+                {
+                    port.Write(plaintext, 0, plaintext.Length);
+                    port.BaseStream.Flush();
+                    return returnValue ? port.ReadLine().Trim() : "";
+                }
+
+                byte[] transactionNonce;
+                byte[] frame = EncodeEncryptedCommand(plaintext, out transactionNonce);
+                port.Write(frame, 0, frame.Length);
+                port.BaseStream.Flush();
+                string response = DecodeEncryptedResponse(
+                    ReadEncryptedFrame(), transactionNonce);
+                return returnValue ? ParseEncryptedResponseValue(response) : "";
+            }
+        }
+
+        private static byte[] EncodeEncryptedCommand(
+            byte[] plaintext, out byte[] transactionNonce)
+        {
+            transactionNonce = new byte[12];
+            using (var random = RandomNumberGenerator.Create())
+                random.GetBytes(transactionNonce);
+            var aad = new byte[14];
+            aad[0] = 1;
+            aad[1] = 0;
+            Buffer.BlockCopy(transactionNonce, 0, aad, 2, transactionNonce.Length);
+            var nonce = new byte[13];
+            Buffer.BlockCopy(transactionNonce, 0, nonce, 1, transactionNonce.Length);
+            byte[] tag;
+            byte[] ciphertext = TransportAesCcmSeal(
+                transportEncryptionKey, nonce, aad, plaintext, out tag);
+            int payloadLength = 30 + ciphertext.Length;
+            if (payloadLength > 251)
+                throw new InvalidOperationException(
+                    "Encrypted command exceeds the COM frame limit");
+            var frame = new byte[5 + payloadLength];
+            frame[0] = 0xDE;
+            frame[1] = 0xAD;
+            frame[2] = (byte)payloadLength;
+            frame[3] = (byte)(payloadLength >> 8);
+            frame[4] = 0x03;
+            Buffer.BlockCopy(aad, 0, frame, 5, aad.Length);
+            Buffer.BlockCopy(tag, 0, frame, 19, tag.Length);
+            Buffer.BlockCopy(ciphertext, 0, frame, 35, ciphertext.Length);
+            return frame;
+        }
+
+        private static byte[] ReadEncryptedFrame()
+        {
+            byte previous = 0;
+            while (true)
+            {
+                byte current = ReadExact(1)[0];
+                if (previous == 0xDE && current == 0xAD)
+                    break;
+                previous = current;
+            }
+            var remainder = ReadExact(3);
+            var header = new byte[] {
+                0xDE, 0xAD, remainder[0], remainder[1], remainder[2]
+            };
+            if (header[4] != 0x03)
+                throw new InvalidDataException("Encrypted response frame is invalid");
+            int payloadLength = header[2] | header[3] << 8;
+            if (payloadLength < 30 || payloadLength > 251)
+                throw new InvalidDataException("Encrypted response length is invalid");
+            var frame = new byte[5 + payloadLength];
+            Buffer.BlockCopy(header, 0, frame, 0, header.Length);
+            Buffer.BlockCopy(ReadExact(payloadLength), 0, frame, 5, payloadLength);
+            return frame;
+        }
+
+        private static byte[] ReadExact(int length)
+        {
+            var bytes = new byte[length];
+            int offset = 0;
+            while (offset < length)
+            {
+                int read = port.Read(bytes, offset, length - offset);
+                if (read <= 0)
+                    throw new EndOfStreamException("Encrypted response ended early");
+                offset += read;
+            }
+            return bytes;
+        }
+
+        private static string DecodeEncryptedResponse(
+            byte[] frame, byte[] expectedTransactionNonce)
+        {
+            if (frame[5] != 1 || frame[6] != 1)
+                throw new InvalidDataException("Encrypted response envelope is invalid");
+            var transactionNonce = new byte[12];
+            Buffer.BlockCopy(frame, 7, transactionNonce, 0, transactionNonce.Length);
+            if (!TransportBytesEqual(
+                    transactionNonce, expectedTransactionNonce))
+                throw new InvalidDataException(
+                    "Encrypted response transaction nonce does not match");
+            var aad = new byte[14];
+            Buffer.BlockCopy(frame, 5, aad, 0, aad.Length);
+            var tag = new byte[16];
+            Buffer.BlockCopy(frame, 19, tag, 0, tag.Length);
+            var ciphertext = new byte[frame.Length - 35];
+            Buffer.BlockCopy(frame, 35, ciphertext, 0, ciphertext.Length);
+            var nonce = new byte[13];
+            nonce[0] = 1;
+            Buffer.BlockCopy(transactionNonce, 0, nonce, 1, transactionNonce.Length);
+            byte[] plaintext = TransportAesCcmOpen(
+                transportEncryptionKey, nonce, aad, ciphertext, tag);
+            return Encoding.ASCII.GetString(plaintext);
+        }
+
+        private static byte[] TransportAesCcmSeal(
+            byte[] key, byte[] nonce, byte[] aad, byte[] plaintext,
+            out byte[] encryptedTag)
+        {
+            using (var aes = Aes.Create())
+            {
+                aes.Key = key;
+                aes.Mode = CipherMode.ECB;
+                aes.Padding = PaddingMode.None;
+                using (var encryptor = aes.CreateEncryptor())
+                {
+                    byte[] tag = TransportAesCcmTag(
+                        encryptor, nonce, aad, plaintext);
+                    byte[] tagMask = TransportAesCcmCounterBlock(
+                        encryptor, nonce, 0);
+                    encryptedTag = new byte[16];
+                    for (int index = 0; index < encryptedTag.Length; index++)
+                        encryptedTag[index] = (byte)(tag[index] ^ tagMask[index]);
+                    return TransportAesCcmCounterCrypt(
+                        encryptor, nonce, plaintext);
+                }
+            }
+        }
+
+        private static byte[] TransportAesCcmOpen(
+            byte[] key, byte[] nonce, byte[] aad, byte[] ciphertext,
+            byte[] encryptedTag)
+        {
+            using (var aes = Aes.Create())
+            {
+                aes.Key = key;
+                aes.Mode = CipherMode.ECB;
+                aes.Padding = PaddingMode.None;
+                using (var encryptor = aes.CreateEncryptor())
+                {
+                    byte[] plaintext = TransportAesCcmCounterCrypt(
+                        encryptor, nonce, ciphertext);
+                    byte[] tag = TransportAesCcmTag(
+                        encryptor, nonce, aad, plaintext);
+                    byte[] tagMask = TransportAesCcmCounterBlock(
+                        encryptor, nonce, 0);
+                    var expectedTag = new byte[16];
+                    for (int index = 0; index < expectedTag.Length; index++)
+                        expectedTag[index] = (byte)(tag[index] ^ tagMask[index]);
+                    if (!TransportBytesEqual(expectedTag, encryptedTag))
+                        throw new CryptographicException(
+                            "Encrypted response authentication failed");
+                    return plaintext;
+                }
+            }
+        }
+
+        private static byte[] TransportAesCcmTag(
+            ICryptoTransform encryptor, byte[] nonce, byte[] aad,
+            byte[] plaintext)
+        {
+            if (nonce.Length != 13 || plaintext.Length > ushort.MaxValue ||
+                aad.Length >= 0xFF00)
+                throw new CryptographicException(
+                    "AES-CCM transport parameters are invalid");
+
+            var block = new byte[16];
+            block[0] = 0x79;
+            Buffer.BlockCopy(nonce, 0, block, 1, nonce.Length);
+            block[14] = (byte)(plaintext.Length >> 8);
+            block[15] = (byte)plaintext.Length;
+            byte[] state = TransportAesBlockEncrypt(encryptor, block);
+
+            int aadOffset = 0;
+            bool aadFirstBlock = true;
+            while (aadOffset < aad.Length)
+            {
+                Array.Clear(block, 0, block.Length);
+                int blockOffset = 0;
+                if (aadFirstBlock)
+                {
+                    block[0] = (byte)(aad.Length >> 8);
+                    block[1] = (byte)aad.Length;
+                    blockOffset = 2;
+                    aadFirstBlock = false;
+                }
+                int copyBytes = Math.Min(
+                    block.Length - blockOffset, aad.Length - aadOffset);
+                Buffer.BlockCopy(aad, aadOffset, block, blockOffset, copyBytes);
+                aadOffset += copyBytes;
+                state = TransportAesCcmMacBlock(encryptor, state, block);
+            }
+
+            for (int plaintextOffset = 0;
+                 plaintextOffset < plaintext.Length;
+                 plaintextOffset += block.Length)
+            {
+                Array.Clear(block, 0, block.Length);
+                int copyBytes = Math.Min(
+                    block.Length, plaintext.Length - plaintextOffset);
+                Buffer.BlockCopy(
+                    plaintext, plaintextOffset, block, 0, copyBytes);
+                state = TransportAesCcmMacBlock(encryptor, state, block);
+            }
+            return state;
+        }
+
+        private static byte[] TransportAesCcmCounterCrypt(
+            ICryptoTransform encryptor, byte[] nonce, byte[] input)
+        {
+            var output = new byte[input.Length];
+            int counter = 1;
+            for (int offset = 0; offset < input.Length; offset += 16)
+            {
+                byte[] mask = TransportAesCcmCounterBlock(
+                    encryptor, nonce, counter++);
+                int copyBytes = Math.Min(16, input.Length - offset);
+                for (int index = 0; index < copyBytes; index++)
+                    output[offset + index] =
+                        (byte)(input[offset + index] ^ mask[index]);
+            }
+            return output;
+        }
+
+        private static byte[] TransportAesCcmCounterBlock(
+            ICryptoTransform encryptor, byte[] nonce, int counter)
+        {
+            var block = new byte[16];
+            block[0] = 1;
+            Buffer.BlockCopy(nonce, 0, block, 1, nonce.Length);
+            block[14] = (byte)(counter >> 8);
+            block[15] = (byte)counter;
+            return TransportAesBlockEncrypt(encryptor, block);
+        }
+
+        private static byte[] TransportAesCcmMacBlock(
+            ICryptoTransform encryptor, byte[] state, byte[] block)
+        {
+            var mixed = new byte[16];
+            for (int index = 0; index < mixed.Length; index++)
+                mixed[index] = (byte)(state[index] ^ block[index]);
+            return TransportAesBlockEncrypt(encryptor, mixed);
+        }
+
+        private static byte[] TransportAesBlockEncrypt(
+            ICryptoTransform encryptor, byte[] block)
+        {
+            var output = new byte[16];
+            if (encryptor.TransformBlock(
+                    block, 0, block.Length, output, 0) != output.Length)
+                throw new CryptographicException(
+                    "AES block operation failed");
+            return output;
+        }
+
+        private static bool TransportBytesEqual(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length)
+                return false;
+            int difference = 0;
+            for (int index = 0; index < left.Length; index++)
+                difference |= left[index] ^ right[index];
+            return difference == 0;
+        }
+
+        private static string ParseEncryptedResponseValue(string response)
+        {
+            string body = response.EndsWith(">>> ", StringComparison.Ordinal)
+                ? response.Substring(0, response.Length - 4)
+                : throw new InvalidDataException(
+                    "Encrypted response is missing the command prompt");
+            string[] lines = body
+                .Replace("\r\n", "\n")
+                .Replace('\r', '\n')
+                .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0)
+                return "";
+            return lines.Length == 1 ? lines[0].Trim() : lines[lines.Length - 1].Trim();
         }
     }
 }

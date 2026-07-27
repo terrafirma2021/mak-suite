@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use serialport::SerialPort;
 
+use super::encryption::{EncryptedFrameDecoder, TransportEncryption};
 use crate::error::{MakxdError, Result};
 use crate::protocol::constants::*;
 
@@ -11,8 +12,9 @@ use crate::protocol::constants::*;
 pub fn establish_connection(
     port_name: &str,
     try_4m_first: bool,
+    transport_encryption: Option<&TransportEncryption>,
 ) -> Result<(Box<dyn SerialPort>, String)> {
-    if try_4m_first && let Ok(result) = try_connect(port_name, BAUD_4M) {
+    if try_4m_first && let Ok(result) = try_connect(port_name, BAUD_4M, transport_encryption) {
         return Ok(result);
     }
 
@@ -37,10 +39,16 @@ pub fn establish_connection(
         std::thread::sleep(Duration::from_millis(50));
         let _ = port.clear(serialport::ClearBuffer::Input);
         // Now send version query through this port directly.
-        port.write_all(CMD_VERSION)?;
+        let (version_command, expected_nonce) = encode_command(CMD_VERSION, transport_encryption)?;
+        port.write_all(&version_command)?;
         port.flush()?;
 
-        let raw = read_until_prompt(&mut *port, Duration::from_millis(500))?;
+        let raw = read_response(
+            &mut *port,
+            Duration::from_millis(500),
+            transport_encryption,
+            expected_nonce.as_ref(),
+        )?;
         let text = String::from_utf8_lossy(&raw);
         if text.contains("km.MAKCU") {
             let version = text
@@ -72,17 +80,27 @@ pub fn find_port() -> Result<String> {
     Err(MakxdError::NotFound)
 }
 
-fn try_connect(port_name: &str, baud: u32) -> Result<(Box<dyn SerialPort>, String)> {
+fn try_connect(
+    port_name: &str,
+    baud: u32,
+    transport_encryption: Option<&TransportEncryption>,
+) -> Result<(Box<dyn SerialPort>, String)> {
     let mut port = serialport::new(port_name, baud)
         .timeout(Duration::from_millis(200))
         .open()
         .map_err(MakxdError::Port)?;
 
     // Send version query and verify response.
-    port.write_all(CMD_VERSION)?;
+    let (version_command, expected_nonce) = encode_command(CMD_VERSION, transport_encryption)?;
+    port.write_all(&version_command)?;
     port.flush()?;
 
-    let raw = read_until_prompt(&mut *port, Duration::from_millis(500))?;
+    let raw = read_response(
+        &mut *port,
+        Duration::from_millis(500),
+        transport_encryption,
+        expected_nonce.as_ref(),
+    )?;
     let text = String::from_utf8_lossy(&raw);
     if text.contains("km.MAKCU") {
         // Extract version string.
@@ -98,6 +116,51 @@ fn try_connect(port_name: &str, baud: u32) -> Result<(Box<dyn SerialPort>, Strin
             "unexpected version response: {}",
             text.trim()
         )))
+    }
+}
+
+fn encode_command(
+    plaintext: &[u8],
+    transport_encryption: Option<&TransportEncryption>,
+) -> Result<(Vec<u8>, Option<[u8; 12]>)> {
+    if let Some(encryption) = transport_encryption {
+        let (frame, nonce) = encryption.encode_command(plaintext)?;
+        Ok((frame, Some(nonce)))
+    } else {
+        Ok((plaintext.to_vec(), None))
+    }
+}
+
+fn read_response(
+    port: &mut dyn SerialPort,
+    timeout: Duration,
+    transport_encryption: Option<&TransportEncryption>,
+    expected_nonce: Option<&[u8; 12]>,
+) -> Result<Vec<u8>> {
+    let Some(encryption) = transport_encryption else {
+        return read_until_prompt(port, timeout);
+    };
+    let deadline = std::time::Instant::now() + timeout;
+    let mut decoder = EncryptedFrameDecoder::new();
+    let mut tmp = [0u8; 64];
+    loop {
+        if std::time::Instant::now() > deadline {
+            return Err(MakxdError::Timeout);
+        }
+        match port.read(&mut tmp) {
+            Ok(n) => {
+                for (plaintext, transaction_nonce) in decoder.feed(encryption, &tmp[..n])? {
+                    if expected_nonce.is_some_and(|expected| expected != &transaction_nonce) {
+                        return Err(MakxdError::Protocol(
+                            "encrypted response transaction nonce does not match".into(),
+                        ));
+                    }
+                    return Ok(plaintext);
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {}
+            Err(error) => return Err(error.into()),
+        }
     }
 }
 

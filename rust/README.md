@@ -42,6 +42,28 @@ fn main() -> Result<()> {
 `Device::connect_port("COM31")` or `DeviceConfig` when the port or connection
 policy must be explicit.
 
+## Encrypted COM API
+
+Configure the HPM key and COM-encryption switch in MAKUI, then provide the
+matching key in the local `DeviceConfig`:
+
+```rust
+use makxd::{Device, DeviceConfig};
+
+let device = Device::with_config(DeviceConfig {
+    encryption_enabled: true,
+    encryption_key: Some([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+        0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+    ]),
+    ..Default::default()
+})?;
+```
+
+Every normal command is encrypted automatically. These fields configure only
+the Rust client and cannot set the HPM key or enable/disable encryption on the
+HPM. When HPM COM encryption is enabled, plaintext clients do not work.
+
 ## Features
 
 Features are opt-in; the default build is synchronous and minimal.

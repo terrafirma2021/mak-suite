@@ -9,6 +9,9 @@ use serialport::SerialPort;
 use crate::protocol::parser::{self, ParseEvent, StreamParser};
 use crate::types::{ButtonMask, CatchEvent};
 
+use super::PendingResponse;
+use super::encryption::{EncryptedFrameDecoder, TransportEncryption};
+
 /// Shared state that the reader thread signals on exit.
 pub(crate) struct ReaderSignal {
     pub alive: AtomicBool,
@@ -26,12 +29,14 @@ impl ReaderSignal {
 
 pub(crate) fn reader_thread(
     mut port: Box<dyn SerialPort>,
-    pending_responses: Arc<Mutex<VecDeque<channel::Sender<Vec<u8>>>>>,
+    pending_responses: Arc<Mutex<VecDeque<PendingResponse>>>,
     button_subs: Arc<Mutex<Vec<channel::Sender<ButtonMask>>>>,
     catch_subs: Arc<Mutex<Vec<channel::Sender<CatchEvent>>>>,
     signal: Arc<ReaderSignal>,
+    transport_encryption: Option<Arc<TransportEncryption>>,
 ) {
     let mut parser = StreamParser::new();
+    let mut encrypted_decoder = EncryptedFrameDecoder::new();
     let mut buf = [0u8; 256];
 
     loop {
@@ -41,6 +46,41 @@ pub(crate) fn reader_thread(
                 // (e.g. mouse), the port may never time out.
                 if !signal.alive.load(Ordering::Acquire) {
                     break;
+                }
+                let decoded_frames = if let Some(encryption) = transport_encryption.as_deref() {
+                    match encrypted_decoder.feed(encryption, &buf[..n]) {
+                        Ok(frames) => frames,
+                        Err(_) => break,
+                    }
+                } else {
+                    Vec::new()
+                };
+                if transport_encryption.is_some() {
+                    for (plaintext, transaction_nonce) in decoded_frames {
+                        for byte in plaintext {
+                            if let Some(event) = parser.feed(byte) {
+                                match event {
+                                    ParseEvent::ButtonEvent(mask) => {
+                                        let mut subs = button_subs.lock().unwrap();
+                                        subs.retain(|sub| sub.send(ButtonMask(mask)).is_ok());
+                                    }
+                                    ParseEvent::Response(data) => {
+                                        let mut pending = pending_responses.lock().unwrap();
+                                        let matching_index = pending.iter().position(|response| {
+                                            response.expected_nonce.as_ref()
+                                                == Some(&transaction_nonce)
+                                        });
+                                        if let Some(response) =
+                                            matching_index.and_then(|index| pending.remove(index))
+                                        {
+                                            let _ = response.response_tx.send(data);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    continue;
                 }
                 for &byte in &buf[..n] {
                     if let Some(event) = parser.feed(byte) {
@@ -57,8 +97,8 @@ pub(crate) fn reader_thread(
                                     subs.retain(|sub| sub.send(catch_event).is_ok());
                                 } else {
                                     let mut pending = pending_responses.lock().unwrap();
-                                    if let Some(tx) = pending.pop_front() {
-                                        let _ = tx.send(data);
+                                    if let Some(response) = pending.pop_front() {
+                                        let _ = response.response_tx.send(data);
                                     }
                                 }
                             }

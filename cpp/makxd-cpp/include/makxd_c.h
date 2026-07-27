@@ -87,6 +87,8 @@ MAKXD_C_API const char* makxd_error_string(makxd_error_t error);
 
 // Device management
 MAKXD_C_API makxd_device_t* makxd_device_create(void);
+MAKXD_C_API makxd_device_t* makxd_device_create_with_transport(
+    bool encryption_enabled, const char* encryption_key_hex);
 MAKXD_C_API void makxd_device_destroy(makxd_device_t* device);
 
 // Static device discovery

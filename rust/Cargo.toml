@@ -1,6 +1,6 @@
 [package]
 name = "makxd"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 rust-version = "1.85"
 description = "Rust library for controlling MAKXD USB HID interceptor devices"
@@ -28,6 +28,9 @@ mock = []
 serialport = "4"
 thiserror = "2"
 crossbeam-channel = "0.5"
+aes = "0.8"
+ccm = "0.5"
+getrandom = "0.3"
 
 # Optional (async feature)
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros"], optional = true }

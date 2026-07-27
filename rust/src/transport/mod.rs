@@ -1,3 +1,4 @@
+pub(crate) mod encryption;
 #[cfg(feature = "mock")]
 pub mod mock;
 pub(crate) mod monitor;
@@ -16,8 +17,14 @@ use crossbeam_channel as channel;
 use crate::error::{MakxdError, Result};
 use crate::types::{ButtonMask, CatchEvent, ConnectionState};
 
+use self::encryption::TransportEncryption;
 use self::reader::ReaderSignal;
 use self::writer::WritePayload;
+
+pub(crate) struct PendingResponse {
+    pub response_tx: channel::Sender<Vec<u8>>,
+    pub expected_nonce: Option<[u8; 12]>,
+}
 
 // ---------------------------------------------------------------------------
 // TransportHandle — public(crate) API surface
@@ -43,7 +50,8 @@ pub(crate) struct TransportInner {
     write_rx: channel::Receiver<WritePayload>,
 
     // Pending response oneshots: writer pushes, reader pops. Shared Arc.
-    pending_responses: Arc<Mutex<VecDeque<channel::Sender<Vec<u8>>>>>,
+    pending_responses: Arc<Mutex<VecDeque<PendingResponse>>>,
+    pub transport_encryption: Option<Arc<TransportEncryption>>,
 
     // Button event subscribers.
     button_subs: Arc<Mutex<Vec<channel::Sender<ButtonMask>>>>,
@@ -93,6 +101,7 @@ impl TransportInner {
         let reader_buttons = Arc::clone(&self.button_subs);
         let reader_catch = Arc::clone(&self.catch_subs);
         let reader_signal = Arc::clone(&signal);
+        let reader_encryption = self.transport_encryption.clone();
         let reader_handle = std::thread::Builder::new()
             .name("makxd-reader".into())
             .spawn(move || {
@@ -102,6 +111,7 @@ impl TransportInner {
                     reader_buttons,
                     reader_catch,
                     reader_signal,
+                    reader_encryption,
                 );
             })
             .map_err(MakxdError::Io)?;
@@ -151,8 +161,14 @@ impl TransportHandle {
         try_4m_first: bool,
         reconnect: bool,
         reconnect_backoff: Duration,
+        transport_encryption: Option<TransportEncryption>,
     ) -> Result<Self> {
-        let (port, _version) = serial::establish_connection(&port_name, try_4m_first)?;
+        let transport_encryption = transport_encryption.map(Arc::new);
+        let (port, _version) = serial::establish_connection(
+            &port_name,
+            try_4m_first,
+            transport_encryption.as_deref(),
+        )?;
         let (write_tx, write_rx) = channel::unbounded::<WritePayload>();
 
         let inner = Arc::new(TransportInner {
@@ -162,6 +178,7 @@ impl TransportHandle {
             write_tx: Mutex::new(Some(write_tx)),
             write_rx,
             pending_responses: Arc::new(Mutex::new(VecDeque::new())),
+            transport_encryption,
             button_subs: Arc::new(Mutex::new(Vec::new())),
             catch_subs: Arc::new(Mutex::new(Vec::new())),
             state_subs: Mutex::new(Vec::new()),
@@ -203,6 +220,7 @@ impl TransportHandle {
             write_tx: Mutex::new(Some(write_tx)),
             write_rx: write_rx.clone(),
             pending_responses: Arc::new(Mutex::new(VecDeque::new())),
+            transport_encryption: None,
             button_subs: Arc::clone(&button_subs),
             catch_subs: Arc::clone(&catch_subs),
             state_subs: Mutex::new(Vec::new()),
@@ -238,10 +256,19 @@ impl TransportHandle {
             return Err(MakxdError::Disconnected);
         }
 
+        let (data, expected_nonce) =
+            if let Some(encryption) = self.inner.transport_encryption.as_deref() {
+                let (frame, nonce) = encryption.encode_command(&data)?;
+                (frame, Some(nonce))
+            } else {
+                (data, None)
+            };
+
         if fire_and_forget {
             self.inner.send_payload(WritePayload {
                 data,
                 response_tx: None,
+                expected_nonce,
             })?;
             Ok(None)
         } else {
@@ -249,6 +276,7 @@ impl TransportHandle {
             self.inner.send_payload(WritePayload {
                 data,
                 response_tx: Some(tx),
+                expected_nonce,
             })?;
             match rx.recv_timeout(timeout) {
                 Ok(response) => Ok(Some(response)),
@@ -270,10 +298,19 @@ impl TransportHandle {
             return Err(MakxdError::Disconnected);
         }
 
+        let (data, expected_nonce) =
+            if let Some(encryption) = self.inner.transport_encryption.as_deref() {
+                let (frame, nonce) = encryption.encode_command(&data)?;
+                (frame, Some(nonce))
+            } else {
+                (data, None)
+            };
+
         if fire_and_forget {
             self.inner.send_payload(WritePayload {
                 data,
                 response_tx: None,
+                expected_nonce,
             })?;
             Ok(None)
         } else {
@@ -281,6 +318,7 @@ impl TransportHandle {
             self.inner.send_payload(WritePayload {
                 data,
                 response_tx: Some(tx),
+                expected_nonce,
             })?;
 
             tokio::task::spawn_blocking(move || match rx.recv_timeout(timeout) {

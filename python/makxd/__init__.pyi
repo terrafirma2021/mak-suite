@@ -32,5 +32,9 @@ __all__: List[str]
 def create_controller(
     fallback_com_port: str = "", 
     debug: bool = False, 
-    send_init: bool = True
+    send_init: bool = True,
+    auto_reconnect: bool = True,
+    override_port: bool = False,
+    encryption_enabled: bool = False,
+    encryption_key: str = "",
 ) -> MakxdController: ...

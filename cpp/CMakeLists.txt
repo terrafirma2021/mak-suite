@@ -36,11 +36,16 @@ if(UNIX AND NOT APPLE)
     pkg_check_modules(UDEV REQUIRED libudev)
 endif()
 
+if(UNIX)
+    find_package(OpenSSL REQUIRED)
+endif()
+
 # Library source files
 set(LIBRARY_SOURCES
     makxd-cpp/src/makxd.cpp
     makxd-cpp/src/serialport.cpp
     makxd-cpp/src/makxd_c.cpp
+    makxd-cpp/src/transport_encryption.cpp
 )
 
 # Public headers (for distribution)
@@ -54,6 +59,7 @@ set(PUBLIC_HEADERS
 set(HEADERS
     ${PUBLIC_HEADERS}
     makxd-cpp/include/serialport.h
+    makxd-cpp/include/transport_encryption.h
 )
 
 # Create both shared and static libraries by default
@@ -120,7 +126,7 @@ foreach(target ${LIBRARY_TARGETS})
 
     # Platform-specific linking
     if(WIN32)
-        target_link_libraries(${target} PUBLIC setupapi)
+        target_link_libraries(${target} PUBLIC setupapi bcrypt)
         target_compile_definitions(${target} PRIVATE _WIN32_WINNT=0x0601)
         
         # Export symbols for shared library on Windows
@@ -129,9 +135,11 @@ foreach(target ${LIBRARY_TARGETS})
             target_compile_definitions(${target} INTERFACE MAKXD_SHARED)
         endif()
     elseif(UNIX AND NOT APPLE)
-        target_link_libraries(${target} PUBLIC ${UDEV_LIBRARIES})
+        target_link_libraries(${target} PUBLIC ${UDEV_LIBRARIES} OpenSSL::Crypto)
         target_include_directories(${target} PUBLIC ${UDEV_INCLUDE_DIRS})
         target_compile_options(${target} PUBLIC ${UDEV_CFLAGS_OTHER})
+    elseif(APPLE)
+        target_link_libraries(${target} PUBLIC OpenSSL::Crypto)
     endif()
 
     # Set output directory
@@ -176,6 +184,10 @@ find_dependency(Threads REQUIRED)
 if(UNIX AND NOT APPLE)
     find_dependency(PkgConfig REQUIRED)
     pkg_check_modules(UDEV REQUIRED libudev)
+endif()
+
+if(UNIX)
+    find_dependency(OpenSSL REQUIRED)
 endif()
 
 # Include the targets file

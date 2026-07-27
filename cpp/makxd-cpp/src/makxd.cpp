@@ -313,7 +313,9 @@ namespace makxd {
             // will join after the monitoring loop exits via the stop token.
         }
 
-        Impl() : serialPort(std::make_unique<SerialPort>())
+        Impl(bool encryptionEnabled, std::string_view encryptionKey)
+            : serialPort(std::make_unique<SerialPort>(
+                  encryptionEnabled, encryptionKey))
             , connected(false)
             , highPerformanceMode(false) {
           
@@ -661,8 +663,8 @@ namespace makxd {
     };
 
     // Device implementation
-    Device::Device()
-        : m_impl(std::make_unique<Impl>())
+    Device::Device(bool encryptionEnabled, std::string_view encryptionKey)
+        : m_impl(std::make_unique<Impl>(encryptionEnabled, encryptionKey))
         , m_lifetimeToken(std::make_shared<std::atomic<bool>>(true)) {}
     std::string Device::Impl::lastError = "";
 

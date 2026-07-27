@@ -61,6 +61,23 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## Encrypted COM API
+
+First configure the HPM key and COM-encryption switch in MAKUI. Then provide
+the matching key once when creating the local client:
+
+```python
+device = create_controller(
+    encryption_enabled=True,
+    encryption_key="00112233445566778899aabbccddeeff",
+)
+```
+
+All normal API and raw `km.*` calls are encrypted automatically. These
+arguments configure only this Python client; they cannot set the HPM key or
+enable/disable encryption on the HPM. When HPM COM encryption is enabled,
+plaintext clients do not work.
+
 ## Mouse API
 
 ```python

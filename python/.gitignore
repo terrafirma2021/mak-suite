@@ -16,6 +16,9 @@ testing.py
 fix.py
 
 tests
+!tests/
+tests/*
+!tests/test_transport_encryption.py
 pypi.txt
 etc
 scripts

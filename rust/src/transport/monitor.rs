@@ -52,7 +52,11 @@ pub(crate) fn monitor_thread(inner: Arc<TransportInner>) {
             std::thread::sleep(backoff);
 
             let port_name = inner.port_name.lock().unwrap().clone();
-            match super::serial::establish_connection(&port_name, true) {
+            match super::serial::establish_connection(
+                &port_name,
+                true,
+                inner.transport_encryption.as_deref(),
+            ) {
                 Ok((port, _version)) => {
                     if inner.spawn_io_threads(port).is_ok() {
                         inner

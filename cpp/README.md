@@ -44,6 +44,24 @@ device.mouseMove(100, 0);
 device.click(makxd::MouseButton::LEFT);
 ```
 
+### Encrypted COM API
+
+Configure the HPM key and COM-encryption switch in MAKUI, then provide the
+matching key when creating the local client:
+
+```cpp
+makxd::Device device(
+    true,
+    "00112233445566778899aabbccddeeff");
+device.connect();
+device.mouseMove(100, 0);
+```
+
+Every normal command is encrypted automatically. Constructor arguments
+configure only the C++ client and cannot set the HPM key or enable/disable
+encryption on the HPM. When HPM COM encryption is enabled, plaintext clients
+do not work.
+
 ### C API (for other languages)
 
 The library includes a complete C ABI for easy integration with Python, Rust, Go, C#, and other languages:
@@ -56,6 +74,13 @@ makxd_connect(device, "");
 makxd_mouse_move(device, 100, 0);
 makxd_mouse_click(device, MAKXD_MOUSE_LEFT);
 makxd_device_destroy(device);
+```
+
+The C ABI equivalent is:
+
+```c
+makxd_device_t* device = makxd_device_create_with_transport(
+    true, "00112233445566778899aabbccddeeff");
 ```
 
 See `examples/` for complete integration examples.

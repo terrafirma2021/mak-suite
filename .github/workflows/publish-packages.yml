@@ -40,7 +40,10 @@ jobs:
         run: python -m pip install --upgrade build pytest twine "./python"
 
       - name: Run hardware-independent tests
-        run: python -m pytest python/tests/test_response_contract.py
+        run: >-
+          python -m pytest
+          python/tests/test_response_contract.py
+          python/tests/test_transport_encryption.py
 
       - name: Build Python distributions
         working-directory: python

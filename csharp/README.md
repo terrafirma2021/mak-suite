@@ -24,6 +24,23 @@ device.move(100, 100);
 device.click(MouseButton.Left, 1);
 ```
 
+## Encrypted COM API
+
+Configure the HPM key and COM-encryption switch in MAKUI, then pass the
+matching key when connecting the local client:
+
+```csharp
+device.connect(
+    "COM1",
+    true,
+    "00112233445566778899aabbccddeeff");
+```
+
+Every command method uses encrypted framing automatically. These arguments
+configure only the C# client and cannot set the HPM key or enable/disable
+encryption on the HPM. When HPM COM encryption is enabled, plaintext clients
+do not work.
+
 ## Performance (Results may vary)
 - Mouse Movement (100 rapid moves tested): Total elapsed time: 46ms, (0.46 ms avg)
 - Mouse Clicks (50 rapid clicks): Total elapsed time: 155ms, (1.55 ms avg)

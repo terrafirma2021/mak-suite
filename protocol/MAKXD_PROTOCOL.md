@@ -17,9 +17,61 @@ command byte is limited by the 256-byte UART DMA cell:
 ```text
 bytes 0..1   DE AD
 bytes 2..3   payload length, little-endian, 1..251
-byte 4       command: 0x00 generic command, 0x01 input stream
+byte 4       command: 0x00 generic, 0x01 input stream, 0x03 encrypted API
 bytes 5..N   payload
 ```
+
+## Optional encrypted COM API
+
+The language bindings support optional AES-128-CCM protection for all `km.*`
+commands and their responses. This is a client transport choice only:
+
+- the HPM transport key and COM-encryption switch are configured in MAKUI;
+- no Mak-suite API can set, replace, enable, or disable the HPM setting;
+- the client receives the matching key from its application configuration and
+  keeps it in memory;
+- plaintext mode remains the default;
+- when HPM COM encryption is enabled, plaintext `km.*` commands do not work;
+- when HPM COM encryption is disabled, encrypted commands do not work.
+
+The caller selects encrypted transport once when creating the client. Every
+normal mouse, keyboard, controller, query, batch, and raw `km.*` method then
+uses the same transport automatically.
+
+Encrypted requests use command byte `0x03`:
+
+```text
+bytes 0..1   DE AD
+bytes 2..3   encrypted payload length, little-endian
+byte 4       0x03
+byte 5       envelope version: 1
+byte 6       direction: 0 request, 1 response
+bytes 7..18  12-byte transaction nonce
+bytes 19..34 16-byte AES-CCM authentication tag
+bytes 35..N  ciphertext
+```
+
+AES-CCM uses:
+
+```text
+key          caller-supplied AES-128 key
+nonce        direction byte + 12-byte transaction nonce
+AAD          version + direction + 12-byte transaction nonce
+tag          16 bytes
+```
+
+Each request uses a new transaction nonce from the operating system CSPRNG.
+The response must use the same transaction nonce with direction `1`; clients
+authenticate it and reject a mismatch. The complete plaintext command,
+including its line ending, is encrypted. The decrypted response retains the
+normal echo/result/`>>> ` contract.
+
+The encrypted envelope leaves 221 bytes for the complete plaintext command,
+including its line ending, inside one COM DMA frame. Bindings reject larger
+commands instead of splitting or truncating them.
+
+MAKUI, bootloader flashing, identity, and input-stream frames are not changed
+by this client option.
 
 The host requests any combination of sources with a two-byte payload:
 

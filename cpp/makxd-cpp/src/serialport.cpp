@@ -1,4 +1,5 @@
 #include "../include/serialport.h"
+#include "../include/transport_encryption.h"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
@@ -6,6 +7,7 @@
 #include <string>
 #include <cstring>
 #include <chrono>
+#include <exception>
 #include <future>
 #include <string_view>
 #include <utility>
@@ -51,10 +53,12 @@ std::string parseAsciiResponseValue(std::string_view body) {
 }
 } // namespace
 
-SerialPort::SerialPort()
+SerialPort::SerialPort(bool encryptionEnabled, std::string_view encryptionKey)
 	: m_baudRate(115200)
 	, m_timeout(100)
 	, m_isOpen(false)
+	, m_transportEncryption(std::make_unique<TransportEncryption>(
+	      encryptionEnabled, encryptionKey))
 #ifdef _WIN32
 	, m_handle(INVALID_HANDLE_VALUE)
 #else
@@ -229,6 +233,20 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 		return promise.get_future();
 	}
 
+	std::string trackedCommand = command + "\r\n";
+	TransportEncodedCommand encodedCommand;
+	try {
+		encodedCommand = m_transportEncryption->encodeCommand(
+		    std::span<const uint8_t>(
+		        reinterpret_cast<const uint8_t*>(trackedCommand.data()),
+		        trackedCommand.size()));
+	}
+	catch (...) {
+		std::promise<std::string> promise;
+		promise.set_exception(std::current_exception());
+		return promise.get_future();
+	}
+
 	int cmdId = -1;
 	std::future<std::string> future;
 
@@ -243,19 +261,19 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 			return promise.get_future();
 		}
 
-		auto pendingCmd = std::make_unique<PendingCommand>(cmdId, command, expectResponse, timeout);
+		auto pendingCmd = std::make_unique<PendingCommand>(
+		    cmdId, command, expectResponse, timeout,
+		    m_transportEncryption->enabled(), encodedCommand.transactionNonce);
 		future = pendingCmd->promise.get_future();
 		m_pendingCommands.emplace(cmdId, std::move(pendingCmd));
 		m_pendingCommandOrder.push_back(cmdId);
 	}
 
-	// Send the plain KM command; the ID is internal FIFO correlation only.
-	std::string trackedCommand = command + "\r\n";
-
 	// Unified write operation
-	ssize_t bytesWritten = platformWrite(trackedCommand.c_str(), trackedCommand.length());
+	ssize_t bytesWritten = platformWrite(
+	    encodedCommand.bytes.data(), encodedCommand.bytes.size());
 
-	if (bytesWritten != static_cast<ssize_t>(trackedCommand.length())) {
+	if (bytesWritten != static_cast<ssize_t>(encodedCommand.bytes.size())) {
 		std::lock_guard<std::mutex> lock(m_commandMutex);
 		auto it = m_pendingCommands.find(cmdId);
 		if (it != m_pendingCommands.end()) {
@@ -266,7 +284,7 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 				}
 				else {
 					errorMsg += " (partial write: " + std::to_string(bytesWritten) +
-					            "/" + std::to_string(trackedCommand.length()) + " bytes)";
+					            "/" + std::to_string(encodedCommand.bytes.size()) + " bytes)";
 				}
 				it->second->promise.set_exception(std::make_exception_ptr(
 				                                      std::runtime_error(errorMsg)));
@@ -304,10 +322,21 @@ bool SerialPort::sendCommand(const std::string& command) {
 	}
 
 	std::string fullCommand = command + "\r\n";
+	TransportEncodedCommand encodedCommand;
+	try {
+		encodedCommand = m_transportEncryption->encodeCommand(
+		    std::span<const uint8_t>(
+		        reinterpret_cast<const uint8_t*>(fullCommand.data()),
+		        fullCommand.size()));
+	}
+	catch (...) {
+		return false;
+	}
 
 	// Unified write and flush operation
-	ssize_t bytesWritten = platformWrite(fullCommand.c_str(), fullCommand.length());
-	if (bytesWritten == static_cast<ssize_t>(fullCommand.length())) {
+	ssize_t bytesWritten = platformWrite(
+	    encodedCommand.bytes.data(), encodedCommand.bytes.size());
+	if (bytesWritten == static_cast<ssize_t>(encodedCommand.bytes.size())) {
 		return platformFlush();
 	}
 
@@ -366,6 +395,27 @@ void SerialPort::listenerLoop(std::stop_token stopToken) {
 
 			if (bytesRead <= 0) {
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				continue;
+			}
+			if (m_transportEncryption->enabled()) {
+				for (const auto& decoded : m_transportEncryption->decodeResponses(
+				         std::span<const uint8_t>(
+				             readBuffer.data(), static_cast<size_t>(bytesRead)))) {
+					const std::string plaintext(
+					    reinterpret_cast<const char*>(decoded.plaintext.data()),
+					    decoded.plaintext.size());
+					if (plaintext.size() < ASCII_PROMPT.size() ||
+					    plaintext.compare(
+					        plaintext.size() - ASCII_PROMPT.size(),
+					        ASCII_PROMPT.size(),
+					        ASCII_PROMPT) != 0) {
+						throw std::runtime_error(
+						    "encrypted response is missing the command prompt");
+					}
+					processResponse(
+					    plaintext.substr(0, plaintext.size() - ASCII_PROMPT.size()),
+					    &decoded.transactionNonce);
+				}
 				continue;
 			}
 
@@ -515,13 +565,46 @@ void SerialPort::handleButtonData(uint8_t data) {
 	}
 }
 
-void SerialPort::processResponse(const std::string& response) {
+void SerialPort::processResponse(
+    const std::string& response,
+    const std::array<uint8_t, 12>* transactionNonce) {
 	const std::string value = parseAsciiResponseValue(response);
 
 	// Responses are prompt-delimited and complete in command order. The command
 	// itself is not modified with a tracking suffix; KM only accepts plain ASCII
 	// command lines.
 	std::lock_guard<std::mutex> lock(m_commandMutex);
+	if (m_transportEncryption->enabled()) {
+		if (transactionNonce == nullptr) {
+			return;
+		}
+		auto orderIt = std::find_if(
+		    m_pendingCommandOrder.begin(),
+		    m_pendingCommandOrder.end(),
+		    [&](int pendingId) {
+			    const auto pendingIt = m_pendingCommands.find(pendingId);
+			    return pendingIt != m_pendingCommands.end() &&
+			           pendingIt->second->encrypted &&
+			           pendingIt->second->transaction_nonce == *transactionNonce;
+		    });
+		if (orderIt == m_pendingCommandOrder.end()) {
+			return;
+		}
+		const int cmdId = *orderIt;
+		m_pendingCommandOrder.erase(orderIt);
+		auto it = m_pendingCommands.find(cmdId);
+		if (it == m_pendingCommands.end()) {
+			return;
+		}
+		try {
+			it->second->promise.set_value(value);
+		}
+		catch (...) {
+		}
+		m_pendingCommands.erase(it);
+		return;
+	}
+
 	while (!m_pendingCommandOrder.empty()) {
 		int cmdId = m_pendingCommandOrder.front();
 		m_pendingCommandOrder.pop_front();
