@@ -21,7 +21,6 @@ jobs:
   python:
     name: Python package
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       contents: read
       id-token: write
