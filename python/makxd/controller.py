@@ -155,13 +155,6 @@ class MakxdController:
         self.mouse.move_controls(dx, dy, segments, ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2)
 
     @maybe_async
-    def move_to(self, x: int, y: int, segments: int = 1,
-                ctrl_x1: Optional[int] = None, ctrl_y1: Optional[int] = None,
-                ctrl_x2: Optional[int] = None, ctrl_y2: Optional[int] = None) -> None:
-        self._check_connection()
-        self.mouse.move_to(x, y, segments, ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2)
-
-    @maybe_async
     def mouse_position(self) -> str:
         self._check_connection()
         return self.mouse.position()

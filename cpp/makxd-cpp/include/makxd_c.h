@@ -119,8 +119,6 @@ MAKXD_C_API makxd_error_t makxd_mouse_silent_move(makxd_device_t* device, int32_
 MAKXD_C_API makxd_error_t makxd_mouse_move_smooth(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments);
 MAKXD_C_API makxd_error_t makxd_mouse_move_bezier(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y);
 MAKXD_C_API makxd_error_t makxd_mouse_move_controls(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x1, int32_t ctrl_y1, int32_t ctrl_x2, int32_t ctrl_y2);
-MAKXD_C_API makxd_error_t makxd_mouse_move_to(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments);
-MAKXD_C_API makxd_error_t makxd_mouse_move_to_controls(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x1, int32_t ctrl_y1, int32_t ctrl_x2, int32_t ctrl_y2);
 MAKXD_C_API makxd_error_t makxd_mouse_click_count(makxd_device_t* device, makxd_mouse_button_t button, uint32_t count, uint32_t delay_ms);
 MAKXD_C_API makxd_error_t makxd_get_mouse_position(makxd_device_t* device, char* response, size_t response_size);
 MAKXD_C_API makxd_error_t makxd_set_mouse_screen(makxd_device_t* device, int32_t width, int32_t height);

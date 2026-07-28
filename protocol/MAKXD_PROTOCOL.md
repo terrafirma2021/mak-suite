@@ -285,7 +285,7 @@ The no-argument button form queries state. The value form sends the button
 state (`0` released, `1` pressed). `click` uses a one-based button number,
 click count, and optional delay.
 
-### Relative and absolute movement
+### Relative movement
 
 ```text
 km.move(x,y)
@@ -293,19 +293,13 @@ km.move(x,y,segments)
 km.move(x,y,segments,cx1,cy1)
 km.move(x,y,segments,cx1,cy1,cx2,cy2)
 
-km.moveto(x,y)
-km.moveto(x,y,segments)
-km.moveto(x,y,segments,cx1,cy1)
-km.moveto(x,y,segments,cx1,cy1,cx2,cy2)
 km.getpos()
 
 km.wheel(delta)
 ```
 
-Movement values are signed. `move` is relative; `moveto` is absolute and is
-clamped to the configured screen. A single control pair is duplicated as both
-control points. `moveto(0,0)` with no segment or control arguments is the
-calibration-to-zero form.
+Movement values are signed. `move` is relative. A single control pair is
+duplicated as both control points.
 
 ### Screen and stream configuration
 
@@ -470,7 +464,7 @@ differences explicitly:
 - The parser registers `side1` and `side2`; bindings must not silently replace
   them with `ms1` and `ms2`.
 - The parser registers `multidown`, `multiup`, `multipress`, `keys`, `silent`,
-  `moveto`, `getpos`, `screen`, `axis`, `mouse`, `echo`, and `baud`.
+  `getpos`, `screen`, `axis`, `mouse`, `echo`, and `baud`.
 - `km.disable(...)` is not registered in this command table. A binding must not
   advertise it as supported until a parser alias is intentionally added.
 - Keyboard catch handler symbols exist, but no `catch_kb` alias is registered;

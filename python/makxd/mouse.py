@@ -145,26 +145,6 @@ class Mouse:
             f"km.move({x},{y},{segments},{ctrl_x1},{ctrl_y1},{ctrl_x2},{ctrl_y2})"
         )
 
-    def move_to(
-        self,
-        x: int,
-        y: int,
-        segments: int = 1,
-        ctrl_x1: int | None = None,
-        ctrl_y1: int | None = None,
-        ctrl_x2: int | None = None,
-        ctrl_y2: int | None = None,
-    ) -> None:
-        controls = (ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2)
-        if any(value is not None for value in controls):
-            if any(value is None for value in controls):
-                raise MakxdCommandError("All absolute-move control coordinates are required")
-            self.transport.send_command(
-                f"km.moveto({x},{y},{segments},{ctrl_x1},{ctrl_y1},{ctrl_x2},{ctrl_y2})"
-            )
-            return
-        self.transport.send_command(f"km.moveto({x},{y},{segments})")
-
     def position(self) -> str:
         return self.transport.send_command("km.getpos()", expect_response=True) or ""
 

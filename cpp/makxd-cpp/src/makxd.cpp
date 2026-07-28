@@ -1042,25 +1042,6 @@ namespace makxd {
             std::to_string(ctrl_y2) + ")");
     }
 
-    bool Device::mouseMoveTo(int32_t x, int32_t y, uint32_t segments) {
-        if (!m_impl->connected.load()) {
-            return false;
-        }
-        return m_impl->executeCommand(
-            "km.moveto(" + std::to_string(x) + "," + std::to_string(y) + "," +
-            std::to_string(segments) + ")");
-    }
-
-    bool Device::mouseMoveToControls(int32_t x, int32_t y, uint32_t segments,
-        int32_t ctrl_x1, int32_t ctrl_y1, int32_t ctrl_x2, int32_t ctrl_y2) {
-        if (!m_impl->connected.load()) return false;
-        return m_impl->executeCommand(
-            "km.moveto(" + std::to_string(x) + "," + std::to_string(y) + "," +
-            std::to_string(segments) + "," + std::to_string(ctrl_x1) + "," +
-            std::to_string(ctrl_y1) + "," + std::to_string(ctrl_x2) + "," +
-            std::to_string(ctrl_y2) + ")");
-    }
-
     std::string Device::mousePosition() {
         if (!m_impl->connected.load()) return {};
         try {

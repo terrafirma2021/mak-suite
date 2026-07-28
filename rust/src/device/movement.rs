@@ -30,31 +30,6 @@ impl Device {
         })
     }
 
-    pub fn move_to(&self, x: i32, y: i32, segments: u32) -> Result<()> {
-        timed!("move_to", {
-            let command = builder::build_move_to(x, y, segments)?;
-            self.exec_dynamic(command.as_bytes())
-        })
-    }
-
-    pub fn move_to_controls(
-        &self,
-        x: i32,
-        y: i32,
-        segments: u32,
-        ctrl_x1: i32,
-        ctrl_y1: i32,
-        ctrl_x2: i32,
-        ctrl_y2: i32,
-    ) -> Result<()> {
-        timed!("move_to_controls", {
-            let command = builder::build_move_to_controls(
-                x, y, segments, ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2,
-            )?;
-            self.exec_dynamic(command.as_bytes())
-        })
-    }
-
     pub fn click_count(&self, button: u8, count: u32, delay_ms: u32) -> Result<()> {
         timed!("click_count", self.exec_dynamic(builder::build_click(button, count, delay_ms).as_bytes()))
     }
@@ -161,31 +136,6 @@ impl AsyncDevice {
     ) -> Result<()> {
         timed!("move_controls", {
             let command = builder::build_move_controls(
-                x, y, segments, ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2,
-            )?;
-            self.exec_dynamic(command.as_bytes()).await
-        })
-    }
-
-    pub async fn move_to(&self, x: i32, y: i32, segments: u32) -> Result<()> {
-        timed!("move_to", {
-            let command = builder::build_move_to(x, y, segments)?;
-            self.exec_dynamic(command.as_bytes()).await
-        })
-    }
-
-    pub async fn move_to_controls(
-        &self,
-        x: i32,
-        y: i32,
-        segments: u32,
-        ctrl_x1: i32,
-        ctrl_y1: i32,
-        ctrl_x2: i32,
-        ctrl_y2: i32,
-    ) -> Result<()> {
-        timed!("move_to_controls", {
-            let command = builder::build_move_to_controls(
                 x, y, segments, ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2,
             )?;
             self.exec_dynamic(command.as_bytes()).await

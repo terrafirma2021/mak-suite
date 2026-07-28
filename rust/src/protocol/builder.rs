@@ -57,32 +57,6 @@ pub fn build_move_controls(
     ))
 }
 
-pub fn build_move_to(x: i32, y: i32, segments: u32) -> Result<String> {
-    check_move_range(x, "x")?;
-    check_move_range(y, "y")?;
-    Ok(format!("km.moveto({x},{y},{segments})\r\n"))
-}
-
-pub fn build_move_to_controls(
-    x: i32,
-    y: i32,
-    segments: u32,
-    ctrl_x1: i32,
-    ctrl_y1: i32,
-    ctrl_x2: i32,
-    ctrl_y2: i32,
-) -> Result<String> {
-    check_move_range(x, "x")?;
-    check_move_range(y, "y")?;
-    check_move_range(ctrl_x1, "ctrl_x1")?;
-    check_move_range(ctrl_y1, "ctrl_y1")?;
-    check_move_range(ctrl_x2, "ctrl_x2")?;
-    check_move_range(ctrl_y2, "ctrl_y2")?;
-    Ok(format!(
-        "km.moveto({x},{y},{segments},{ctrl_x1},{ctrl_y1},{ctrl_x2},{ctrl_y2})\r\n"
-    ))
-}
-
 pub fn build_click(button: u8, count: u32, delay_ms: u32) -> String {
     format!("km.click({button},{count},{delay_ms})\r\n")
 }

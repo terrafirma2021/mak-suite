@@ -229,26 +229,6 @@ namespace Mouse
                 $"km.move({x}, {y}, {segments}, {ctrl_x1}, {ctrl_y1}, {ctrl_x2}, {ctrl_y2})");
         }
 
-        public static void move_to(int x, int y, int segments = 1,
-            int? ctrl_x1 = null, int? ctrl_y1 = null,
-            int? ctrl_x2 = null, int? ctrl_y2 = null)
-        {
-            if (!connected)
-                return;
-
-            if (ctrl_x1.HasValue || ctrl_y1.HasValue || ctrl_x2.HasValue || ctrl_y2.HasValue)
-            {
-                if (!ctrl_x1.HasValue || !ctrl_y1.HasValue || !ctrl_x2.HasValue || !ctrl_y2.HasValue)
-                    throw new ArgumentException("All absolute-move control coordinates are required");
-                send_keyboard_command(
-                    $"km.moveto({x}, {y}, {segments}, {ctrl_x1.Value}, {ctrl_y1.Value}, {ctrl_x2.Value}, {ctrl_y2.Value})");
-            }
-            else
-            {
-                send_keyboard_command($"km.moveto({x}, {y}, {segments})");
-            }
-        }
-
         public static string get_position()
         {
             return send_keyboard_query("km.getpos()");

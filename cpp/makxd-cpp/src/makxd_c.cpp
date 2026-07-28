@@ -441,18 +441,6 @@ makxd_error_t makxd_mouse_move_controls(makxd_device_t* device, int32_t x, int32
     catch (...) { return handle_exception(); }
 }
 
-makxd_error_t makxd_mouse_move_to(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments) {
-    if (!device) return MAKXD_ERROR_INVALID_DEVICE;
-    try { return device->cpp_device->mouseMoveTo(x, y, segments) ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; }
-    catch (...) { return handle_exception(); }
-}
-
-makxd_error_t makxd_mouse_move_to_controls(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x1, int32_t ctrl_y1, int32_t ctrl_x2, int32_t ctrl_y2) {
-    if (!device) return MAKXD_ERROR_INVALID_DEVICE;
-    try { return device->cpp_device->mouseMoveToControls(x, y, segments, ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2) ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; }
-    catch (...) { return handle_exception(); }
-}
-
 makxd_error_t makxd_mouse_click_count(makxd_device_t* device, makxd_mouse_button_t button, uint32_t count, uint32_t delay_ms) {
     if (!device) return MAKXD_ERROR_INVALID_DEVICE;
     try {
