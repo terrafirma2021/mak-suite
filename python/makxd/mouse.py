@@ -145,19 +145,6 @@ class Mouse:
             f"km.move({x},{y},{segments},{ctrl_x1},{ctrl_y1},{ctrl_x2},{ctrl_y2})"
         )
 
-    def position(self) -> str:
-        return self.transport.send_command("km.getpos()", expect_response=True) or ""
-
-    def screen(self, width: int | None = None, height: int | None = None) -> str | None:
-        if (width is None) != (height is None):
-            raise MakxdCommandError("Screen width and height must be supplied together")
-        if width is None:
-            return self.transport.send_command("km.screen()", expect_response=True)
-        if width <= 0 or height <= 0:
-            raise MakxdCommandError("Screen dimensions must be positive")
-        self.transport.send_command(f"km.screen({width},{height})")
-        return None
-
     def click_count(self, button: MouseButton, count: int, delay_ms: int = 1) -> None:
         if button not in self._BUTTON_COMMANDS:
             raise MakxdCommandError(f"Unsupported button: {button}")

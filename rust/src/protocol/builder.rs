@@ -61,16 +61,6 @@ pub fn build_click(button: u8, count: u32, delay_ms: u32) -> String {
     format!("km.click({button},{count},{delay_ms})\r\n")
 }
 
-pub fn build_screen(width: Option<u16>, height: Option<u16>) -> Result<String> {
-    match (width, height) {
-        (Some(width), Some(height)) if width > 0 && height > 0 => {
-            Ok(format!("km.screen({width},{height})\r\n"))
-        }
-        (None, None) => Ok("km.screen()\r\n".to_owned()),
-        _ => Err(MakxdError::Protocol("screen width and height must both be positive".into())),
-    }
-}
-
 pub fn build_mode(command: &str, mode: &str, period_ms: Option<u16>) -> Result<String> {
     let mode = mode.trim();
     if mode.is_empty() {

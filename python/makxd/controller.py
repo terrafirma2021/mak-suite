@@ -155,16 +155,6 @@ class MakxdController:
         self.mouse.move_controls(dx, dy, segments, ctrl_x1, ctrl_y1, ctrl_x2, ctrl_y2)
 
     @maybe_async
-    def mouse_position(self) -> str:
-        self._check_connection()
-        return self.mouse.position()
-
-    @maybe_async
-    def mouse_screen(self, width: Optional[int] = None, height: Optional[int] = None) -> Optional[str]:
-        self._check_connection()
-        return self.mouse.screen(width, height)
-
-    @maybe_async
     def click_count(self, button: MouseButton, count: int, delay_ms: int = 1) -> None:
         self._check_connection()
         self.mouse.click_count(button, count, delay_ms)

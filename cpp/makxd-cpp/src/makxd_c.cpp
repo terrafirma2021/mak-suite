@@ -456,24 +456,6 @@ static makxd_error_t copy_extra_response(makxd_device_t* device, char* response,
     return value.empty() ? MAKXD_ERROR_COMMAND_FAILED : MAKXD_SUCCESS;
 }
 
-makxd_error_t makxd_get_mouse_position(makxd_device_t* device, char* response, size_t response_size) {
-    if (!device) return MAKXD_ERROR_INVALID_DEVICE;
-    try { return copy_extra_response(device, response, response_size, device->cpp_device->mousePosition()); }
-    catch (...) { return handle_exception(); }
-}
-
-makxd_error_t makxd_set_mouse_screen(makxd_device_t* device, int32_t width, int32_t height) {
-    if (!device) return MAKXD_ERROR_INVALID_DEVICE;
-    try { return device->cpp_device->setMouseScreen(width, height) ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; }
-    catch (...) { return handle_exception(); }
-}
-
-makxd_error_t makxd_get_mouse_screen(makxd_device_t* device, char* response, size_t response_size) {
-    if (!device) return MAKXD_ERROR_INVALID_DEVICE;
-    try { return copy_extra_response(device, response, response_size, device->cpp_device->getMouseScreen()); }
-    catch (...) { return handle_exception(); }
-}
-
 makxd_error_t makxd_set_axis_stream(makxd_device_t* device, const char* mode, uint32_t period_ms) {
     if (!device || !mode) return MAKXD_ERROR_INVALID_PARAMETER;
     try { return device->cpp_device->setAxisStream(mode, period_ms) ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; }

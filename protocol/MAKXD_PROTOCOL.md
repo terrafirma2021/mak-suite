@@ -293,20 +293,15 @@ km.move(x,y,segments)
 km.move(x,y,segments,cx1,cy1)
 km.move(x,y,segments,cx1,cy1,cx2,cy2)
 
-km.getpos()
-
 km.wheel(delta)
 ```
 
 Movement values are signed. `move` is relative. A single control pair is
 duplicated as both control points.
 
-### Screen and stream configuration
+### Stream configuration
 
 ```text
-km.screen()
-km.screen(width,height)
-
 km.axis()
 km.axis(mode)
 km.axis(mode,period_ms)
@@ -464,7 +459,7 @@ differences explicitly:
 - The parser registers `side1` and `side2`; bindings must not silently replace
   them with `ms1` and `ms2`.
 - The parser registers `multidown`, `multiup`, `multipress`, `keys`, `silent`,
-  `getpos`, `screen`, `axis`, `mouse`, `echo`, and `baud`.
+  `axis`, `mouse`, `echo`, and `baud`.
 - `km.disable(...)` is not registered in this command table. A binding must not
   advertise it as supported until a parser alias is intentionally added.
 - Keyboard catch handler symbols exist, but no `catch_kb` alias is registered;

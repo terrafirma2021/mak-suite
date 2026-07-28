@@ -34,17 +34,6 @@ impl Device {
         timed!("click_count", self.exec_dynamic(builder::build_click(button, count, delay_ms).as_bytes()))
     }
 
-    pub fn screen(&self) -> Result<String> {
-        timed!("screen", { self.query_dynamic(builder::build_screen(None, None)?.as_bytes()) })
-    }
-
-    pub fn set_screen(&self, width: u16, height: u16) -> Result<()> {
-        timed!("set_screen", {
-            let command = builder::build_screen(Some(width), Some(height))?;
-            self.exec_dynamic(command.as_bytes())
-        })
-    }
-
     pub fn axis_stream(&self) -> Result<String> {
         timed!("axis_stream", { self.query_dynamic(builder::build_mode_query("axis").as_bytes()) })
     }
@@ -144,17 +133,6 @@ impl AsyncDevice {
 
     pub async fn click_count(&self, button: u8, count: u32, delay_ms: u32) -> Result<()> {
         timed!("click_count", self.exec_dynamic(builder::build_click(button, count, delay_ms).as_bytes()).await)
-    }
-
-    pub async fn screen(&self) -> Result<String> {
-        timed!("screen", { self.query_dynamic(builder::build_screen(None, None)?.as_bytes()).await })
-    }
-
-    pub async fn set_screen(&self, width: u16, height: u16) -> Result<()> {
-        timed!("set_screen", {
-            let command = builder::build_screen(Some(width), Some(height))?;
-            self.exec_dynamic(command.as_bytes()).await
-        })
     }
 
     pub async fn axis_stream(&self) -> Result<String> {

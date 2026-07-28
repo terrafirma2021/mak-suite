@@ -1042,34 +1042,6 @@ namespace makxd {
             std::to_string(ctrl_y2) + ")");
     }
 
-    std::string Device::mousePosition() {
-        if (!m_impl->connected.load()) return {};
-        try {
-            return m_impl->serialPort->sendTrackedCommand(
-                "km.getpos()", true, std::chrono::milliseconds(100)).get();
-        }
-        catch (...) {
-            return {};
-        }
-    }
-
-    bool Device::setMouseScreen(int32_t width, int32_t height) {
-        if (!m_impl->connected.load() || width <= 0 || height <= 0) return false;
-        return m_impl->executeCommand(
-            "km.screen(" + std::to_string(width) + "," + std::to_string(height) + ")");
-    }
-
-    std::string Device::getMouseScreen() {
-        if (!m_impl->connected.load()) return {};
-        try {
-            return m_impl->serialPort->sendTrackedCommand(
-                "km.screen()", true, std::chrono::milliseconds(100)).get();
-        }
-        catch (...) {
-            return {};
-        }
-    }
-
     bool Device::setAxisStream(const std::string& mode, uint32_t period_ms) {
         if (!m_impl->connected.load() || mode.empty()) return false;
         const std::string suffix = period_ms == 0 ? ")" : "," + std::to_string(period_ms) + ")";

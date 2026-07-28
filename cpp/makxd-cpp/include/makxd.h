@@ -178,9 +178,6 @@ namespace makxd {
             int32_t ctrl_x, int32_t ctrl_y);
         [[nodiscard]] bool mouseMoveControls(int32_t x, int32_t y, uint32_t segments,
             int32_t ctrl_x1, int32_t ctrl_y1, int32_t ctrl_x2, int32_t ctrl_y2);
-        [[nodiscard]] std::string mousePosition();
-        [[nodiscard]] bool setMouseScreen(int32_t width, int32_t height);
-        [[nodiscard]] std::string getMouseScreen();
         [[nodiscard]] bool setAxisStream(const std::string& mode, uint32_t period_ms = 0);
         [[nodiscard]] std::string getAxisStream();
         [[nodiscard]] bool setMouseStream(const std::string& mode, uint32_t period_ms = 0);

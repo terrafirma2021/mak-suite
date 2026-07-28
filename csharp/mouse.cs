@@ -229,21 +229,6 @@ namespace Mouse
                 $"km.move({x}, {y}, {segments}, {ctrl_x1}, {ctrl_y1}, {ctrl_x2}, {ctrl_y2})");
         }
 
-        public static string get_position()
-        {
-            return send_keyboard_query("km.getpos()");
-        }
-
-        public static string screen()
-        {
-            return send_keyboard_query("km.screen()");
-        }
-
-        public static void screen(int width, int height)
-        {
-            send_keyboard_command($"km.screen({width},{height})");
-        }
-
         public static void click_count(MouseButton button, int count, int delay_ms = 1)
         {
             if (!connected)
