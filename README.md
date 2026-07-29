@@ -26,15 +26,6 @@ bound through the selected operating-system VLAN interface/address so the
 802.1Q tag stays outside KM, `MAK_API`, and AES records. BLE uses the fixed
 MAKXD GATT UUIDs and enables notifications before the version proof.
 
-## MAKXD firmware
-
-The current MAKXD firmware release is stored under
-[`/makxd_firmware/`](makxd_firmware/). The release catalog is
-[`/makxd_firmware/firmware.json`](makxd_firmware/firmware.json), and every
-catalog `file` is resolved relative to that directory. Installable `.mkafw`
-firmware files are stored beside the JSON catalog. The catalog contains only
-the current release.
-
 ## Repository
 
 [`terrafirma2021/mak-suite`](https://github.com/terrafirma2021/mak-suite)
