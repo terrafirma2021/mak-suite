@@ -67,6 +67,10 @@ impl<'d> BatchBuilder<'d> {
         self.push_built(proto_builder::build_move(x, y))
     }
 
+    pub fn move_xy_dt(self, x: i32, y: i32, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_move_dt(x, y, dt_uframes))
+    }
+
     pub fn silent_move(self, x: i32, y: i32) -> Self {
         self.push_built(proto_builder::build_silent_move(x, y))
     }
@@ -78,10 +82,26 @@ impl<'d> BatchBuilder<'d> {
         self
     }
 
+    pub fn button_down_dt(self, button: Button, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_button_dt(
+            button,
+            true,
+            dt_uframes,
+        ))
+    }
+
     pub fn button_up(mut self, button: Button) -> Self {
         self.steps
             .push(BatchStep::Native(constants::button_up_cmd(button).to_vec()));
         self
+    }
+
+    pub fn button_up_dt(self, button: Button, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_button_dt(
+            button,
+            false,
+            dt_uframes,
+        ))
     }
 
     pub fn button_up_force(mut self, button: Button) -> Self {
@@ -95,14 +115,36 @@ impl<'d> BatchBuilder<'d> {
         self.push_built(proto_builder::build_wheel(delta))
     }
 
+    pub fn wheel_dt(self, delta: i32, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_wheel_dt(delta, dt_uframes))
+    }
+
     pub fn keyboard_down<K: Into<KeyboardKey>>(self, key: K) -> Self {
         let key = key.into();
         self.push_keyboard(keyboard_builder::build_down(&key))
     }
 
+    pub fn keyboard_down_dt<K: Into<KeyboardKey>>(
+        self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Self {
+        let key = key.into();
+        self.push_keyboard(keyboard_builder::build_down_dt(&key, dt_uframes))
+    }
+
     pub fn keyboard_up<K: Into<KeyboardKey>>(self, key: K) -> Self {
         let key = key.into();
         self.push_keyboard(keyboard_builder::build_up(&key))
+    }
+
+    pub fn keyboard_up_dt<K: Into<KeyboardKey>>(
+        self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Self {
+        let key = key.into();
+        self.push_keyboard(keyboard_builder::build_up_dt(&key, dt_uframes))
     }
 
     pub fn keyboard_press<K: Into<KeyboardKey>>(self, key: K) -> Self {
@@ -138,6 +180,10 @@ impl<'d> BatchBuilder<'d> {
             keyboard_builder::build_init().into_bytes(),
         ));
         self
+    }
+
+    pub fn keyboard_init_dt(self, dt_uframes: u16) -> Self {
+        self.push_keyboard(keyboard_builder::build_init_dt(dt_uframes))
     }
 
     pub fn keyboard_multi_down(self, keys: &[KeyboardKey]) -> Self {
@@ -413,6 +459,10 @@ impl<'d> AsyncBatchBuilder<'d> {
         self.push_built(proto_builder::build_move(x, y))
     }
 
+    pub fn move_xy_dt(self, x: i32, y: i32, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_move_dt(x, y, dt_uframes))
+    }
+
     pub fn silent_move(self, x: i32, y: i32) -> Self {
         self.push_built(proto_builder::build_silent_move(x, y))
     }
@@ -424,11 +474,27 @@ impl<'d> AsyncBatchBuilder<'d> {
         self
     }
 
+    pub fn button_down_dt(self, button: Button, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_button_dt(
+            button,
+            true,
+            dt_uframes,
+        ))
+    }
+
     pub fn button_up(mut self, button: Button) -> Self {
         self.steps.push(AsyncBatchStep::Native(
             constants::button_up_cmd(button).to_vec(),
         ));
         self
+    }
+
+    pub fn button_up_dt(self, button: Button, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_button_dt(
+            button,
+            false,
+            dt_uframes,
+        ))
     }
 
     pub fn button_up_force(mut self, button: Button) -> Self {
@@ -442,14 +508,36 @@ impl<'d> AsyncBatchBuilder<'d> {
         self.push_built(proto_builder::build_wheel(delta))
     }
 
+    pub fn wheel_dt(self, delta: i32, dt_uframes: u16) -> Self {
+        self.push_built(proto_builder::build_wheel_dt(delta, dt_uframes))
+    }
+
     pub fn keyboard_down<K: Into<KeyboardKey>>(self, key: K) -> Self {
         let key = key.into();
         self.push_keyboard(keyboard_builder::build_down(&key))
     }
 
+    pub fn keyboard_down_dt<K: Into<KeyboardKey>>(
+        self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Self {
+        let key = key.into();
+        self.push_keyboard(keyboard_builder::build_down_dt(&key, dt_uframes))
+    }
+
     pub fn keyboard_up<K: Into<KeyboardKey>>(self, key: K) -> Self {
         let key = key.into();
         self.push_keyboard(keyboard_builder::build_up(&key))
+    }
+
+    pub fn keyboard_up_dt<K: Into<KeyboardKey>>(
+        self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Self {
+        let key = key.into();
+        self.push_keyboard(keyboard_builder::build_up_dt(&key, dt_uframes))
     }
 
     pub fn keyboard_press<K: Into<KeyboardKey>>(self, key: K) -> Self {
@@ -485,6 +573,10 @@ impl<'d> AsyncBatchBuilder<'d> {
             keyboard_builder::build_init().into_bytes(),
         ));
         self
+    }
+
+    pub fn keyboard_init_dt(self, dt_uframes: u16) -> Self {
+        self.push_keyboard(keyboard_builder::build_init_dt(dt_uframes))
     }
 
     pub fn keyboard_multi_down(self, keys: &[KeyboardKey]) -> Self {

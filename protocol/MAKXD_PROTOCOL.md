@@ -148,12 +148,12 @@ to zero. Requests shorter than 16 bytes cannot be correlated and are dropped.
 | Command | ID | Exact request size | Bridge action |
 | --- | ---: | ---: | --- |
 | connect | `0xAF3C2828` | 16 | establish or reset the caller session if MAKXD is connected |
-| mouse move | `0xAEDE7345` | 72 | reconcile buttons, then send relative movement |
-| mouse left | `0x9823AE8D` | 72 | reconcile the complete mouse-button snapshot |
-| mouse middle | `0x97A3AE8D` | 72 | reconcile the complete mouse-button snapshot |
-| mouse right | `0x238D8212` | 72 | reconcile the complete mouse-button snapshot |
-| mouse wheel/all | `0xFFEEAD38` | 72 | reconcile buttons and send any non-zero movement or wheel values |
-| keyboard all | `0x123C2C2F` | 28 | diff and apply the complete keyboard snapshot |
+| mouse move | `0xAEDE7345` | 74 | reconcile buttons, then send relative movement |
+| mouse left | `0x9823AE8D` | 74 | reconcile the complete mouse-button snapshot |
+| mouse middle | `0x97A3AE8D` | 74 | reconcile the complete mouse-button snapshot |
+| mouse right | `0x238D8212` | 74 | reconcile the complete mouse-button snapshot |
+| mouse wheel/all | `0xFFEEAD38` | 74 | reconcile buttons and send any non-zero movement or wheel values |
+| keyboard all | `0x123C2C2F` | 30 | diff and apply the complete keyboard snapshot |
 | physical monitor | `0x27388020` | 16 | start or stop combined mouse and keyboard monitoring |
 | reboot | `0xAA8855AA` | 16 | acknowledge and reset the Bridge caller session |
 
@@ -162,7 +162,7 @@ size or invalid values. It does not treat an unlisted command as successful.
 
 ### Mouse payload
 
-Mouse commands append this 56-byte payload to the header:
+Mouse commands append this 58-byte payload to the header:
 
 | Payload offset | Size | Field |
 | ---: | ---: | --- |
@@ -170,11 +170,13 @@ Mouse commands append this 56-byte payload to the header:
 | 4 | 4 | signed relative X |
 | 8 | 4 | signed relative Y |
 | 12 | 4 | signed wheel delta |
-| 16 | 40 | reserved; ignored by the Bridge and zeroed by the lightweight client |
+| 16 | 2 | `dt_uframes` |
+| 18 | 40 | reserved; ignored by the Bridge and zeroed by the lightweight client |
 
 Button bits 0 through 4 are left, right, middle, side 1, and side 2. Although
 the UDP fields are signed 32-bit values, MAKXD accepts X, Y, and wheel values
 only in the signed 16-bit range. The Bridge rejects values outside that range.
+`dt_uframes` is `0..16383`.
 
 `mouse wheel/all` is shared by `kmNet_mouse_wheel()` and
 `kmNet_mouse_all()`. The Bridge therefore processes the complete packet:
@@ -183,13 +185,14 @@ wheel value is sent.
 
 ### Keyboard payload
 
-The keyboard command appends this 12-byte complete-state snapshot:
+The keyboard command appends this 14-byte complete-state snapshot:
 
 | Payload offset | Size | Field |
 | ---: | ---: | --- |
 | 0 | 1 | modifier bitmap for HID usages `0xE0` through `0xE7` |
 | 1 | 1 | reserved, zero |
 | 2 | 10 | currently held non-modifier HID usages, zero-padded |
+| 12 | 2 | `dt_uframes` in `0..16383` |
 
 The Bridge diffs each snapshot against its caller-session state, releases
 removed usages, and presses added usages. Zero entries are empty.
@@ -271,33 +274,30 @@ GET:
 ### Button state and button actions
 
 ```text
-km.left()       GET;   km.left(value)       SET
-km.right()      GET;   km.right(value)      SET
-km.middle()     GET;   km.middle(value)     SET
-km.side1()      GET;   km.side1(value)      SET
-km.side2()      GET;   km.side2(value)      SET
+km.left()       GET;   km.left(value[,dt_uframes])       SET
+km.right()      GET;   km.right(value[,dt_uframes])      SET
+km.middle()     GET;   km.middle(value[,dt_uframes])     SET
+km.side1()      GET;   km.side1(value[,dt_uframes])      SET
+km.side2()      GET;   km.side2(value[,dt_uframes])      SET
 
 km.click(button,count)
 km.click(button,count,delay_ms)
 ```
 
 The no-argument button form queries state. The value form sends the button
-state (`0` released, `1` pressed). `click` uses a one-based button number,
-click count, and optional delay.
+state (`0` released, `1` pressed). Direct button mutations accept optional
+`dt_uframes` in `0..16383`. `click` uses a one-based button number, click
+count, and optional delay.
 
 ### Relative movement
 
 ```text
-km.move(x,y)
-km.move(x,y,segments)
-km.move(x,y,segments,cx1,cy1)
-km.move(x,y,segments,cx1,cy1,cx2,cy2)
-
-km.wheel(delta)
+km.move(x,y[,dt_uframes])
+km.wheel(delta[,dt_uframes])
 ```
 
-Movement values are signed. `move` is relative. A single control pair is
-duplicated as both control points.
+Movement values are signed 16-bit values and `move` is relative.
+`dt_uframes` is optional and must be in `0..16383`.
 
 ### Stream configuration
 
@@ -369,8 +369,8 @@ performs the parser's silent movement/click operation with an `x,y` pair.
 ## Keyboard commands
 
 ```text
-km.down(key)
-km.up(key)
+km.down(key[,dt_uframes])
+km.up(key[,dt_uframes])
 km.press(key)
 km.press(key,hold_ms)
 km.press(key,hold_ms,random_range)
@@ -383,7 +383,7 @@ km.multipress(key1,key2,...)
 
 km.mask(key,mode)
 km.remap(source,target)
-km.init()
+km.init([dt_uframes])
 km.keys()
 km.keys(value)
 ```
@@ -392,6 +392,13 @@ Keys accept unsigned HID codes (`0` through `255`) or recognized names. Named
 keys are single-quoted and escaped. Keyboard strings are double-quoted,
 ASCII-only, and limited to 256 bytes. `mode` and `value` use `0` to disable
 and `1` to enable. `km.keys()` queries the keyboard callback state.
+Direct `down`, `up`, and `init` mutations accept optional `dt_uframes` in
+`0..16383`.
+
+For every ASCII direct-input command above, omitting `dt_uframes` is valid and
+the command contains no trailing parameter. An explicitly supplied `0` is also
+valid and is emitted as the trailing parameter. Both schedule an exact zero
+delay in firmware.
 
 ### Key names
 

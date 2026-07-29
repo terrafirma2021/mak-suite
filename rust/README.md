@@ -29,7 +29,9 @@ fn main() -> Result<()> {
     let device = Device::connect()?;
 
     device.move_xy(100, 50)?;
+    device.move_xy_dt(100, 50, 250)?;
     device.button_down(Button::Left)?;
+    device.button_down_dt(Button::Left, 250)?;
     device.button_up(Button::Left)?;
     device.wheel(-3)?;
 
@@ -90,8 +92,10 @@ use makxd::{Button, Device, LockTarget};
 
 let device = Device::connect()?;
 device.move_xy(100, -50)?;
+device.move_xy_dt(100, -50, 250)?;
 device.silent_move(10, 10)?;
 device.button_down(Button::Left)?;
+device.button_down_dt(Button::Left, 250)?;
 device.button_up_force(Button::Left)?;
 device.set_lock(LockTarget::X, true)?;
 let locked = device.lock_state(LockTarget::X)?;
@@ -101,7 +105,9 @@ let locked = device.lock_state(LockTarget::X)?;
 
 ```rust
 device.keyboard_down("a")?;
+device.keyboard_down_dt("a", 250)?;
 device.keyboard_up(4u8)?;
+device.keyboard_init_dt(250)?;
 device.keyboard_press_for("space", 25)?;
 device.keyboard_string("hello")?;
 device.keyboard_mask("a", true)?;
@@ -109,6 +115,9 @@ device.keyboard_remap("a", "b")?;
 ```
 
 Keyboard names and numeric HID usages are accepted through `KeyboardKey`.
+The `_dt` methods accept `dt_uframes` in `0..16383`. Methods without `_dt`
+remain the no-trailing-parameter command forms; `_dt(..., 0)` sends an explicit
+trailing zero.
 
 ### Button events
 

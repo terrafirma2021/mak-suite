@@ -111,6 +111,23 @@ namespace Mouse
         };
 
         private static Random r = new Random();
+
+        private static string DtArgument(ushort? dtUframes)
+        {
+            string value = DtValue(dtUframes);
+            return value.Length == 0 ? "" : $",{value}";
+        }
+
+        private static string DtValue(ushort? dtUframes)
+        {
+            if (!dtUframes.HasValue)
+                return "";
+            if (dtUframes.Value > 0x3FFF)
+                throw new ArgumentOutOfRangeException(
+                    nameof(dtUframes), "DT must be in the range 0..16383");
+            return dtUframes.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
         public static void connect(string com, bool encryptionEnabled = false,
             string encryptionKey = "")
         {
@@ -179,12 +196,13 @@ namespace Mouse
             version = WriteCommandInternal("km.version()", true);
         }
 
-        public static void move(int x, int y)
+        public static void move(int x, int y, ushort? dtUframes = null)
         {
+            string dtArgument = DtArgument(dtUframes);
             if (!connected)
                 return;
 
-            send_keyboard_command($"km.move({x}, {y})");
+            send_keyboard_command($"km.move({x},{y}{dtArgument})");
         }
 
         public static void move_smooth(int x, int y, int segments)
@@ -203,12 +221,13 @@ namespace Mouse
             send_keyboard_command($"km.move({x}, {y}, {segments}, {ctrl_x}, {ctrl_y})");
         }
 
-        public static void mouse_wheel(int delta)
+        public static void mouse_wheel(int delta, ushort? dtUframes = null)
         {
+            string dtArgument = DtArgument(dtUframes);
             if (!connected)
                 return;
 
-            send_keyboard_command($"km.wheel({delta})");
+            send_keyboard_command($"km.wheel({delta}{dtArgument})");
         }
 
         public static void silent_move(int x, int y)
@@ -317,14 +336,20 @@ namespace Mouse
             }
         }
 
-        public static void keyboard_down(KeyboardKey key)
+        public static void keyboard_down(
+            KeyboardKey key,
+            ushort? dtUframes = null)
         {
-            send_keyboard_command($"km.down({key.ToCommandArgument()})");
+            send_keyboard_command(
+                $"km.down({key.ToCommandArgument()}{DtArgument(dtUframes)})");
         }
 
-        public static void keyboard_up(KeyboardKey key)
+        public static void keyboard_up(
+            KeyboardKey key,
+            ushort? dtUframes = null)
         {
-            send_keyboard_command($"km.up({key.ToCommandArgument()})");
+            send_keyboard_command(
+                $"km.up({key.ToCommandArgument()}{DtArgument(dtUframes)})");
         }
 
         public static void keyboard_press(KeyboardKey key)
@@ -350,9 +375,9 @@ namespace Mouse
             send_keyboard_command($"km.string(\"{EscapeKeyboardString(text)}\")");
         }
 
-        public static void keyboard_init()
+        public static void keyboard_init(ushort? dtUframes = null)
         {
-            send_keyboard_command("km.init()");
+            send_keyboard_command($"km.init({DtValue(dtUframes)})");
         }
 
         public static bool keyboard_is_down(KeyboardKey key)
@@ -456,25 +481,40 @@ namespace Mouse
             }
         }
 
-        public static void click(string button, int ms_delay, int click_delay = 0)
+        public static void click(
+            string button,
+            int ms_delay,
+            int click_delay = 0,
+            ushort? dtUframes = null)
         {
+            string dtArgument = DtArgument(dtUframes);
             if (!connected)
                 return;
 
             int time = r.Next(10, 100); //use this to randomize press time
             Thread.Sleep(click_delay);
-            send_keyboard_command($"km.{button}(1)");
+            send_keyboard_command(
+                $"km.{button}(1{dtArgument})");
             Thread.Sleep(time);
-            send_keyboard_command($"km.{button}(0)");
+            send_keyboard_command(
+                $"km.{button}(0{dtArgument})");
             Thread.Sleep(ms_delay);
         }
 
-        public static void press(MouseButton button, int press)
+        public static void press(
+            MouseButton button,
+            int press,
+            ushort? dtUframes = null)
         {
+            if (press != 0 && press != 1)
+                throw new ArgumentOutOfRangeException(
+                    nameof(press), "Button state must be 0 or 1");
+            string dtArgument = DtArgument(dtUframes);
             if(!connected)
                 return;
 
-            send_keyboard_command($"km.{MouseButtonToString(button)}({press})");
+            send_keyboard_command(
+                $"km.{MouseButtonToString(button)}({press}{dtArgument})");
         }
         public static void start_listening()
         {

@@ -14,10 +14,34 @@ impl Device {
         })
     }
 
+    pub fn keyboard_down_dt<K: Into<KeyboardKey>>(
+        &self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Result<()> {
+        let key = key.into();
+        timed!("keyboard_down_dt", {
+            let command = builder::build_down_dt(&key, dt_uframes)?;
+            self.exec_dynamic(command.as_bytes())
+        })
+    }
+
     pub fn keyboard_up<K: Into<KeyboardKey>>(&self, key: K) -> Result<()> {
         let key = key.into();
         timed!("keyboard_up", {
             let command = builder::build_up(&key)?;
+            self.exec_dynamic(command.as_bytes())
+        })
+    }
+
+    pub fn keyboard_up_dt<K: Into<KeyboardKey>>(
+        &self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Result<()> {
+        let key = key.into();
+        timed!("keyboard_up_dt", {
+            let command = builder::build_up_dt(&key, dt_uframes)?;
             self.exec_dynamic(command.as_bytes())
         })
     }
@@ -62,6 +86,12 @@ impl Device {
     pub fn keyboard_init(&self) -> Result<()> {
         timed!("keyboard_init", {
             self.exec_dynamic(builder::build_init().as_bytes())
+        })
+    }
+
+    pub fn keyboard_init_dt(&self, dt_uframes: u16) -> Result<()> {
+        timed!("keyboard_init_dt", {
+            self.exec_dynamic(builder::build_init_dt(dt_uframes)?.as_bytes())
         })
     }
 
@@ -140,10 +170,34 @@ impl AsyncDevice {
         })
     }
 
+    pub async fn keyboard_down_dt<K: Into<KeyboardKey>>(
+        &self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Result<()> {
+        let key = key.into();
+        timed!("keyboard_down_dt", {
+            let command = builder::build_down_dt(&key, dt_uframes)?;
+            self.exec_dynamic(command.as_bytes()).await
+        })
+    }
+
     pub async fn keyboard_up<K: Into<KeyboardKey>>(&self, key: K) -> Result<()> {
         let key = key.into();
         timed!("keyboard_up", {
             let command = builder::build_up(&key)?;
+            self.exec_dynamic(command.as_bytes()).await
+        })
+    }
+
+    pub async fn keyboard_up_dt<K: Into<KeyboardKey>>(
+        &self,
+        key: K,
+        dt_uframes: u16,
+    ) -> Result<()> {
+        let key = key.into();
+        timed!("keyboard_up_dt", {
+            let command = builder::build_up_dt(&key, dt_uframes)?;
             self.exec_dynamic(command.as_bytes()).await
         })
     }
@@ -194,6 +248,13 @@ impl AsyncDevice {
     pub async fn keyboard_init(&self) -> Result<()> {
         timed!("keyboard_init", {
             self.exec_dynamic(builder::build_init().as_bytes()).await
+        })
+    }
+
+    pub async fn keyboard_init_dt(&self, dt_uframes: u16) -> Result<()> {
+        timed!("keyboard_init_dt", {
+            self.exec_dynamic(builder::build_init_dt(dt_uframes)?.as_bytes())
+                .await
         })
     }
 

@@ -34,8 +34,8 @@ constexpr std::uint32_t CMD_REBOOT = 0xAA8855AAu;
 constexpr std::uint32_t CMD_MONITOR = 0x27388020u;
 
 constexpr std::size_t HEADER_SIZE = 16u;
-constexpr std::size_t MOUSE_PAYLOAD_SIZE = 56u;
-constexpr std::size_t KEYBOARD_PAYLOAD_SIZE = 12u;
+constexpr std::size_t MOUSE_PAYLOAD_SIZE = 58u;
+constexpr std::size_t KEYBOARD_PAYLOAD_SIZE = 14u;
 constexpr std::size_t MONITOR_PACKET_SIZE = 20u;
 constexpr DWORD RECEIVE_TIMEOUT_MS = 2000u;
 
@@ -72,6 +72,12 @@ void write_u32_le(std::uint8_t* destination, std::uint32_t value)
     destination[1] = static_cast<std::uint8_t>(value >> 8u);
     destination[2] = static_cast<std::uint8_t>(value >> 16u);
     destination[3] = static_cast<std::uint8_t>(value >> 24u);
+}
+
+void write_u16_le(std::uint8_t* destination, std::uint16_t value)
+{
+    destination[0] = static_cast<std::uint8_t>(value);
+    destination[1] = static_cast<std::uint8_t>(value >> 8u);
 }
 
 std::uint32_t read_u32_le(const std::uint8_t* source)
@@ -222,22 +228,25 @@ int send_command_locked(std::uint32_t command, std::span<const std::uint8_t> pay
 }
 
 std::array<std::uint8_t, MOUSE_PAYLOAD_SIZE> make_mouse_payload(
-    std::uint32_t buttons, int x, int y, int wheel)
+    std::uint32_t buttons, int x, int y, int wheel, std::uint16_t dt_uframes)
 {
     std::array<std::uint8_t, MOUSE_PAYLOAD_SIZE> payload{};
     write_u32_le(payload.data(), buttons);
     write_u32_le(payload.data() + 4u, static_cast<std::uint32_t>(static_cast<std::int32_t>(x)));
     write_u32_le(payload.data() + 8u, static_cast<std::uint32_t>(static_cast<std::int32_t>(y)));
     write_u32_le(payload.data() + 12u, static_cast<std::uint32_t>(static_cast<std::int32_t>(wheel)));
+    write_u16_le(payload.data() + 16u, dt_uframes);
     return payload;
 }
 
 std::array<std::uint8_t, KEYBOARD_PAYLOAD_SIZE> make_keyboard_payload(
-    std::uint8_t modifiers, const std::array<std::uint8_t, 10>& keys)
+    std::uint8_t modifiers, const std::array<std::uint8_t, 10>& keys,
+    std::uint16_t dt_uframes)
 {
     std::array<std::uint8_t, KEYBOARD_PAYLOAD_SIZE> payload{};
     payload[0] = modifiers;
     std::copy(keys.begin(), keys.end(), payload.begin() + 2u);
+    write_u16_le(payload.data() + 12u, dt_uframes);
     return payload;
 }
 
@@ -303,15 +312,16 @@ void close_local(bool notify_monitor)
     }
 }
 
-int set_mouse_button(std::uint32_t command, std::uint32_t bit, int is_down)
+int set_mouse_button(std::uint32_t command, std::uint32_t bit, int is_down,
+                     std::uint16_t dt_uframes)
 {
-    if (is_down != 0 && is_down != 1) {
+    if ((is_down != 0 && is_down != 1) || dt_uframes > 0x3FFFu) {
         return KMNET_ERR_ARGUMENT;
     }
     std::scoped_lock lock(g_state.command_mutex);
     const std::uint32_t candidate = is_down != 0 ?
         (g_state.mouse_buttons | bit) : (g_state.mouse_buttons & ~bit);
-    const auto payload = make_mouse_payload(candidate, 0, 0, 0);
+    const auto payload = make_mouse_payload(candidate, 0, 0, 0, dt_uframes);
     const int result = send_command_locked(command, payload);
     if (result == KMNET_SUCCESS) {
         g_state.mouse_buttons = candidate;
@@ -400,46 +410,81 @@ void kmNet_close()
 
 int kmNet_mouse_move(int x, int y)
 {
-    if (!is_i16(x) || !is_i16(y)) {
+    return kmNet_mouse_move(x, y, 0u);
+}
+
+int kmNet_mouse_move(int x, int y, std::uint16_t dt_uframes)
+{
+    if (!is_i16(x) || !is_i16(y) || dt_uframes > 0x3FFFu) {
         return KMNET_ERR_ARGUMENT;
     }
     std::scoped_lock lock(g_state.command_mutex);
-    const auto payload = make_mouse_payload(g_state.mouse_buttons, x, y, 0);
+    const auto payload = make_mouse_payload(
+        g_state.mouse_buttons, x, y, 0, dt_uframes);
     return send_command_locked(CMD_MOUSE_MOVE, payload);
 }
 
 int kmNet_mouse_left(int is_down)
 {
-    return set_mouse_button(CMD_MOUSE_LEFT, 0x01u, is_down);
+    return kmNet_mouse_left(is_down, 0u);
+}
+
+int kmNet_mouse_left(int is_down, std::uint16_t dt_uframes)
+{
+    return set_mouse_button(CMD_MOUSE_LEFT, 0x01u, is_down, dt_uframes);
 }
 
 int kmNet_mouse_middle(int is_down)
 {
-    return set_mouse_button(CMD_MOUSE_MIDDLE, 0x04u, is_down);
+    return kmNet_mouse_middle(is_down, 0u);
+}
+
+int kmNet_mouse_middle(int is_down, std::uint16_t dt_uframes)
+{
+    return set_mouse_button(CMD_MOUSE_MIDDLE, 0x04u, is_down, dt_uframes);
 }
 
 int kmNet_mouse_right(int is_down)
 {
-    return set_mouse_button(CMD_MOUSE_RIGHT, 0x02u, is_down);
+    return kmNet_mouse_right(is_down, 0u);
+}
+
+int kmNet_mouse_right(int is_down, std::uint16_t dt_uframes)
+{
+    return set_mouse_button(CMD_MOUSE_RIGHT, 0x02u, is_down, dt_uframes);
 }
 
 int kmNet_mouse_wheel(int wheel)
 {
-    if (!is_i16(wheel)) {
+    return kmNet_mouse_wheel(wheel, 0u);
+}
+
+int kmNet_mouse_wheel(int wheel, std::uint16_t dt_uframes)
+{
+    if (!is_i16(wheel) || dt_uframes > 0x3FFFu) {
         return KMNET_ERR_ARGUMENT;
     }
     std::scoped_lock lock(g_state.command_mutex);
-    const auto payload = make_mouse_payload(g_state.mouse_buttons, 0, 0, wheel);
+    const auto payload = make_mouse_payload(
+        g_state.mouse_buttons, 0, 0, wheel, dt_uframes);
     return send_command_locked(CMD_MOUSE_WHEEL, payload);
 }
 
 int kmNet_mouse_all(std::uint32_t buttons, int x, int y, int wheel)
 {
-    if ((buttons & ~0x1Fu) != 0u || !is_i16(x) || !is_i16(y) || !is_i16(wheel)) {
+    return kmNet_mouse_all(buttons, x, y, wheel, 0u);
+}
+
+int kmNet_mouse_all(std::uint32_t buttons, int x, int y, int wheel,
+                    std::uint16_t dt_uframes)
+{
+    if ((buttons & ~0x1Fu) != 0u || !is_i16(x) || !is_i16(y) ||
+        !is_i16(wheel) || dt_uframes > 0x3FFFu) {
         return KMNET_ERR_ARGUMENT;
     }
     std::scoped_lock lock(g_state.command_mutex);
-    const auto payload = make_mouse_payload(buttons, x, y, wheel);
+    const auto payload = make_mouse_payload(
+        buttons, x, y, wheel, dt_uframes);
     const int result = send_command_locked(CMD_MOUSE_WHEEL, payload);
     if (result == KMNET_SUCCESS) {
         g_state.mouse_buttons = buttons;
@@ -449,7 +494,12 @@ int kmNet_mouse_all(std::uint32_t buttons, int x, int y, int wheel)
 
 int kmNet_keydown(int hid_usage)
 {
-    if (hid_usage <= 0 || hid_usage > 0xFF) {
+    return kmNet_keydown(hid_usage, 0u);
+}
+
+int kmNet_keydown(int hid_usage, std::uint16_t dt_uframes)
+{
+    if (hid_usage <= 0 || hid_usage > 0xFF || dt_uframes > 0x3FFFu) {
         return KMNET_ERR_ARGUMENT;
     }
     std::scoped_lock lock(g_state.command_mutex);
@@ -469,7 +519,7 @@ int kmNet_keydown(int hid_usage)
         }
     }
 
-    const auto payload = make_keyboard_payload(modifiers, keys);
+    const auto payload = make_keyboard_payload(modifiers, keys, dt_uframes);
     const int result = send_command_locked(CMD_KEYBOARD_ALL, payload);
     if (result == KMNET_SUCCESS) {
         g_state.keyboard_modifiers = modifiers;
@@ -480,7 +530,12 @@ int kmNet_keydown(int hid_usage)
 
 int kmNet_keyup(int hid_usage)
 {
-    if (hid_usage <= 0 || hid_usage > 0xFF) {
+    return kmNet_keyup(hid_usage, 0u);
+}
+
+int kmNet_keyup(int hid_usage, std::uint16_t dt_uframes)
+{
+    if (hid_usage <= 0 || hid_usage > 0xFF || dt_uframes > 0x3FFFu) {
         return KMNET_ERR_ARGUMENT;
     }
     std::scoped_lock lock(g_state.command_mutex);
@@ -498,7 +553,7 @@ int kmNet_keyup(int hid_usage)
         }
     }
 
-    const auto payload = make_keyboard_payload(modifiers, keys);
+    const auto payload = make_keyboard_payload(modifiers, keys, dt_uframes);
     const int result = send_command_locked(CMD_KEYBOARD_ALL, payload);
     if (result == KMNET_SUCCESS) {
         g_state.keyboard_modifiers = modifiers;

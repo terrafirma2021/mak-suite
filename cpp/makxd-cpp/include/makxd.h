@@ -162,7 +162,9 @@ namespace makxd {
 
         // Mouse button control; success requires Makxd's echoed command.
         [[nodiscard]] bool mouseDown(MouseButton button);
+        [[nodiscard]] bool mouseDown(MouseButton button, uint16_t dt_uframes);
         [[nodiscard]] bool mouseUp(MouseButton button);
+        [[nodiscard]] bool mouseUp(MouseButton button, uint16_t dt_uframes);
         [[nodiscard]] bool click(MouseButton button);  // Combined press+release
         [[nodiscard]] bool click(MouseButton button, uint32_t count, uint32_t delay_ms = 1);
 
@@ -172,6 +174,7 @@ namespace makxd {
 
         // Movement; success requires Makxd's echoed command.
         [[nodiscard]] bool mouseMove(int32_t x, int32_t y);
+        [[nodiscard]] bool mouseMove(int32_t x, int32_t y, uint16_t dt_uframes);
         [[nodiscard]] bool mouseSilentMove(int32_t x, int32_t y);
         [[nodiscard]] bool mouseMoveSmooth(int32_t x, int32_t y, uint32_t segments);
         [[nodiscard]] bool mouseMoveBezier(int32_t x, int32_t y, uint32_t segments,
@@ -196,16 +199,20 @@ namespace makxd {
 
         // Mouse wheel
         [[nodiscard]] bool mouseWheel(int32_t delta);
+        [[nodiscard]] bool mouseWheel(int32_t delta, uint16_t dt_uframes);
 
         // Keyboard control
         [[nodiscard]] bool keyboardDown(const KeyboardKey& key);
+        [[nodiscard]] bool keyboardDown(const KeyboardKey& key, uint16_t dt_uframes);
         [[nodiscard]] bool keyboardUp(const KeyboardKey& key);
+        [[nodiscard]] bool keyboardUp(const KeyboardKey& key, uint16_t dt_uframes);
         [[nodiscard]] bool keyboardPress(const KeyboardKey& key);
         [[nodiscard]] bool keyboardPress(const KeyboardKey& key, uint32_t hold_ms);
         [[nodiscard]] bool keyboardPress(const KeyboardKey& key,
             uint32_t hold_ms, uint32_t rand_ms);
         [[nodiscard]] bool keyboardString(const std::string& text);
         [[nodiscard]] bool keyboardInit();
+        [[nodiscard]] bool keyboardInit(uint16_t dt_uframes);
         [[nodiscard]] bool keyboardIsDown(const KeyboardKey& key);
         [[nodiscard]] bool keyboardMask(const KeyboardKey& key, bool enable);
         [[nodiscard]] bool keyboardRemap(const KeyboardKey& source,
@@ -299,25 +306,34 @@ namespace makxd {
         class MAKXD_API BatchCommandBuilder {
         public:
             BatchCommandBuilder& move(int32_t x, int32_t y);
+            BatchCommandBuilder& move(int32_t x, int32_t y, uint16_t dt_uframes);
             BatchCommandBuilder& moveSmooth(int32_t x, int32_t y, uint32_t segments = 10);
             BatchCommandBuilder& moveBezier(int32_t x, int32_t y, uint32_t segments = 20,
                 int32_t ctrl_x = 0, int32_t ctrl_y = 0);
             BatchCommandBuilder& click(MouseButton button);
             BatchCommandBuilder& press(MouseButton button);
+            BatchCommandBuilder& press(MouseButton button, uint16_t dt_uframes);
             BatchCommandBuilder& release(MouseButton button);
+            BatchCommandBuilder& release(MouseButton button, uint16_t dt_uframes);
             BatchCommandBuilder& scroll(int32_t delta);
+            BatchCommandBuilder& scroll(int32_t delta, uint16_t dt_uframes);
             BatchCommandBuilder& drag(MouseButton button, int32_t x, int32_t y);
             BatchCommandBuilder& dragSmooth(MouseButton button, int32_t x, int32_t y, uint32_t segments = 10);
             BatchCommandBuilder& dragBezier(MouseButton button, int32_t x, int32_t y, uint32_t segments = 20,
                 int32_t ctrl_x = 0, int32_t ctrl_y = 0);
             BatchCommandBuilder& keyboardDown(const KeyboardKey& key);
+            BatchCommandBuilder& keyboardDown(
+                const KeyboardKey& key, uint16_t dt_uframes);
             BatchCommandBuilder& keyboardUp(const KeyboardKey& key);
+            BatchCommandBuilder& keyboardUp(
+                const KeyboardKey& key, uint16_t dt_uframes);
             BatchCommandBuilder& keyboardPress(const KeyboardKey& key);
             BatchCommandBuilder& keyboardPress(const KeyboardKey& key, uint32_t hold_ms);
             BatchCommandBuilder& keyboardPress(const KeyboardKey& key,
                 uint32_t hold_ms, uint32_t rand_ms);
             BatchCommandBuilder& keyboardString(const std::string& text);
             BatchCommandBuilder& keyboardInit();
+            BatchCommandBuilder& keyboardInit(uint16_t dt_uframes);
             BatchCommandBuilder& keyboardMask(const KeyboardKey& key, bool enable);
             BatchCommandBuilder& keyboardRemap(const KeyboardKey& source,
                 const KeyboardKey& target);
@@ -335,6 +351,7 @@ namespace makxd {
             Device* m_device;
             std::shared_ptr<std::atomic<bool>> m_deviceLifetime;
             std::vector<std::string> m_commands;
+            bool m_valid = true;
         };
 
         BatchCommandBuilder createBatch();

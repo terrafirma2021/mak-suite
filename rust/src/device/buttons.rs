@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::protocol::constants;
+use crate::protocol::builder;
 use crate::timed;
 use crate::types::Button;
 
@@ -11,9 +12,21 @@ impl Device {
         timed!("button_down", self.exec(constants::button_down_cmd(button)))
     }
 
+    pub fn button_down_dt(&self, button: Button, dt_uframes: u16) -> Result<()> {
+        timed!("button_down_dt", {
+            self.exec_dynamic(builder::build_button_dt(button, true, dt_uframes)?.as_bytes())
+        })
+    }
+
     /// Silent release — does not override a physically held button.
     pub fn button_up(&self, button: Button) -> Result<()> {
         timed!("button_up", self.exec(constants::button_up_cmd(button)))
+    }
+
+    pub fn button_up_dt(&self, button: Button, dt_uframes: u16) -> Result<()> {
+        timed!("button_up_dt", {
+            self.exec_dynamic(builder::build_button_dt(button, false, dt_uframes)?.as_bytes())
+        })
     }
 
     /// Force release a button even if the user is physically holding it.
@@ -47,11 +60,25 @@ impl AsyncDevice {
         )
     }
 
+    pub async fn button_down_dt(&self, button: Button, dt_uframes: u16) -> Result<()> {
+        timed!("button_down_dt", {
+            self.exec_dynamic(builder::build_button_dt(button, true, dt_uframes)?.as_bytes())
+                .await
+        })
+    }
+
     pub async fn button_up(&self, button: Button) -> Result<()> {
         timed!(
             "button_up",
             self.exec(constants::button_up_cmd(button)).await
         )
+    }
+
+    pub async fn button_up_dt(&self, button: Button, dt_uframes: u16) -> Result<()> {
+        timed!("button_up_dt", {
+            self.exec_dynamic(builder::build_button_dt(button, false, dt_uframes)?.as_bytes())
+                .await
+        })
     }
 
     pub async fn button_up_force(&self, button: Button) -> Result<()> {

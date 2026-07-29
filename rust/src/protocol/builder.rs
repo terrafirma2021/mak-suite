@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use crate::error::{MakxdError, Result};
+use crate::types::Button;
 
 /// Maximum absolute value for move/silent_move coordinates (firmware limit).
 pub const MOVE_RANGE: i32 = 32767;
@@ -27,11 +28,44 @@ impl CommandBuf {
     }
 }
 
+pub const DT_UFRAMES_MAX: u16 = 0x3FFF;
+
+fn check_dt_uframes(dt_uframes: u16) -> Result<()> {
+    if dt_uframes > DT_UFRAMES_MAX {
+        return Err(MakxdError::OutOfRange {
+            value: dt_uframes as i64,
+            min: 0,
+            max: DT_UFRAMES_MAX as i64,
+        });
+    }
+    Ok(())
+}
+
 /// Build `km.move(x,y)\r\n`. Returns an error if coordinates exceed ±32767.
 pub fn build_move(x: i32, y: i32) -> Result<CommandBuf> {
     check_move_range(x, "x")?;
     check_move_range(y, "y")?;
     build_cmd(|buf| write!(buf, "km.move({},{})\r\n", x, y))
+}
+
+pub fn build_move_dt(x: i32, y: i32, dt_uframes: u16) -> Result<CommandBuf> {
+    check_move_range(x, "x")?;
+    check_move_range(y, "y")?;
+    check_dt_uframes(dt_uframes)?;
+    build_cmd(|buf| write!(buf, "km.move({x},{y},{dt_uframes})\r\n"))
+}
+
+pub fn build_button_dt(button: Button, pressed: bool, dt_uframes: u16) -> Result<CommandBuf> {
+    check_dt_uframes(dt_uframes)?;
+    let name = match button {
+        Button::Left => "left",
+        Button::Right => "right",
+        Button::Middle => "middle",
+        Button::Side1 => "side1",
+        Button::Side2 => "side2",
+    };
+    let state = if pressed { 1 } else { 0 };
+    build_cmd(|buf| write!(buf, "km.{name}({state},{dt_uframes})\r\n"))
 }
 
 /// Build the full relative move form accepted by the device parser.
@@ -109,6 +143,17 @@ pub fn build_wheel(delta: i32) -> Result<CommandBuf> {
     build_cmd(|buf| write!(buf, "km.wheel({})\r\n", delta))
 }
 
+pub fn build_wheel_dt(delta: i32, dt_uframes: u16) -> Result<CommandBuf> {
+    if !(-WHEEL_RANGE..=WHEEL_RANGE).contains(&delta) {
+        return Err(MakxdError::OutOfRange {
+            value: delta as i64,
+            min: -WHEEL_RANGE as i64,
+            max: WHEEL_RANGE as i64,
+        });
+    }
+    check_dt_uframes(dt_uframes)?;
+    build_cmd(|buf| write!(buf, "km.wheel({delta},{dt_uframes})\r\n"))
+}
 fn check_move_range(v: i32, _axis: &str) -> Result<()> {
     if !(-MOVE_RANGE..=MOVE_RANGE).contains(&v) {
         return Err(MakxdError::OutOfRange {
@@ -154,4 +199,34 @@ fn fmt_len(buf: &[u8; 64]) -> usize {
         .position(|&b| b == b'\n')
         .map(|p| p + 1)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod dt_tests {
+    use super::*;
+
+    #[test]
+    fn builds_timed_mouse_commands() {
+        assert_eq!(
+            build_button_dt(Button::Left, true, 0)
+                .unwrap()
+                .as_bytes(),
+            b"km.left(1,0)\r\n"
+        );
+        assert_eq!(
+            build_move_dt(12, -7, 16383).unwrap().as_bytes(),
+            b"km.move(12,-7,16383)\r\n"
+        );
+        assert_eq!(
+            build_wheel_dt(-2, 9).unwrap().as_bytes(),
+            b"km.wheel(-2,9)\r\n"
+        );
+    }
+
+    #[test]
+    fn rejects_out_of_range_dt() {
+        assert!(build_button_dt(Button::Left, true, 16384).is_err());
+        assert!(build_move_dt(0, 0, 16384).is_err());
+        assert!(build_wheel_dt(0, 16384).is_err());
+    }
 }

@@ -84,24 +84,24 @@ class MakxdController:
         return self._connected and self.transport.is_connected()
 
     @maybe_async
-    def click(self, button: MouseButton) -> None:
+    def click(self, button: MouseButton, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.mouse.press(button)
-        self.mouse.release(button)
+        self.mouse.press(button, dt_uframes)
+        self.mouse.release(button, dt_uframes)
 
     @maybe_async
-    def double_click(self, button: MouseButton) -> None:
+    def double_click(self, button: MouseButton, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.mouse.press(button)
-        self.mouse.release(button)
+        self.mouse.press(button, dt_uframes)
+        self.mouse.release(button, dt_uframes)
         time.sleep(0.001)
-        self.mouse.press(button)
-        self.mouse.release(button)
+        self.mouse.press(button, dt_uframes)
+        self.mouse.release(button, dt_uframes)
 
     @maybe_async
-    def move(self, dx: int, dy: int) -> None:
+    def move(self, dx: int, dy: int, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.mouse.move(dx, dy)
+        self.mouse.move(dx, dy, dt_uframes)
 
     @maybe_async
     def move_abs(
@@ -142,9 +142,9 @@ class MakxdController:
                 raise RuntimeError(f"Batch execution failed at action: {e}")
 
     @maybe_async
-    def scroll(self, delta: int) -> None:
+    def scroll(self, delta: int, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.mouse.scroll(delta)
+        self.mouse.scroll(delta, dt_uframes)
 
     @maybe_async
     def move_controls(self, dx: int, dy: int, segments: int,
@@ -190,24 +190,24 @@ class MakxdController:
         return self.mouse.catch(button, enabled)
 
     @maybe_async
-    def press(self, button: MouseButton) -> None:
+    def press(self, button: MouseButton, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.mouse.press(button)
+        self.mouse.press(button, dt_uframes)
 
     @maybe_async
-    def release(self, button: MouseButton) -> None:
+    def release(self, button: MouseButton, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.mouse.release(button)
+        self.mouse.release(button, dt_uframes)
 
     @maybe_async
-    def keyboard_down(self, key: KeyboardKey) -> None:
+    def keyboard_down(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.keyboard.down(key)
+        self.keyboard.down(key, dt_uframes)
 
     @maybe_async
-    def keyboard_up(self, key: KeyboardKey) -> None:
+    def keyboard_up(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.keyboard.up(key)
+        self.keyboard.up(key, dt_uframes)
 
     @maybe_async
     def keyboard_press(
@@ -225,9 +225,9 @@ class MakxdController:
         self.keyboard.string(text)
 
     @maybe_async
-    def keyboard_init(self) -> None:
+    def keyboard_init(self, dt_uframes: int | None = None) -> None:
         self._check_connection()
-        self.keyboard.init()
+        self.keyboard.init(dt_uframes)
 
     @maybe_async
     def keyboard_is_down(self, key: KeyboardKey) -> bool:
@@ -503,17 +503,30 @@ class MakxdController:
         """Legacy method - use disconnect() instead"""
         await self.disconnect()
 
-    async def async_click(self, button: MouseButton) -> None:
+    async def async_click(
+        self,
+        button: MouseButton,
+        dt_uframes: int | None = None,
+    ) -> None:
         """Legacy method - use click() instead"""
-        await self.click(button)
+        await self.click(button, dt_uframes)
 
-    async def async_move(self, dx: int, dy: int) -> None:
+    async def async_move(
+        self,
+        dx: int,
+        dy: int,
+        dt_uframes: int | None = None,
+    ) -> None:
         """Legacy method - use move() instead"""
-        await self.move(dx, dy)
+        await self.move(dx, dy, dt_uframes)
 
-    async def async_scroll(self, delta: int) -> None:
+    async def async_scroll(
+        self,
+        delta: int,
+        dt_uframes: int | None = None,
+    ) -> None:
         """Legacy method - use scroll() instead"""
-        await self.scroll(delta)
+        await self.scroll(delta, dt_uframes)
 
 def create_controller(fallback_com_port: str = "", debug: bool = False, 
                      send_init: bool = True, auto_reconnect: bool = True, 

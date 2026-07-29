@@ -21,8 +21,14 @@ using Mouse;
 
 device.connect("COM1");
 device.move(100, 100);
+device.move(100, 100, 250);
+device.press(MouseButton.Left, 1, 250);
 device.click(MouseButton.Left, 1);
 ```
+
+The nullable `dtUframes` argument on direct mouse and keyboard mutations is
+optional and must be in `0..16383`. Omitting it sends no trailing DT parameter;
+passing `0` explicitly sends a trailing zero.
 
 ## Encrypted COM API
 
@@ -63,7 +69,9 @@ The keyboard API follows [`protocol/MAKXD_PROTOCOL.md`](../protocol/MAKXD_PROTOC
 
 ```csharp
 device.keyboard_down("a");
+device.keyboard_down("a", 250);
 device.keyboard_up(4);
+device.keyboard_init(250);
 device.keyboard_press("space", 25);
 device.keyboard_string("hello");
 device.keyboard_mask("a", true);

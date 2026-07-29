@@ -1,4 +1,5 @@
 use crate::error::{MakxdError, Result};
+use crate::protocol::builder::DT_UFRAMES_MAX;
 use crate::types::KeyboardKey;
 
 pub const KEYBOARD_STRING_MAX_LEN: usize = 256;
@@ -7,8 +8,16 @@ pub fn build_down(key: &KeyboardKey) -> Result<String> {
     build_key_command("km.down", key)
 }
 
+pub fn build_down_dt(key: &KeyboardKey, dt_uframes: u16) -> Result<String> {
+    build_key_command_dt("km.down", key, dt_uframes)
+}
+
 pub fn build_up(key: &KeyboardKey) -> Result<String> {
     build_key_command("km.up", key)
+}
+
+pub fn build_up_dt(key: &KeyboardKey, dt_uframes: u16) -> Result<String> {
+    build_key_command_dt("km.up", key, dt_uframes)
 }
 
 pub fn build_press(
@@ -46,6 +55,11 @@ pub fn build_string(text: &str) -> Result<String> {
 
 pub fn build_init() -> String {
     "km.init()\r\n".to_owned()
+}
+
+pub fn build_init_dt(dt_uframes: u16) -> Result<String> {
+    check_dt_uframes(dt_uframes)?;
+    Ok(format!("km.init({dt_uframes})\r\n"))
 }
 
 pub fn build_is_down(key: &KeyboardKey) -> Result<String> {
@@ -93,6 +107,29 @@ pub fn build_remap(source: &KeyboardKey, target: &KeyboardKey) -> Result<String>
 
 fn build_key_command(command: &str, key: &KeyboardKey) -> Result<String> {
     Ok(format!("{command}({})\r\n", key_argument(key)?))
+}
+
+fn build_key_command_dt(
+    command: &str,
+    key: &KeyboardKey,
+    dt_uframes: u16,
+) -> Result<String> {
+    check_dt_uframes(dt_uframes)?;
+    Ok(format!(
+        "{command}({},{dt_uframes})\r\n",
+        key_argument(key)?
+    ))
+}
+
+fn check_dt_uframes(dt_uframes: u16) -> Result<()> {
+    if dt_uframes > DT_UFRAMES_MAX {
+        return Err(MakxdError::OutOfRange {
+            value: dt_uframes as i64,
+            min: 0,
+            max: DT_UFRAMES_MAX as i64,
+        });
+    }
+    Ok(())
 }
 
 fn key_argument(key: &KeyboardKey) -> Result<String> {
@@ -166,6 +203,17 @@ mod tests {
             build_press(&key, Some(10), Some(3)).unwrap(),
             "km.press('a',10,3)\r\n"
         );
+    }
+
+    #[test]
+    fn builds_and_validates_dt_commands() {
+        assert_eq!(
+            build_down_dt(&KeyboardKey::from(4u8), 0).unwrap(),
+            "km.down(4,0)\r\n"
+        );
+        assert_eq!(build_init_dt(16383).unwrap(), "km.init(16383)\r\n");
+        assert!(build_up_dt(&KeyboardKey::from(4u8), 16384).is_err());
+        assert!(build_init_dt(16384).is_err());
     }
 
     #[test]

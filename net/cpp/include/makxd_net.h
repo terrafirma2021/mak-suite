@@ -25,15 +25,24 @@ enum kmNet_result : int {
 void kmNet_close();
 
 [[nodiscard]] int kmNet_mouse_move(int x, int y);
+[[nodiscard]] int kmNet_mouse_move(int x, int y, std::uint16_t dt_uframes);
 [[nodiscard]] int kmNet_mouse_left(int is_down);
+[[nodiscard]] int kmNet_mouse_left(int is_down, std::uint16_t dt_uframes);
 [[nodiscard]] int kmNet_mouse_middle(int is_down);
+[[nodiscard]] int kmNet_mouse_middle(int is_down, std::uint16_t dt_uframes);
 [[nodiscard]] int kmNet_mouse_right(int is_down);
+[[nodiscard]] int kmNet_mouse_right(int is_down, std::uint16_t dt_uframes);
 [[nodiscard]] int kmNet_mouse_wheel(int wheel);
+[[nodiscard]] int kmNet_mouse_wheel(int wheel, std::uint16_t dt_uframes);
 [[nodiscard]] int kmNet_mouse_all(std::uint32_t buttons, int x, int y, int wheel);
+[[nodiscard]] int kmNet_mouse_all(std::uint32_t buttons, int x, int y, int wheel,
+                                  std::uint16_t dt_uframes);
 
 // Keys are unsigned USB HID keyboard usages. Modifier usages are 0xE0..0xE7.
 [[nodiscard]] int kmNet_keydown(int hid_usage);
+[[nodiscard]] int kmNet_keydown(int hid_usage, std::uint16_t dt_uframes);
 [[nodiscard]] int kmNet_keyup(int hid_usage);
+[[nodiscard]] int kmNet_keyup(int hid_usage, std::uint16_t dt_uframes);
 
 // port == 0 disables monitoring. A non-zero port starts the Bridge's combined
 // mouse/keyboard stream and binds a second local UDP socket on that port.

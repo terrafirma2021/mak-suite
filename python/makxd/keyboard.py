@@ -61,17 +61,36 @@ def _escape_double_quoted(value: str) -> str:
     return "".join(escaped)
 
 
+def _dt_argument(dt_uframes: int | None) -> str:
+    value = _dt_value(dt_uframes)
+    return "" if value == "" else f",{value}"
+
+
+def _dt_value(dt_uframes: int | None) -> str:
+    if dt_uframes is None:
+        return ""
+    if not isinstance(dt_uframes, int) or isinstance(dt_uframes, bool):
+        raise MakxdCommandError("DT must be an integer")
+    if dt_uframes < 0 or dt_uframes > 0x3FFF:
+        raise MakxdCommandError("DT must be in the range 0..16383")
+    return str(dt_uframes)
+
+
 class Keyboard:
     """MAKXD keyboard command surface matching the C++ API contract."""
 
     def __init__(self, transport: SerialTransport) -> None:
         self.transport = transport
 
-    def down(self, key: KeyboardKey) -> None:
-        self.transport.send_command(f"km.down({_key_argument(key)})")
+    def down(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
+        self.transport.send_command(
+            f"km.down({_key_argument(key)}{_dt_argument(dt_uframes)})"
+        )
 
-    def up(self, key: KeyboardKey) -> None:
-        self.transport.send_command(f"km.up({_key_argument(key)})")
+    def up(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
+        self.transport.send_command(
+            f"km.up({_key_argument(key)}{_dt_argument(dt_uframes)})"
+        )
 
     def press(
         self,
@@ -99,8 +118,8 @@ class Keyboard:
             raise MakxdCommandError("Keyboard string must contain ASCII bytes")
         self.transport.send_command(f'km.string("{_escape_double_quoted(text)}")')
 
-    def init(self) -> None:
-        self.transport.send_command("km.init()")
+    def init(self, dt_uframes: int | None = None) -> None:
+        self.transport.send_command(f"km.init({_dt_value(dt_uframes)})")
 
     def is_down(self, key: KeyboardKey) -> bool:
         response = self.transport.send_command(

@@ -164,6 +164,24 @@ namespace makxd {
             command += ')';
             return command;
         }
+
+        constexpr uint16_t DT_UFRAMES_MAX = 0x3FFFu;
+
+        bool dtUframesValid(uint16_t dtUframes) {
+            return dtUframes <= DT_UFRAMES_MAX;
+        }
+
+        std::string commandWithDt(std::string_view command, uint16_t dtUframes) {
+            if (!dtUframesValid(dtUframes) ||
+                command.empty() || command.back() != ')') {
+                return {};
+            }
+            std::string timedCommand(command.substr(0u, command.size() - 1u));
+            timedCommand += ',';
+            timedCommand += std::to_string(dtUframes);
+            timedCommand += ')';
+            return timedCommand;
+        }
     } // namespace
 
     // Constants
@@ -532,12 +550,16 @@ namespace makxd {
 
 
         // Optimized move command with buffer reuse and bounds checking
-        bool executeMoveCommand(int32_t x, int32_t y) {
+        bool executeMoveCommand(
+            int32_t x,
+            int32_t y,
+            std::optional<uint16_t> dtUframes = std::nullopt) {
             // Validate coordinate ranges to prevent buffer overflow
             constexpr int32_t MAX_COORD = 32767;
             constexpr int32_t MIN_COORD = -32768;
             
-            if (x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD) {
+            if (x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD ||
+                (dtUframes.has_value() && !dtUframesValid(*dtUframes))) {
                 #ifdef DEBUG
                 std::cerr << "Move coordinates out of range: (" << x << "," << y << ")" << std::endl;
                 #endif
@@ -551,6 +573,10 @@ namespace makxd {
             moveCommandBuffer += std::to_string(x);
             moveCommandBuffer += ",";
             moveCommandBuffer += std::to_string(y);
+            if (dtUframes.has_value()) {
+                moveCommandBuffer += ",";
+                moveCommandBuffer += std::to_string(*dtUframes);
+            }
             moveCommandBuffer += ")";
 
             // Additional length check
@@ -621,9 +647,12 @@ namespace makxd {
         }
 
         // Optimized wheel command with buffer reuse
-        bool executeWheelCommand(int32_t delta) {
+        bool executeWheelCommand(
+            int32_t delta,
+            std::optional<uint16_t> dtUframes = std::nullopt) {
             // Validate wheel delta range
-            if (delta < -32768 || delta > 32767) {
+            if (delta < -32768 || delta > 32767 ||
+                (dtUframes.has_value() && !dtUframesValid(*dtUframes))) {
                 return false;
             }
             
@@ -632,6 +661,10 @@ namespace makxd {
 
             wheelCommandBuffer = "km.wheel(";
             wheelCommandBuffer += std::to_string(delta);
+            if (dtUframes.has_value()) {
+                wheelCommandBuffer += ",";
+                wheelCommandBuffer += std::to_string(*dtUframes);
+            }
             wheelCommandBuffer += ")";
 
             return executeCommand(wheelCommandBuffer);
@@ -948,6 +981,16 @@ namespace makxd {
         return cmd ? m_impl->executeCommand(*cmd) : false;
     }
 
+    bool Device::mouseDown(MouseButton button, uint16_t dt_uframes) {
+        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
+            return false;
+        }
+        const auto* command = m_impl->commandCache.getPressCommand(button);
+        const auto timedCommand =
+            command ? commandWithDt(*command, dt_uframes) : std::string{};
+        return !timedCommand.empty() && m_impl->executeCommand(timedCommand);
+    }
+
     bool Device::mouseUp(MouseButton button) {
         if (!m_impl->connected.load()) {
             return false;
@@ -955,6 +998,16 @@ namespace makxd {
 
         const auto* cmd = m_impl->commandCache.getReleaseCommand(button);
         return cmd ? m_impl->executeCommand(*cmd) : false;
+    }
+
+    bool Device::mouseUp(MouseButton button, uint16_t dt_uframes) {
+        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
+            return false;
+        }
+        const auto* command = m_impl->commandCache.getReleaseCommand(button);
+        const auto timedCommand =
+            command ? commandWithDt(*command, dt_uframes) : std::string{};
+        return !timedCommand.empty() && m_impl->executeCommand(timedCommand);
     }
 
     bool Device::click(MouseButton button) {
@@ -1005,6 +1058,13 @@ namespace makxd {
         }
 
         return m_impl->executeMoveCommand(x, y);
+    }
+
+    bool Device::mouseMove(int32_t x, int32_t y, uint16_t dt_uframes) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+        return m_impl->executeMoveCommand(x, y, dt_uframes);
     }
 
     bool Device::mouseSilentMove(int32_t x, int32_t y) {
@@ -1171,6 +1231,13 @@ namespace makxd {
         return m_impl->executeWheelCommand(delta);
     }
 
+    bool Device::mouseWheel(int32_t delta, uint16_t dt_uframes) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+        return m_impl->executeWheelCommand(delta, dt_uframes);
+    }
+
     // Keyboard control methods
     bool Device::keyboardDown(const KeyboardKey& key) {
         if (!m_impl->connected.load()) {
@@ -1182,6 +1249,18 @@ namespace makxd {
             m_impl->executeCommand("km.down(" + keyCommand + ")");
     }
 
+    bool Device::keyboardDown(
+        const KeyboardKey& key, uint16_t dt_uframes) {
+        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
+            return false;
+        }
+        const auto keyCommand = keyboardKeyCommand(key);
+        return !keyCommand.empty() &&
+            m_impl->executeCommand(
+                "km.down(" + keyCommand + "," +
+                std::to_string(dt_uframes) + ")");
+    }
+
     bool Device::keyboardUp(const KeyboardKey& key) {
         if (!m_impl->connected.load()) {
             return false;
@@ -1190,6 +1269,18 @@ namespace makxd {
         const auto keyCommand = keyboardKeyCommand(key);
         return !keyCommand.empty() &&
             m_impl->executeCommand("km.up(" + keyCommand + ")");
+    }
+
+    bool Device::keyboardUp(
+        const KeyboardKey& key, uint16_t dt_uframes) {
+        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
+            return false;
+        }
+        const auto keyCommand = keyboardKeyCommand(key);
+        return !keyCommand.empty() &&
+            m_impl->executeCommand(
+                "km.up(" + keyCommand + "," +
+                std::to_string(dt_uframes) + ")");
     }
 
     bool Device::keyboardPress(const KeyboardKey& key) {
@@ -1244,6 +1335,14 @@ namespace makxd {
         }
 
         return m_impl->executeCommand("km.init()");
+    }
+
+    bool Device::keyboardInit(uint16_t dt_uframes) {
+        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
+            return false;
+        }
+        return m_impl->executeCommand(
+            "km.init(" + std::to_string(dt_uframes) + ")");
     }
 
     bool Device::keyboardIsDown(const KeyboardKey& key) {
@@ -1786,6 +1885,21 @@ namespace makxd {
         return *this;
     }
 
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::move(
+        int32_t x, int32_t y, uint16_t dt_uframes) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
+        if (!dtUframesValid(dt_uframes)) {
+            m_valid = false;
+            return *this;
+        }
+        m_commands.push_back(
+            "km.move(" + std::to_string(x) + "," + std::to_string(y) + "," +
+            std::to_string(dt_uframes) + ")");
+        return *this;
+    }
+
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::moveSmooth(int32_t x, int32_t y, uint32_t segments) {
         if (!isDeviceAlive()) {
             return *this;
@@ -1831,6 +1945,23 @@ namespace makxd {
         return *this;
     }
 
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::press(
+        MouseButton button, uint16_t dt_uframes) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
+        const auto* command =
+            m_device->m_impl->commandCache.getPressCommand(button);
+        const auto timedCommand =
+            command ? commandWithDt(*command, dt_uframes) : std::string{};
+        if (timedCommand.empty()) {
+            m_valid = false;
+        } else {
+            m_commands.push_back(timedCommand);
+        }
+        return *this;
+    }
+
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::release(MouseButton button) {
         if (!isDeviceAlive()) {
             return *this;
@@ -1843,11 +1974,43 @@ namespace makxd {
         return *this;
     }
 
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::release(
+        MouseButton button, uint16_t dt_uframes) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
+        const auto* command =
+            m_device->m_impl->commandCache.getReleaseCommand(button);
+        const auto timedCommand =
+            command ? commandWithDt(*command, dt_uframes) : std::string{};
+        if (timedCommand.empty()) {
+            m_valid = false;
+        } else {
+            m_commands.push_back(timedCommand);
+        }
+        return *this;
+    }
+
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::scroll(int32_t delta) {
         if (!isDeviceAlive()) {
             return *this;
         }
         m_commands.push_back("km.wheel(" + std::to_string(delta) + ")");
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::scroll(
+        int32_t delta, uint16_t dt_uframes) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
+        if (!dtUframesValid(dt_uframes)) {
+            m_valid = false;
+            return *this;
+        }
+        m_commands.push_back(
+            "km.wheel(" + std::to_string(delta) + "," +
+            std::to_string(dt_uframes) + ")");
         return *this;
     }
 
@@ -1917,6 +2080,22 @@ namespace makxd {
         return *this;
     }
 
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::keyboardDown(
+        const KeyboardKey& key, uint16_t dt_uframes) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
+        const auto keyCommand = keyboardKeyCommand(key);
+        if (keyCommand.empty() || !dtUframesValid(dt_uframes)) {
+            m_valid = false;
+        } else {
+            m_commands.push_back(
+                "km.down(" + keyCommand + "," +
+                std::to_string(dt_uframes) + ")");
+        }
+        return *this;
+    }
+
     Device::BatchCommandBuilder& Device::BatchCommandBuilder::keyboardUp(
         const KeyboardKey& key)
     {
@@ -1926,6 +2105,22 @@ namespace makxd {
         const auto keyCommand = keyboardKeyCommand(key);
         if (!keyCommand.empty()) {
             m_commands.push_back("km.up(" + keyCommand + ")");
+        }
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::keyboardUp(
+        const KeyboardKey& key, uint16_t dt_uframes) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
+        const auto keyCommand = keyboardKeyCommand(key);
+        if (keyCommand.empty() || !dtUframesValid(dt_uframes)) {
+            m_valid = false;
+        } else {
+            m_commands.push_back(
+                "km.up(" + keyCommand + "," +
+                std::to_string(dt_uframes) + ")");
         }
         return *this;
     }
@@ -1989,6 +2184,20 @@ namespace makxd {
     {
         if (isDeviceAlive()) {
             m_commands.push_back("km.init()");
+        }
+        return *this;
+    }
+
+    Device::BatchCommandBuilder& Device::BatchCommandBuilder::keyboardInit(
+        uint16_t dt_uframes) {
+        if (!isDeviceAlive()) {
+            return *this;
+        }
+        if (!dtUframesValid(dt_uframes)) {
+            m_valid = false;
+        } else {
+            m_commands.push_back(
+                "km.init(" + std::to_string(dt_uframes) + ")");
         }
         return *this;
     }
@@ -2062,7 +2271,7 @@ namespace makxd {
     }
 
     bool Device::BatchCommandBuilder::execute() {
-        if (!isDeviceAlive()) {
+        if (!isDeviceAlive() || !m_valid) {
             return false;
         }
 

@@ -10,6 +10,17 @@ class AxisButton:
     def __init__(self, name: str) -> None:
         self.name = name
 
+
+def _dt_argument(dt_uframes: int | None) -> str:
+    if dt_uframes is None:
+        return ""
+    if not isinstance(dt_uframes, int) or isinstance(dt_uframes, bool):
+        raise MakxdCommandError("DT must be an integer")
+    if dt_uframes < 0 or dt_uframes > 0x3FFF:
+        raise MakxdCommandError("DT must be in the range 0..16383")
+    return f",{dt_uframes}"
+
+
 class Mouse:
     _BUTTON_COMMANDS = {
         MouseButton.LEFT: "left",
@@ -51,21 +62,30 @@ class Mouse:
             self._UNLOCK_COMMANDS[name] = (f"km.lock_{cmd}(0)", bit)
             self._LOCK_QUERY_COMMANDS[name] = (f"km.lock_{cmd}()", bit)
 
-    def _send_button_command(self, button: MouseButton, state: int) -> None:
+    def _send_button_command(
+        self,
+        button: MouseButton,
+        state: int,
+        dt_uframes: int | None = None,
+    ) -> None:
         if button not in self._BUTTON_COMMANDS:
             raise MakxdCommandError(f"Unsupported button: {button}")
 
-        cmd = self._PRESS_COMMANDS[button] if state else self._RELEASE_COMMANDS[button]
-        self.transport.send_command(cmd)
+        command = self._BUTTON_COMMANDS[button]
+        self.transport.send_command(
+            f"km.{command}({state}{_dt_argument(dt_uframes)})"
+        )
 
-    def press(self, button: MouseButton) -> None:
-        self.transport.send_command(self._PRESS_COMMANDS[button])
+    def press(self, button: MouseButton, dt_uframes: int | None = None) -> None:
+        self._send_button_command(button, 1, dt_uframes)
 
-    def release(self, button: MouseButton) -> None:
-        self.transport.send_command(self._RELEASE_COMMANDS[button])
+    def release(self, button: MouseButton, dt_uframes: int | None = None) -> None:
+        self._send_button_command(button, 0, dt_uframes)
 
-    def move(self, x: int, y: int) -> None:
-        self.transport.send_command(f"km.move({x},{y})")
+    def move(self, x: int, y: int, dt_uframes: int | None = None) -> None:
+        self.transport.send_command(
+            f"km.move({x},{y}{_dt_argument(dt_uframes)})"
+        )
 
     def silent_move(self, x: int, y: int) -> None:
         self.transport.send_command(f"km.silent({x},{y})")
@@ -110,16 +130,11 @@ class Mouse:
             self.transport.send_command(f"km.move({move_x},{move_y})")
             time.sleep(wait_ms / 1000)
 
-    def click(self, button: MouseButton) -> None:
+    def click(self, button: MouseButton, dt_uframes: int | None = None) -> None:
         if button not in self._BUTTON_COMMANDS:
             raise MakxdCommandError(f"Unsupported button: {button}")
-
-        press_cmd = self._PRESS_COMMANDS[button]
-        release_cmd = self._RELEASE_COMMANDS[button]
-        
-        transport = self.transport
-        transport.send_command(press_cmd)
-        transport.send_command(release_cmd)
+        self.press(button, dt_uframes)
+        self.release(button, dt_uframes)
 
     def move_smooth(self, x: int, y: int, segments: int) -> None:
         self.transport.send_command(f"km.move({x},{y},{segments})")
@@ -199,8 +214,10 @@ class Mouse:
         self.transport.send_command(f"km.catch_{alias}({0 if enabled else 1})")
         return None
 
-    def scroll(self, delta: int) -> None:
-        self.transport.send_command(f"km.wheel({delta})")
+    def scroll(self, delta: int, dt_uframes: int | None = None) -> None:
+        self.transport.send_command(
+            f"km.wheel({delta}{_dt_argument(dt_uframes)})"
+        )
 
 
     def _set_lock(self, name: str, lock: bool) -> None:

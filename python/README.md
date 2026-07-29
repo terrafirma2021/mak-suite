@@ -82,13 +82,20 @@ plaintext clients do not work.
 
 ```python
 device.move(100, 50)
+device.move(100, 50, dt_uframes=250)
 device.move_smooth(200, 100, segments=20)
 device.move_bezier(150, 150, segments=30, ctrl_x=75, ctrl_y=200)
 device.press(MouseButton.LEFT)
+device.press(MouseButton.LEFT, dt_uframes=250)
 device.release(MouseButton.LEFT)
 device.click_count(MouseButton.LEFT, count=2)
 device.scroll(-5)
+device.scroll(-5, dt_uframes=250)
 ```
+
+Direct mouse and keyboard mutations accept an optional `dt_uframes` in
+`0..16383`. Omitting it sends the original command without a trailing
+parameter; explicitly passing `0` sends the trailing zero.
 
 The controller also exposes movement, locking, button-state, device-info,
 firmware-version, serial, and command-stream helpers matching the MAKXD
@@ -98,7 +105,9 @@ command surface.
 
 ```python
 device.keyboard_down("a")
+device.keyboard_down("a", dt_uframes=250)
 device.keyboard_up(4)
+device.keyboard_init(dt_uframes=250)
 device.keyboard_press("space", hold_ms=25)
 device.keyboard_string("hello")
 device.keyboard_mask("a", True)

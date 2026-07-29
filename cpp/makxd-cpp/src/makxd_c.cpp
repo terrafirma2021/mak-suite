@@ -322,6 +322,28 @@ makxd_error_t makxd_mouse_down(makxd_device_t* device, makxd_mouse_button_t butt
     }
 }
 
+makxd_error_t makxd_mouse_down_dt(
+    makxd_device_t* device,
+    makxd_mouse_button_t button,
+    uint16_t dt_uframes) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        makxd::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKXD_ERROR_INVALID_PARAMETER;
+        }
+        return device->cpp_device->mouseDown(cpp_button, dt_uframes)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
 makxd_error_t makxd_mouse_up(makxd_device_t* device, makxd_mouse_button_t button) {
     if (!device) {
         return MAKXD_ERROR_INVALID_DEVICE;
@@ -335,6 +357,28 @@ makxd_error_t makxd_mouse_up(makxd_device_t* device, makxd_mouse_button_t button
 
         bool success = device->cpp_device->mouseUp(cpp_button);
         return success ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_mouse_up_dt(
+    makxd_device_t* device,
+    makxd_mouse_button_t button,
+    uint16_t dt_uframes) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        makxd::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKXD_ERROR_INVALID_PARAMETER;
+        }
+        return device->cpp_device->mouseUp(cpp_button, dt_uframes)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
     }
@@ -386,6 +430,25 @@ makxd_error_t makxd_mouse_move(makxd_device_t* device, int32_t x, int32_t y) {
     try {
         bool success = device->cpp_device->mouseMove(x, y);
         return success ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_mouse_move_dt(
+    makxd_device_t* device,
+    int32_t x,
+    int32_t y,
+    uint16_t dt_uframes) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        return device->cpp_device->mouseMove(x, y, dt_uframes)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
     }
@@ -568,6 +631,121 @@ makxd_error_t makxd_mouse_wheel(makxd_device_t* device, int32_t delta) {
     try {
         bool success = device->cpp_device->mouseWheel(delta);
         return success ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_mouse_wheel_dt(
+    makxd_device_t* device,
+    int32_t delta,
+    uint16_t dt_uframes) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        return device->cpp_device->mouseWheel(delta, dt_uframes)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_keyboard_down(makxd_device_t* device, uint8_t key) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (key == 0u) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        return device->cpp_device->keyboardDown(makxd::KeyboardKey{key})
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_keyboard_down_dt(
+    makxd_device_t* device,
+    uint8_t key,
+    uint16_t dt_uframes) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (key == 0u || dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        return device->cpp_device->keyboardDown(
+            makxd::KeyboardKey{key}, dt_uframes)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_keyboard_up(makxd_device_t* device, uint8_t key) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (key == 0u) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        return device->cpp_device->keyboardUp(makxd::KeyboardKey{key})
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_keyboard_up_dt(
+    makxd_device_t* device,
+    uint8_t key,
+    uint16_t dt_uframes) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (key == 0u || dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        return device->cpp_device->keyboardUp(
+            makxd::KeyboardKey{key}, dt_uframes)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_keyboard_init(makxd_device_t* device) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    try {
+        return device->cpp_device->keyboardInit()
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_keyboard_init_dt(
+    makxd_device_t* device,
+    uint16_t dt_uframes) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    if (dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        return device->cpp_device->keyboardInit(dt_uframes)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
     } catch (...) {
         return handle_exception();
     }

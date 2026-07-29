@@ -107,7 +107,9 @@ MAKXD_C_API makxd_error_t makxd_get_version(makxd_device_t* device, char* versio
 
 // Mouse button control
 MAKXD_C_API makxd_error_t makxd_mouse_down(makxd_device_t* device, makxd_mouse_button_t button);
+MAKXD_C_API makxd_error_t makxd_mouse_down_dt(makxd_device_t* device, makxd_mouse_button_t button, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_mouse_up(makxd_device_t* device, makxd_mouse_button_t button);
+MAKXD_C_API makxd_error_t makxd_mouse_up_dt(makxd_device_t* device, makxd_mouse_button_t button, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_mouse_click(makxd_device_t* device, makxd_mouse_button_t button);
 
 // Mouse button state queries
@@ -115,6 +117,7 @@ MAKXD_C_API makxd_error_t makxd_mouse_button_state(makxd_device_t* device, makxd
 
 // Mouse movement
 MAKXD_C_API makxd_error_t makxd_mouse_move(makxd_device_t* device, int32_t x, int32_t y);
+MAKXD_C_API makxd_error_t makxd_mouse_move_dt(makxd_device_t* device, int32_t x, int32_t y, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_mouse_silent_move(makxd_device_t* device, int32_t x, int32_t y);
 MAKXD_C_API makxd_error_t makxd_mouse_move_smooth(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments);
 MAKXD_C_API makxd_error_t makxd_mouse_move_bezier(makxd_device_t* device, int32_t x, int32_t y, uint32_t segments, int32_t ctrl_x, int32_t ctrl_y);
@@ -136,6 +139,15 @@ MAKXD_C_API makxd_error_t makxd_mouse_drag_bezier(makxd_device_t* device, makxd_
 
 // Mouse wheel
 MAKXD_C_API makxd_error_t makxd_mouse_wheel(makxd_device_t* device, int32_t delta);
+MAKXD_C_API makxd_error_t makxd_mouse_wheel_dt(makxd_device_t* device, int32_t delta, uint16_t dt_uframes);
+
+// Keyboard control by USB HID usage.
+MAKXD_C_API makxd_error_t makxd_keyboard_down(makxd_device_t* device, uint8_t key);
+MAKXD_C_API makxd_error_t makxd_keyboard_down_dt(makxd_device_t* device, uint8_t key, uint16_t dt_uframes);
+MAKXD_C_API makxd_error_t makxd_keyboard_up(makxd_device_t* device, uint8_t key);
+MAKXD_C_API makxd_error_t makxd_keyboard_up_dt(makxd_device_t* device, uint8_t key, uint16_t dt_uframes);
+MAKXD_C_API makxd_error_t makxd_keyboard_init(makxd_device_t* device);
+MAKXD_C_API makxd_error_t makxd_keyboard_init_dt(makxd_device_t* device, uint16_t dt_uframes);
 
 // Mouse locking
 MAKXD_C_API makxd_error_t makxd_lock_mouse_x(makxd_device_t* device, bool lock);

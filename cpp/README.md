@@ -41,8 +41,15 @@ Basic C++ usage:
 makxd::Device device;
 device.connect();
 device.mouseMove(100, 0);
+device.mouseMove(100, 0, 250);
+device.mouseDown(makxd::MouseButton::LEFT, 250);
+device.keyboardDown(makxd::KeyboardKey{static_cast<uint8_t>(4)}, 250);
 device.click(makxd::MouseButton::LEFT);
 ```
+
+The timed overloads accept `dt_uframes` in `0..16383`. Calling the original
+overload sends no trailing DT parameter; passing `0` explicitly sends a
+trailing zero.
 
 ### Encrypted COM API
 
@@ -72,6 +79,9 @@ The library includes a complete C ABI for easy integration with Python, Rust, Go
 makxd_device_t* device = makxd_device_create();
 makxd_connect(device, "");
 makxd_mouse_move(device, 100, 0);
+makxd_mouse_move_dt(device, 100, 0, 250);
+makxd_mouse_down_dt(device, MAKXD_MOUSE_LEFT, 250);
+makxd_keyboard_down_dt(device, 4, 250);
 makxd_mouse_click(device, MAKXD_MOUSE_LEFT);
 makxd_device_destroy(device);
 ```

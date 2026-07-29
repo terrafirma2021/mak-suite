@@ -12,6 +12,12 @@ impl Device {
         })
     }
 
+    pub fn move_xy_dt(&self, x: i32, y: i32, dt_uframes: u16) -> Result<()> {
+        timed!("move_xy_dt", {
+            self.exec_dynamic(builder::build_move_dt(x, y, dt_uframes)?.as_bytes())
+        })
+    }
+
     pub fn move_controls(
         &self,
         x: i32,
@@ -97,6 +103,12 @@ impl Device {
             self.exec_dynamic(builder::build_wheel(delta)?.as_bytes())
         })
     }
+
+    pub fn wheel_dt(&self, delta: i32, dt_uframes: u16) -> Result<()> {
+        timed!("wheel_dt", {
+            self.exec_dynamic(builder::build_wheel_dt(delta, dt_uframes)?.as_bytes())
+        })
+    }
 }
 
 // -- Async --
@@ -109,6 +121,13 @@ impl AsyncDevice {
     pub async fn move_xy(&self, x: i32, y: i32) -> Result<()> {
         timed!("move_xy", {
             self.exec_dynamic(builder::build_move(x, y)?.as_bytes())
+                .await
+        })
+    }
+
+    pub async fn move_xy_dt(&self, x: i32, y: i32, dt_uframes: u16) -> Result<()> {
+        timed!("move_xy_dt", {
+            self.exec_dynamic(builder::build_move_dt(x, y, dt_uframes)?.as_bytes())
                 .await
         })
     }
@@ -196,6 +215,13 @@ impl AsyncDevice {
     pub async fn wheel(&self, delta: i32) -> Result<()> {
         timed!("wheel", {
             self.exec_dynamic(builder::build_wheel(delta)?.as_bytes())
+                .await
+        })
+    }
+
+    pub async fn wheel_dt(&self, delta: i32, dt_uframes: u16) -> Result<()> {
+        timed!("wheel_dt", {
+            self.exec_dynamic(builder::build_wheel_dt(delta, dt_uframes)?.as_bytes())
                 .await
         })
     }

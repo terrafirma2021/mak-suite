@@ -19,6 +19,7 @@ tests
 !tests/
 tests/*
 !tests/test_transport_encryption.py
+!tests/test_dt_commands.py
 pypi.txt
 etc
 scripts
