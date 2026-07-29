@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "welcome": "Welcome to MAKUI",
+  "welcomeTranslations": {
+    "en": "Welcome to MAKUI",
+    "zh-cn": "\u6b22\u8fce\u4f7f\u7528 MAKUI"
+  },
+  "releases": [
+    {
+      "id": "makxd-1",
+      "label": "MAKXD firmware 1",
+      "labelTranslations": {
+        "en": "MAKXD firmware 1",
+        "zh-cn": "MAKXD \u56fa\u4ef6 1"
+      },
+      "version": 1,
+      "file": "makxd-1.mkafw",
+      "bytes": 214424,
+      "sha256": "b19592566060336cd5bf93ea58fb19167c3967f2ce684feced0198b6bd6fa7eb",
+      "installable": true
+    }
+  ]
+}
