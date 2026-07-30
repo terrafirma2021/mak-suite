@@ -238,6 +238,15 @@ namespace makxd {
         [[nodiscard]] bool mouseUp(MouseButton button, uint16_t dt_uframes);
         [[nodiscard]] bool click(MouseButton button);  // Combined press+release
         [[nodiscard]] bool click(MouseButton button, uint32_t count, uint32_t delay_ms = 1);
+        [[nodiscard]] bool mouseButtonMask(MouseButton button, bool enabled);
+        [[nodiscard]] bool mouseLeftMask(bool enabled);
+        [[nodiscard]] bool mouseRightMask(bool enabled);
+        [[nodiscard]] bool mouseMiddleMask(bool enabled);
+        [[nodiscard]] bool mouseSide1Mask(bool enabled);
+        [[nodiscard]] bool mouseSide2Mask(bool enabled);
+        [[nodiscard]] bool mouseMoveMask(
+            bool left, bool right, bool down, bool up);
+        [[nodiscard]] bool mouseWheelMask(bool down, bool up);
 
 
         // Mouse button state queries (with caching)

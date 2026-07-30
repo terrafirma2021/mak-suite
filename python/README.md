@@ -139,6 +139,9 @@ device.release(MouseButton.LEFT)
 device.click_count(MouseButton.LEFT, count=2)
 device.scroll(-5)
 device.scroll(-5, dt_uframes=250)
+device.mouse_button_mask(MouseButton.LEFT, True)
+device.mouse_move_mask(True, False, False, True)
+device.mouse_wheel_mask(True, False)
 ```
 
 Direct mouse and keyboard mutations accept an optional `dt_uframes` in

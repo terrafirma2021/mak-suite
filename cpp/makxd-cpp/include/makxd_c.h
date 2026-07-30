@@ -209,6 +209,12 @@ MAKXD_C_API makxd_error_t makxd_mouse_down_dt(makxd_device_t* device, makxd_mous
 MAKXD_C_API makxd_error_t makxd_mouse_up(makxd_device_t* device, makxd_mouse_button_t button);
 MAKXD_C_API makxd_error_t makxd_mouse_up_dt(makxd_device_t* device, makxd_mouse_button_t button, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_mouse_click(makxd_device_t* device, makxd_mouse_button_t button);
+MAKXD_C_API makxd_error_t makxd_mouse_button_mask(
+    makxd_device_t* device, makxd_mouse_button_t button, bool enabled);
+MAKXD_C_API makxd_error_t makxd_mouse_move_mask(
+    makxd_device_t* device, bool left, bool right, bool down, bool up);
+MAKXD_C_API makxd_error_t makxd_mouse_wheel_mask(
+    makxd_device_t* device, bool down, bool up);
 
 // Mouse button state queries
 MAKXD_C_API makxd_error_t makxd_mouse_button_state(makxd_device_t* device, makxd_mouse_button_t button, bool* state);

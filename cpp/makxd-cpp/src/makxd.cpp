@@ -1496,6 +1496,79 @@ namespace makxd {
             payload);
     }
 
+    bool Device::mouseButtonMask(MouseButton button, bool enabled) {
+        if (!m_impl->connected.load() || std::to_underlying(button) >= 5u) {
+            return false;
+        }
+        constexpr std::array<const char*, 5> commands{
+            "left_mask", "right_mask", "middle_mask", "side1_mask", "side2_mask"};
+        const auto index = std::to_underlying(button);
+        const std::array<uint8_t, 1> payload{
+            static_cast<uint8_t>(enabled ? 1u : 0u)};
+        return m_impl->executeApiCommand(
+            "km." + std::string(commands[index]) + "(" +
+                (enabled ? "1" : "0") + ")",
+            static_cast<ApiOpcode>(
+                static_cast<uint8_t>(ApiOpcode::LEFT_MASK) + index),
+            ApiVerb::SET,
+            payload);
+    }
+
+    bool Device::mouseLeftMask(bool enabled) {
+        return mouseButtonMask(MouseButton::LEFT, enabled);
+    }
+
+    bool Device::mouseRightMask(bool enabled) {
+        return mouseButtonMask(MouseButton::RIGHT, enabled);
+    }
+
+    bool Device::mouseMiddleMask(bool enabled) {
+        return mouseButtonMask(MouseButton::MIDDLE, enabled);
+    }
+
+    bool Device::mouseSide1Mask(bool enabled) {
+        return mouseButtonMask(MouseButton::SIDE1, enabled);
+    }
+
+    bool Device::mouseSide2Mask(bool enabled) {
+        return mouseButtonMask(MouseButton::SIDE2, enabled);
+    }
+
+    bool Device::mouseMoveMask(
+        bool left, bool right, bool down, bool up) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+        const std::array<uint8_t, 4> payload{
+            static_cast<uint8_t>(left ? 1u : 0u),
+            static_cast<uint8_t>(right ? 1u : 0u),
+            static_cast<uint8_t>(down ? 1u : 0u),
+            static_cast<uint8_t>(up ? 1u : 0u)};
+        return m_impl->executeApiCommand(
+            "km.move_mask(" + std::to_string(payload[0]) + "," +
+                std::to_string(payload[1]) + "," +
+                std::to_string(payload[2]) + "," +
+                std::to_string(payload[3]) + ")",
+            ApiOpcode::MOVE_MASK,
+            ApiVerb::SET,
+            payload);
+    }
+
+    bool Device::mouseWheelMask(bool down, bool up) {
+        if (!m_impl->connected.load()) {
+            return false;
+        }
+        const std::array<uint8_t, 2> payload{
+            static_cast<uint8_t>(down ? 1u : 0u),
+            static_cast<uint8_t>(up ? 1u : 0u)};
+        return m_impl->executeApiCommand(
+            "km.wheel_mask(" + std::to_string(payload[0]) + "," +
+                std::to_string(payload[1]) + ")",
+            ApiOpcode::WHEEL_MASK,
+            ApiVerb::SET,
+            payload);
+    }
+
     bool Device::click(MouseButton button) {
         if (!m_impl->connected.load()) {
             return false;

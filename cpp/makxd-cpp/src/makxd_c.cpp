@@ -539,6 +539,57 @@ makxd_error_t makxd_mouse_button_state(makxd_device_t* device, makxd_mouse_butto
     }
 }
 
+makxd_error_t makxd_mouse_button_mask(
+    makxd_device_t* device,
+    makxd_mouse_button_t button,
+    bool enabled) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    try {
+        makxd::MouseButton cpp_button{};
+        if (!try_convert_mouse_button(button, cpp_button)) {
+            return MAKXD_ERROR_INVALID_PARAMETER;
+        }
+        return device->cpp_device->mouseButtonMask(cpp_button, enabled)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_mouse_move_mask(
+    makxd_device_t* device,
+    bool left,
+    bool right,
+    bool down,
+    bool up) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    try {
+        return device->cpp_device->mouseMoveMask(left, right, down, up)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
+makxd_error_t makxd_mouse_wheel_mask(
+    makxd_device_t* device,
+    bool down,
+    bool up) {
+    if (!device) {
+        return MAKXD_ERROR_INVALID_DEVICE;
+    }
+    try {
+        return device->cpp_device->mouseWheelMask(down, up)
+            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
 // Mouse movement
 makxd_error_t makxd_mouse_move(makxd_device_t* device, int32_t x, int32_t y) {
     if (!device) {

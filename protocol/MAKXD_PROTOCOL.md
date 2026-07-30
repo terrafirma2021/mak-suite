@@ -111,9 +111,23 @@ report has been submitted.
 | `km.side2(value[,dt])` |
 | `km.move(x,y[,dt])` |
 | `km.wheel(delta[,dt])` |
+| `km.left_mask(enabled)` |
+| `km.right_mask(enabled)` |
+| `km.middle_mask(enabled)` |
+| `km.side1_mask(enabled)` |
+| `km.side2_mask(enabled)` |
+| `km.move_mask(left,right,down,up)` |
+| `km.wheel_mask(down,up)` |
 
 Button values are `0` or `1`. Movement and wheel values are signed 16-bit
 integers.
+
+Mouse masks are raw-input locks. A button lock removes that physical button.
+Movement locks zero only the selected raw direction: left is negative X, right
+is positive X, down is positive Y, and up is negative Y. Wheel down is
+negative and wheel up is positive. Injected mouse values bypass every lock.
+Lock changes publish immediately, have no `dt`, do not use the injection queue
+or mailbox, and do not submit a USB report by themselves.
 
 ### Keyboard KM API
 
@@ -348,8 +362,15 @@ Successful responses use status `0x01`; rejected calls use `0xFF`.
 | `API_MIDDLE` | `0x13` |
 | `API_SIDE1` | `0x14` |
 | `API_SIDE2` | `0x15` |
+| `API_MOVE_MASK` | `0x16` |
+| `API_WHEEL_MASK` | `0x17` |
 | `API_MOVE` | `0x18` |
 | `API_WHEEL` | `0x19` |
+| `API_LEFT_MASK` | `0x1A` |
+| `API_RIGHT_MASK` | `0x1B` |
+| `API_MIDDLE_MASK` | `0x1C` |
+| `API_SIDE1_MASK` | `0x1D` |
+| `API_SIDE2_MASK` | `0x1E` |
 
 ### Keyboard
 
@@ -466,8 +487,11 @@ Successful responses use status `0x01`; rejected calls use `0xFF`.
 | `API_CONTROLLER_BUTTON31_MASK` | `0x9E` |
 | `API_CONTROLLER_BUTTON32_MASK` | `0x9F` |
 
-Controller payloads use little-endian integers:
+Payloads use little-endian integers:
 
+- Each named mouse-button raw lock SET uses exactly `enabled:u8`.
+- `API_MOVE_MASK SET` uses `left:u8, right:u8, down:u8, up:u8`.
+- `API_WHEEL_MASK SET` uses `down:u8, up:u8`.
 - `API_CONTROLLER_STATE SET`: `buttons:u32, hat:u8, lt:u16, rt:u16,
   x:i16, y:i16, rx:i16, ry:i16, z:i16, rz:i16 [,dt:u16]`.
 - Each named controller button uses no GET payload; SET uses `state:u8

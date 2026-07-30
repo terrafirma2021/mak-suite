@@ -64,6 +64,19 @@ pub(crate) fn build_controller_command(
     })
 }
 
+pub(crate) fn build_mouse_mask(name: &str, values: &[bool]) -> Result<CommandBuf> {
+    build_cmd(|buf| {
+        write!(buf, "km.{name}(")?;
+        for (index, value) in values.iter().enumerate() {
+            if index != 0 {
+                write!(buf, ",")?;
+            }
+            write!(buf, "{}", *value as u8)?;
+        }
+        write!(buf, ")\r\n")
+    })
+}
+
 /// Build `km.move(x,y)\r\n`. Returns an error if coordinates exceed ±32767.
 pub fn build_move(x: i32, y: i32) -> Result<CommandBuf> {
     check_move_range(x, "x")?;
@@ -224,9 +237,7 @@ mod dt_tests {
     #[test]
     fn builds_timed_mouse_commands() {
         assert_eq!(
-            build_button_dt(Button::Left, true, 0)
-                .unwrap()
-                .as_bytes(),
+            build_button_dt(Button::Left, true, 0).unwrap().as_bytes(),
             b"km.left(1,0)\r\n"
         );
         assert_eq!(
@@ -250,13 +261,9 @@ mod dt_tests {
     #[test]
     fn builds_controller_tuple_and_single_mask_commands() {
         assert_eq!(
-            build_controller_command(
-                "controller",
-                &[3, 8, 10, 20, -1, 2, -3, 4, -5, 6],
-                None,
-            )
-            .unwrap()
-            .as_bytes(),
+            build_controller_command("controller", &[3, 8, 10, 20, -1, 2, -3, 4, -5, 6], None,)
+                .unwrap()
+                .as_bytes(),
             b"km.controller(3,8,10,20,-1,2,-3,4,-5,6)\r\n"
         );
         assert_eq!(
@@ -264,6 +271,26 @@ mod dt_tests {
                 .unwrap()
                 .as_bytes(),
             b"km.controller_right_stick_mask(1,0,1,0)\r\n"
+        );
+    }
+
+    #[test]
+    fn builds_immediate_mouse_mask_commands() {
+        assert_eq!(
+            build_mouse_mask("left_mask", &[true]).unwrap().as_bytes(),
+            b"km.left_mask(1)\r\n"
+        );
+        assert_eq!(
+            build_mouse_mask("move_mask", &[true, false, true, false])
+                .unwrap()
+                .as_bytes(),
+            b"km.move_mask(1,0,1,0)\r\n"
+        );
+        assert_eq!(
+            build_mouse_mask("wheel_mask", &[true, false])
+                .unwrap()
+                .as_bytes(),
+            b"km.wheel_mask(1,0)\r\n"
         );
     }
 }

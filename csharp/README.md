@@ -24,6 +24,9 @@ device.move(100, 100);
 device.move(100, 100, 250);
 device.press(MouseButton.Left, 1, 250);
 device.click(MouseButton.Left, 1);
+device.mouse_left_mask(true);
+device.mouse_move_mask(true, false, false, true);
+device.mouse_wheel_mask(true, false);
 ```
 
 With no port argument, C# probes all CH343 (`1A86:55D3`) ports before all

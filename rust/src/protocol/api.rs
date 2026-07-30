@@ -28,8 +28,15 @@ pub enum ApiOpcode {
     Middle = 0x13,
     Side1 = 0x14,
     Side2 = 0x15,
+    MoveMask = 0x16,
+    WheelMask = 0x17,
     Move = 0x18,
     Wheel = 0x19,
+    LeftMask = 0x1a,
+    RightMask = 0x1b,
+    MiddleMask = 0x1c,
+    Side1Mask = 0x1d,
+    Side2Mask = 0x1e,
     KeyDown = 0x20,
     KeyUp = 0x21,
     KeyInit = 0x22,
@@ -150,6 +157,16 @@ pub(crate) fn button_opcode(button: Button) -> ApiOpcode {
         Button::Middle => ApiOpcode::Middle,
         Button::Side1 => ApiOpcode::Side1,
         Button::Side2 => ApiOpcode::Side2,
+    }
+}
+
+pub(crate) fn button_mask_opcode(button: Button) -> ApiOpcode {
+    match button {
+        Button::Left => ApiOpcode::LeftMask,
+        Button::Right => ApiOpcode::RightMask,
+        Button::Middle => ApiOpcode::MiddleMask,
+        Button::Side1 => ApiOpcode::Side1Mask,
+        Button::Side2 => ApiOpcode::Side2Mask,
     }
 }
 
@@ -329,6 +346,17 @@ mod tests {
 
         let with_dt = mak_api_command(ApiOpcode::Move, ApiVerb::Exec, &[1, 0, 2, 0, 0, 0]).unwrap();
         assert_eq!(with_dt, [0xde, 0xad, 9, 0, 0, 0, 0x18, 2, 1, 0, 2, 0, 0, 0]);
+    }
+
+    #[test]
+    fn mak_api_mouse_masks_have_exact_named_opcodes() {
+        assert_eq!(ApiOpcode::MoveMask as u8, 0x16);
+        assert_eq!(ApiOpcode::WheelMask as u8, 0x17);
+        assert_eq!(button_mask_opcode(Button::Left) as u8, 0x1a);
+        assert_eq!(button_mask_opcode(Button::Right) as u8, 0x1b);
+        assert_eq!(button_mask_opcode(Button::Middle) as u8, 0x1c);
+        assert_eq!(button_mask_opcode(Button::Side1) as u8, 0x1d);
+        assert_eq!(button_mask_opcode(Button::Side2) as u8, 0x1e);
     }
 
     #[test]

@@ -763,6 +763,56 @@ namespace Mouse
                 0x19, 0x02, payload.ToArray());
         }
 
+        public static void mouse_left_mask(bool enabled)
+            => SendApiCommand(
+                $"km.left_mask({(enabled ? 1 : 0)})",
+                0x1A, 0x01, new byte[] { (byte)(enabled ? 1 : 0) });
+
+        public static void mouse_right_mask(bool enabled)
+            => SendApiCommand(
+                $"km.right_mask({(enabled ? 1 : 0)})",
+                0x1B, 0x01, new byte[] { (byte)(enabled ? 1 : 0) });
+
+        public static void mouse_middle_mask(bool enabled)
+            => SendApiCommand(
+                $"km.middle_mask({(enabled ? 1 : 0)})",
+                0x1C, 0x01, new byte[] { (byte)(enabled ? 1 : 0) });
+
+        public static void mouse_side1_mask(bool enabled)
+            => SendApiCommand(
+                $"km.side1_mask({(enabled ? 1 : 0)})",
+                0x1D, 0x01, new byte[] { (byte)(enabled ? 1 : 0) });
+
+        public static void mouse_side2_mask(bool enabled)
+            => SendApiCommand(
+                $"km.side2_mask({(enabled ? 1 : 0)})",
+                0x1E, 0x01, new byte[] { (byte)(enabled ? 1 : 0) });
+
+        public static void mouse_move_mask(
+            bool left, bool right, bool down, bool up)
+        {
+            var payload = new byte[] {
+                (byte)(left ? 1 : 0),
+                (byte)(right ? 1 : 0),
+                (byte)(down ? 1 : 0),
+                (byte)(up ? 1 : 0)
+            };
+            SendApiCommand(
+                $"km.move_mask({payload[0]},{payload[1]},{payload[2]},{payload[3]})",
+                0x16, 0x01, payload);
+        }
+
+        public static void mouse_wheel_mask(bool down, bool up)
+        {
+            var payload = new byte[] {
+                (byte)(down ? 1 : 0),
+                (byte)(up ? 1 : 0)
+            };
+            SendApiCommand(
+                $"km.wheel_mask({payload[0]},{payload[1]})",
+                0x17, 0x01, payload);
+        }
+
         public static void silent_move(int x, int y)
         {
             if (!connected)

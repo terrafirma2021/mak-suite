@@ -210,6 +210,27 @@ class MakxdController:
         self.mouse.release(button, dt_uframes)
 
     @maybe_async
+    def mouse_button_mask(self, button: MouseButton, enabled: bool) -> None:
+        self._check_connection()
+        self.mouse.button_mask(button, enabled)
+
+    @maybe_async
+    def mouse_move_mask(
+        self,
+        left: bool,
+        right: bool,
+        down: bool,
+        up: bool,
+    ) -> None:
+        self._check_connection()
+        self.mouse.move_mask(left, right, down, up)
+
+    @maybe_async
+    def mouse_wheel_mask(self, down: bool, up: bool) -> None:
+        self._check_connection()
+        self.mouse.wheel_mask(down, up)
+
+    @maybe_async
     def keyboard_down(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
         self._check_connection()
         self.keyboard.down(key, dt_uframes)

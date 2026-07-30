@@ -5,7 +5,7 @@ from makxd.errors import MakxdCommandError
 from makxd.keyboard import Keyboard
 from makxd.gamepad import ControllerButton, Gamepad
 from makxd.mouse import Mouse
-from makxd.protocol import ApiProtocol
+from makxd.protocol import ApiOpcode, ApiProtocol, ApiVerb
 from makxd.stream import (
     ControllerStreamState,
     StreamInputRecord,
@@ -19,6 +19,7 @@ import struct
 class CommandTransport:
     def __init__(self) -> None:
         self.commands: list[str] = []
+        self.api_calls: list[tuple[ApiOpcode, ApiVerb, bytes]] = []
         self.api_protocol = ApiProtocol.KM
 
     def send_command(self, command: str, **_kwargs):
@@ -28,6 +29,7 @@ class CommandTransport:
     def send_api(
         self, km_command: str, _opcode, _verb, _payload=b"", **kwargs
     ):
+        self.api_calls.append((_opcode, _verb, _payload))
         return self.send_command(km_command, **kwargs)
 
 
@@ -62,6 +64,38 @@ def test_keyboard_single_and_explicit_dt_commands() -> None:
         "km.up(4,0)",
         "km.init()",
         "km.init(16383)",
+    ]
+
+
+def test_mouse_immediate_mask_commands_and_binary_payloads() -> None:
+    transport = CommandTransport()
+    mouse = Mouse(transport)
+
+    mouse.left_mask(True)
+    mouse.right_mask(False)
+    mouse.middle_mask(True)
+    mouse.side1_mask(False)
+    mouse.side2_mask(True)
+    mouse.move_mask(True, False, True, False)
+    mouse.wheel_mask(True, False)
+
+    assert transport.commands == [
+        "km.left_mask(1)",
+        "km.right_mask(0)",
+        "km.middle_mask(1)",
+        "km.side1_mask(0)",
+        "km.side2_mask(1)",
+        "km.move_mask(1,0,1,0)",
+        "km.wheel_mask(1,0)",
+    ]
+    assert transport.api_calls == [
+        (ApiOpcode.LEFT_MASK, ApiVerb.SET, b"\x01"),
+        (ApiOpcode.RIGHT_MASK, ApiVerb.SET, b"\x00"),
+        (ApiOpcode.MIDDLE_MASK, ApiVerb.SET, b"\x01"),
+        (ApiOpcode.SIDE1_MASK, ApiVerb.SET, b"\x00"),
+        (ApiOpcode.SIDE2_MASK, ApiVerb.SET, b"\x01"),
+        (ApiOpcode.MOVE_MASK, ApiVerb.SET, b"\x01\x00\x01\x00"),
+        (ApiOpcode.WHEEL_MASK, ApiVerb.SET, b"\x01\x00"),
     ]
 
 

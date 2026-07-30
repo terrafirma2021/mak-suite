@@ -1,11 +1,73 @@
 use crate::error::Result;
-use crate::protocol::api::{ApiOpcode, ApiVerb};
+use crate::protocol::api::{ApiOpcode, ApiVerb, button_mask_opcode};
 use crate::protocol::builder;
 use crate::timed;
+use crate::types::Button;
 
 use super::Device;
 
 impl Device {
+    pub fn button_mask(&self, button: Button, enabled: bool) -> Result<()> {
+        let name = match button {
+            Button::Left => "left_mask",
+            Button::Right => "right_mask",
+            Button::Middle => "middle_mask",
+            Button::Side1 => "side1_mask",
+            Button::Side2 => "side2_mask",
+        };
+        let command = builder::build_mouse_mask(name, &[enabled])?;
+        self.exec_api(
+            command.as_bytes(),
+            button_mask_opcode(button),
+            ApiVerb::Set,
+            &[enabled as u8],
+        )
+    }
+
+    pub fn left_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Left, enabled)
+    }
+
+    pub fn right_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Right, enabled)
+    }
+
+    pub fn middle_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Middle, enabled)
+    }
+
+    pub fn side1_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Side1, enabled)
+    }
+
+    pub fn side2_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Side2, enabled)
+    }
+
+    pub fn move_mask(&self, left: bool, right: bool, down: bool, up: bool) -> Result<()> {
+        let values = [left, right, down, up];
+        let payload = [left as u8, right as u8, down as u8, up as u8];
+        let command = builder::build_mouse_mask("move_mask", &values)?;
+        self.exec_api(
+            command.as_bytes(),
+            ApiOpcode::MoveMask,
+            ApiVerb::Set,
+            &payload,
+        )
+    }
+
+    pub fn wheel_mask(&self, down: bool, up: bool) -> Result<()> {
+        let values = [down, up];
+        let payload = [down as u8, up as u8];
+        let command = builder::build_mouse_mask("wheel_mask", &values)?;
+        self.exec_api(
+            command.as_bytes(),
+            ApiOpcode::WheelMask,
+            ApiVerb::Set,
+            &payload,
+        )
+    }
+
     /// Relative mouse move. Coordinates are in HID units, range ±32767.
     pub fn move_xy(&self, x: i32, y: i32) -> Result<()> {
         timed!("move_xy", {
@@ -148,6 +210,70 @@ use super::AsyncDevice;
 
 #[cfg(feature = "async")]
 impl AsyncDevice {
+    pub async fn button_mask(&self, button: Button, enabled: bool) -> Result<()> {
+        let name = match button {
+            Button::Left => "left_mask",
+            Button::Right => "right_mask",
+            Button::Middle => "middle_mask",
+            Button::Side1 => "side1_mask",
+            Button::Side2 => "side2_mask",
+        };
+        let command = builder::build_mouse_mask(name, &[enabled])?;
+        self.exec_api(
+            command.as_bytes(),
+            button_mask_opcode(button),
+            ApiVerb::Set,
+            &[enabled as u8],
+        )
+        .await
+    }
+
+    pub async fn left_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Left, enabled).await
+    }
+
+    pub async fn right_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Right, enabled).await
+    }
+
+    pub async fn middle_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Middle, enabled).await
+    }
+
+    pub async fn side1_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Side1, enabled).await
+    }
+
+    pub async fn side2_mask(&self, enabled: bool) -> Result<()> {
+        self.button_mask(Button::Side2, enabled).await
+    }
+
+    pub async fn move_mask(&self, left: bool, right: bool, down: bool, up: bool) -> Result<()> {
+        let values = [left, right, down, up];
+        let payload = [left as u8, right as u8, down as u8, up as u8];
+        let command = builder::build_mouse_mask("move_mask", &values)?;
+        self.exec_api(
+            command.as_bytes(),
+            ApiOpcode::MoveMask,
+            ApiVerb::Set,
+            &payload,
+        )
+        .await
+    }
+
+    pub async fn wheel_mask(&self, down: bool, up: bool) -> Result<()> {
+        let values = [down, up];
+        let payload = [down as u8, up as u8];
+        let command = builder::build_mouse_mask("wheel_mask", &values)?;
+        self.exec_api(
+            command.as_bytes(),
+            ApiOpcode::WheelMask,
+            ApiVerb::Set,
+            &payload,
+        )
+        .await
+    }
+
     pub async fn move_xy(&self, x: i32, y: i32) -> Result<()> {
         timed!("move_xy", {
             let command = builder::build_move(x, y)?;

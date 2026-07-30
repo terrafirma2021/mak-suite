@@ -145,6 +145,9 @@ device.silent_move(10, 10)?;
 device.button_down(Button::Left)?;
 device.button_down_dt(Button::Left, 250)?;
 device.button_up_force(Button::Left)?;
+device.left_mask(true)?;
+device.move_mask(true, false, false, true)?;
+device.wheel_mask(true, false)?;
 device.set_lock(LockTarget::X, true)?;
 let locked = device.lock_state(LockTarget::X)?;
 ```

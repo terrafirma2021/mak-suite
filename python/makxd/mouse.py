@@ -37,6 +37,13 @@ class Mouse:
         MouseButton.MOUSE4: ApiOpcode.SIDE1,
         MouseButton.MOUSE5: ApiOpcode.SIDE2,
     }
+    _BUTTON_MASK_OPCODES = {
+        MouseButton.LEFT: ApiOpcode.LEFT_MASK,
+        MouseButton.RIGHT: ApiOpcode.RIGHT_MASK,
+        MouseButton.MIDDLE: ApiOpcode.MIDDLE_MASK,
+        MouseButton.MOUSE4: ApiOpcode.SIDE1_MASK,
+        MouseButton.MOUSE5: ApiOpcode.SIDE2_MASK,
+    }
 
     _PRESS_COMMANDS = {}
     _RELEASE_COMMANDS = {}
@@ -96,6 +103,57 @@ class Mouse:
 
     def release(self, button: MouseButton, dt_uframes: int | None = None) -> None:
         self._send_button_command(button, 0, dt_uframes)
+
+    def button_mask(self, button: MouseButton, enabled: bool) -> None:
+        if button not in self._BUTTON_COMMANDS:
+            raise MakxdCommandError(f"Unsupported button: {button}")
+        state = 1 if enabled else 0
+        command = self._BUTTON_COMMANDS[button]
+        self.transport.send_api(
+            f"km.{command}_mask({state})",
+            self._BUTTON_MASK_OPCODES[button],
+            ApiVerb.SET,
+            bytes((state,)),
+        )
+
+    def left_mask(self, enabled: bool) -> None:
+        self.button_mask(MouseButton.LEFT, enabled)
+
+    def right_mask(self, enabled: bool) -> None:
+        self.button_mask(MouseButton.RIGHT, enabled)
+
+    def middle_mask(self, enabled: bool) -> None:
+        self.button_mask(MouseButton.MIDDLE, enabled)
+
+    def side1_mask(self, enabled: bool) -> None:
+        self.button_mask(MouseButton.MOUSE4, enabled)
+
+    def side2_mask(self, enabled: bool) -> None:
+        self.button_mask(MouseButton.MOUSE5, enabled)
+
+    def move_mask(
+        self,
+        left: bool,
+        right: bool,
+        down: bool,
+        up: bool,
+    ) -> None:
+        values = tuple(1 if value else 0 for value in (left, right, down, up))
+        self.transport.send_api(
+            f"km.move_mask({values[0]},{values[1]},{values[2]},{values[3]})",
+            ApiOpcode.MOVE_MASK,
+            ApiVerb.SET,
+            bytes(values),
+        )
+
+    def wheel_mask(self, down: bool, up: bool) -> None:
+        values = (1 if down else 0, 1 if up else 0)
+        self.transport.send_api(
+            f"km.wheel_mask({values[0]},{values[1]})",
+            ApiOpcode.WHEEL_MASK,
+            ApiVerb.SET,
+            bytes(values),
+        )
 
     def move(self, x: int, y: int, dt_uframes: int | None = None) -> None:
         if not isinstance(x, int) or isinstance(x, bool) or not -32768 <= x <= 32767:
