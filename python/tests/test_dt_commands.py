@@ -65,7 +65,7 @@ def test_keyboard_single_and_explicit_dt_commands() -> None:
     ]
 
 
-def test_controller_full_single_mask_and_explicit_dt_commands() -> None:
+def test_controller_full_single_and_immediate_mask_commands() -> None:
     transport = CommandTransport()
     gamepad = Gamepad(transport)
 
@@ -73,16 +73,16 @@ def test_controller_full_single_mask_and_explicit_dt_commands() -> None:
     gamepad.button(ControllerButton.BUTTON7, True, 0)
     gamepad.left_stick(-8, 9, 16383)
     gamepad.button_mask(ControllerButton.BUTTON32, True)
-    gamepad.hat_up_mask(True, 0)
-    gamepad.right_stick_mask(True, False, True, False, 17)
+    gamepad.hat_up_mask(True)
+    gamepad.right_stick_mask(True, False, True, False)
 
     assert transport.commands == [
         "km.controller(3,8,10,20,-1,2,-3,4,-5,6)",
         "km.controller_button7(1,0)",
         "km.controller_left_stick(-8,9,16383)",
         "km.controller_button32_mask(1)",
-        "km.controller_hat_up_mask(1,0)",
-        "km.controller_right_stick_mask(1,0,1,0,17)",
+        "km.controller_hat_up_mask(1)",
+        "km.controller_right_stick_mask(1,0,1,0)",
     ]
 
 

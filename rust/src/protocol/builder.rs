@@ -244,8 +244,7 @@ mod dt_tests {
         assert!(build_button_dt(Button::Left, true, 16384).is_err());
         assert!(build_move_dt(0, 0, 16384).is_err());
         assert!(build_wheel_dt(0, 16384).is_err());
-        assert!(build_controller_command(
-            "controller_hat_up_mask", &[1], Some(16384)).is_err());
+        assert!(build_controller_command("controller_hat_up", &[1], Some(16384)).is_err());
     }
 
     #[test]
@@ -261,12 +260,10 @@ mod dt_tests {
             b"km.controller(3,8,10,20,-1,2,-3,4,-5,6)\r\n"
         );
         assert_eq!(
-            build_controller_command(
-                "controller_right_stick_mask", &[1, 0, 1, 0], Some(0),
-            )
-            .unwrap()
-            .as_bytes(),
-            b"km.controller_right_stick_mask(1,0,1,0,0)\r\n"
+            build_controller_command("controller_right_stick_mask", &[1, 0, 1, 0], None,)
+                .unwrap()
+                .as_bytes(),
+            b"km.controller_right_stick_mask(1,0,1,0)\r\n"
         );
     }
 }

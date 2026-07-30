@@ -331,40 +331,19 @@ namespace makxd {
             int16_t z, int16_t rz, uint16_t dt_uframes);
         [[nodiscard]] bool controllerButtonMask(
             ControllerButton button, bool enabled);
-        [[nodiscard]] bool controllerButtonMask(
-            ControllerButton button, bool enabled, uint16_t dt_uframes);
         [[nodiscard]] bool controllerHatLeftMask(bool enabled);
-        [[nodiscard]] bool controllerHatLeftMask(
-            bool enabled, uint16_t dt_uframes);
         [[nodiscard]] bool controllerHatRightMask(bool enabled);
-        [[nodiscard]] bool controllerHatRightMask(
-            bool enabled, uint16_t dt_uframes);
         [[nodiscard]] bool controllerHatDownMask(bool enabled);
-        [[nodiscard]] bool controllerHatDownMask(
-            bool enabled, uint16_t dt_uframes);
         [[nodiscard]] bool controllerHatUpMask(bool enabled);
-        [[nodiscard]] bool controllerHatUpMask(
-            bool enabled, uint16_t dt_uframes);
         [[nodiscard]] bool controllerLeftTriggerMask(bool enabled);
-        [[nodiscard]] bool controllerLeftTriggerMask(
-            bool enabled, uint16_t dt_uframes);
         [[nodiscard]] bool controllerRightTriggerMask(bool enabled);
-        [[nodiscard]] bool controllerRightTriggerMask(
-            bool enabled, uint16_t dt_uframes);
         [[nodiscard]] bool controllerLeftStickMask(
             bool left, bool right, bool down, bool up);
-        [[nodiscard]] bool controllerLeftStickMask(
-            bool left, bool right, bool down, bool up, uint16_t dt_uframes);
         [[nodiscard]] bool controllerRightStickMask(
             bool left, bool right, bool down, bool up);
-        [[nodiscard]] bool controllerRightStickMask(
-            bool left, bool right, bool down, bool up, uint16_t dt_uframes);
         [[nodiscard]] bool controllerAuxMask(
             bool z_negative, bool z_positive,
             bool rz_negative, bool rz_positive);
-        [[nodiscard]] bool controllerAuxMask(
-            bool z_negative, bool z_positive,
-            bool rz_negative, bool rz_positive, uint16_t dt_uframes);
 
         // Mouse locking with state caching
         [[nodiscard]] bool lockMouseX(bool lock = true);

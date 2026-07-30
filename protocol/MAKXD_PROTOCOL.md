@@ -68,6 +68,30 @@ KM commands are lowercase ASCII. `dt` is always optional where shown, uses
 their exact report cadences. Mouse true cadence is independent from keyboard
 and controller cadence. A zero cadence means that output is not routed.
 
+### Digital input merge
+
+Mouse buttons, keyboard usages and modifiers, controller buttons, and
+controller hat directions use per-input last-transition-wins state. A changed
+physical input becomes final state. A changed injected input becomes final
+state. If both change during the same input service pass, the injected
+transition is applied last.
+
+An unchanged state from either source does not overwrite the other source's
+newer transition. For example, an injected release remains released while the
+same physical button is still held; it becomes pressed again only after a new
+physical release/press transition or a new injected transition.
+
+An injection-only digital request that does not change final state is accepted
+without building or submitting a USB report. Raw reports with movement,
+wheel, axes, triggers, or other changed fields are still forwarded even when
+their digital fields are unchanged.
+
+Synthetic mouse and keyboard reports start from the descriptor-shaped neutral
+report and apply final digital state. Synthetic controller reports start from
+the latest successfully submitted controller report and apply final controller
+state. Controller injection is rejected until a current routed controller
+report has been submitted.
+
 ### Mouse KM API
 
 | Exact KM ASCII |
@@ -240,20 +264,23 @@ The remaining injection commands are:
 Controller masks are raw-input locks. Setting a lock bit to `1` forces only
 that physical component to zero before injection. Setting it to `0` unlocks
 that physical component. Locks never block or alter injected controller
-values.
+values. Lock changes publish immediately, have no `dt` argument, do not enter
+the injection queue or mailbox, and do not submit a USB report by themselves.
+For a paired peer output, the complete latest lock policy is coalesced in one
+dedicated pending slot and retried until the peer link accepts it.
 
 | Exact KM ASCII |
 | --- |
-| `km.controller_button1_mask(enabled[,dt])` through `km.controller_button32_mask(enabled[,dt])` |
-| `km.controller_hat_left_mask(enabled[,dt])` |
-| `km.controller_hat_right_mask(enabled[,dt])` |
-| `km.controller_hat_down_mask(enabled[,dt])` |
-| `km.controller_hat_up_mask(enabled[,dt])` |
-| `km.controller_lt_mask(enabled[,dt])` |
-| `km.controller_rt_mask(enabled[,dt])` |
-| `km.controller_left_stick_mask(left,right,down,up[,dt])` |
-| `km.controller_right_stick_mask(left,right,down,up[,dt])` |
-| `km.controller_aux_mask(z_negative,z_positive,rz_negative,rz_positive[,dt])` |
+| `km.controller_button1_mask(enabled)` through `km.controller_button32_mask(enabled)` |
+| `km.controller_hat_left_mask(enabled)` |
+| `km.controller_hat_right_mask(enabled)` |
+| `km.controller_hat_down_mask(enabled)` |
+| `km.controller_hat_up_mask(enabled)` |
+| `km.controller_lt_mask(enabled)` |
+| `km.controller_rt_mask(enabled)` |
+| `km.controller_left_stick_mask(left,right,down,up)` |
+| `km.controller_right_stick_mask(left,right,down,up)` |
+| `km.controller_aux_mask(z_negative,z_positive,rz_negative,rz_positive)` |
 
 Hat locks remove only the selected raw component. For example, locking raw up
 from a physical up-right value leaves raw right. Stick direction locks zero
@@ -448,10 +475,10 @@ Controller payloads use little-endian integers:
 - Each hat direction uses no GET payload; SET uses `state:u8 [,dt:u16]`.
 - Trigger SET uses `value:u16 [,dt:u16]`.
 - Stick/aux SET uses `first:i16, second:i16 [,dt:u16]`.
-- Each named controller button raw lock SET uses `enabled:u8 [,dt:u16]`.
-- Hat/trigger lock SET uses `enabled:u8 [,dt:u16]`.
+- Each named controller button raw lock SET uses exactly `enabled:u8`.
+- Hat/trigger lock SET uses exactly `enabled:u8`.
 - Stick/aux lock SET uses four directional `u8` flags in the same order as
-  its KM command, followed by optional `dt:u16`.
+  its KM command.
 
 Unlisted opcodes are not part of the public API.
 

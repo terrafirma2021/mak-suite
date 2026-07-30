@@ -77,7 +77,7 @@ def test_mak_api_named_controller_button_hat_and_direction_locks() -> None:
     gamepad.button(ControllerButton.BUTTON32, False, 250)
     assert gamepad.hat_left() is True
     gamepad.hat_left(True)
-    gamepad.hat_right_mask(True, 0)
+    gamepad.hat_right_mask(True)
     gamepad.left_stick_mask(True, False, True, False)
 
     assert transport.calls == [
@@ -85,7 +85,7 @@ def test_mak_api_named_controller_button_hat_and_direction_locks() -> None:
         (0x7F, 0x01, b"\x00\xFA\x00"),
         (0x48, 0x00, b""),
         (0x48, 0x01, b"\x01"),
-        (0x59, 0x01, b"\x01\x00\x00"),
+        (0x59, 0x01, b"\x01"),
         (0x54, 0x01, b"\x01\x00\x01\x00"),
     ]
 

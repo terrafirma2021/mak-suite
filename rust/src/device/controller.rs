@@ -142,28 +142,6 @@ impl Device {
             &[enabled as u8],
         )
     }
-
-    pub fn controller_button_mask_dt(
-        &self,
-        button: ControllerButton,
-        enabled: bool,
-        dt_uframes: u16,
-    ) -> Result<()> {
-        let number = button.number();
-        let command = builder::build_controller_command(
-            &format!("controller_button{number}_mask"),
-            &[enabled as i64],
-            Some(dt_uframes),
-        )?;
-        let mut payload = vec![enabled as u8];
-        payload.extend_from_slice(&dt_uframes.to_le_bytes());
-        self.exec_api(
-            command.as_bytes(),
-            controller_button_mask_opcode(button),
-            ApiVerb::Set,
-            &payload,
-        )
-    }
 }
 
 #[cfg(feature = "async")]
@@ -256,29 +234,6 @@ impl AsyncDevice {
             controller_button_mask_opcode(button),
             ApiVerb::Set,
             &[enabled as u8],
-        )
-        .await
-    }
-
-    pub async fn controller_button_mask_dt(
-        &self,
-        button: ControllerButton,
-        enabled: bool,
-        dt_uframes: u16,
-    ) -> Result<()> {
-        let number = button.number();
-        let command = builder::build_controller_command(
-            &format!("controller_button{number}_mask"),
-            &[enabled as i64],
-            Some(dt_uframes),
-        )?;
-        let mut payload = vec![enabled as u8];
-        payload.extend_from_slice(&dt_uframes.to_le_bytes());
-        self.exec_api(
-            command.as_bytes(),
-            controller_button_mask_opcode(button),
-            ApiVerb::Set,
-            &payload,
         )
         .await
     }
@@ -512,22 +467,11 @@ controller_hat_methods!(
 );
 
 macro_rules! controller_mask_methods {
-    ($plain:ident, $timed:ident, $command:literal, $opcode:expr) => {
+    ($plain:ident, $command:literal, $opcode:expr) => {
         impl Device {
             pub fn $plain(&self, enabled: bool) -> Result<()> {
                 let command = builder::build_controller_command($command, &[enabled as i64], None)?;
                 self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &[enabled as u8])
-            }
-
-            pub fn $timed(&self, enabled: bool, dt_uframes: u16) -> Result<()> {
-                let command = builder::build_controller_command(
-                    $command,
-                    &[enabled as i64],
-                    Some(dt_uframes),
-                )?;
-                let mut payload = vec![enabled as u8];
-                payload.extend_from_slice(&dt_uframes.to_le_bytes());
-                self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &payload)
             }
         }
         #[cfg(feature = "async")]
@@ -537,61 +481,43 @@ macro_rules! controller_mask_methods {
                 self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &[enabled as u8])
                     .await
             }
-
-            pub async fn $timed(&self, enabled: bool, dt_uframes: u16) -> Result<()> {
-                let command = builder::build_controller_command(
-                    $command,
-                    &[enabled as i64],
-                    Some(dt_uframes),
-                )?;
-                let mut payload = vec![enabled as u8];
-                payload.extend_from_slice(&dt_uframes.to_le_bytes());
-                self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &payload)
-                    .await
-            }
         }
     };
 }
 
 controller_mask_methods!(
     controller_left_trigger_mask,
-    controller_left_trigger_mask_dt,
     "controller_lt_mask",
     ApiOpcode::ControllerLtMask
 );
 controller_mask_methods!(
     controller_right_trigger_mask,
-    controller_right_trigger_mask_dt,
     "controller_rt_mask",
     ApiOpcode::ControllerRtMask
 );
 controller_mask_methods!(
     controller_hat_left_mask,
-    controller_hat_left_mask_dt,
     "controller_hat_left_mask",
     ApiOpcode::ControllerHatLeftMask
 );
 controller_mask_methods!(
     controller_hat_right_mask,
-    controller_hat_right_mask_dt,
     "controller_hat_right_mask",
     ApiOpcode::ControllerHatRightMask
 );
 controller_mask_methods!(
     controller_hat_down_mask,
-    controller_hat_down_mask_dt,
     "controller_hat_down_mask",
     ApiOpcode::ControllerHatDownMask
 );
 controller_mask_methods!(
     controller_hat_up_mask,
-    controller_hat_up_mask_dt,
     "controller_hat_up_mask",
     ApiOpcode::ControllerHatUpMask
 );
 
 macro_rules! controller_direction_mask_methods {
-    ($plain:ident, $timed:ident, $command:literal, $opcode:expr) => {
+    ($plain:ident, $command:literal, $opcode:expr) => {
         impl Device {
             pub fn $plain(
                 &self,
@@ -613,32 +539,6 @@ macro_rules! controller_direction_mask_methods {
                     second_negative as u8,
                     second_positive as u8,
                 ];
-                self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &payload)
-            }
-
-            pub fn $timed(
-                &self,
-                first_negative: bool,
-                first_positive: bool,
-                second_negative: bool,
-                second_positive: bool,
-                dt_uframes: u16,
-            ) -> Result<()> {
-                let values = [
-                    first_negative as i64,
-                    first_positive as i64,
-                    second_negative as i64,
-                    second_positive as i64,
-                ];
-                let command =
-                    builder::build_controller_command($command, &values, Some(dt_uframes))?;
-                let mut payload = vec![
-                    first_negative as u8,
-                    first_positive as u8,
-                    second_negative as u8,
-                    second_positive as u8,
-                ];
-                payload.extend_from_slice(&dt_uframes.to_le_bytes());
                 self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &payload)
             }
         }
@@ -667,52 +567,22 @@ macro_rules! controller_direction_mask_methods {
                 self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &payload)
                     .await
             }
-
-            pub async fn $timed(
-                &self,
-                first_negative: bool,
-                first_positive: bool,
-                second_negative: bool,
-                second_positive: bool,
-                dt_uframes: u16,
-            ) -> Result<()> {
-                let values = [
-                    first_negative as i64,
-                    first_positive as i64,
-                    second_negative as i64,
-                    second_positive as i64,
-                ];
-                let command =
-                    builder::build_controller_command($command, &values, Some(dt_uframes))?;
-                let mut payload = vec![
-                    first_negative as u8,
-                    first_positive as u8,
-                    second_negative as u8,
-                    second_positive as u8,
-                ];
-                payload.extend_from_slice(&dt_uframes.to_le_bytes());
-                self.exec_api(command.as_bytes(), $opcode, ApiVerb::Set, &payload)
-                    .await
-            }
         }
     };
 }
 
 controller_direction_mask_methods!(
     controller_left_stick_mask,
-    controller_left_stick_mask_dt,
     "controller_left_stick_mask",
     ApiOpcode::ControllerLeftStickMask
 );
 controller_direction_mask_methods!(
     controller_right_stick_mask,
-    controller_right_stick_mask_dt,
     "controller_right_stick_mask",
     ApiOpcode::ControllerRightStickMask
 );
 controller_direction_mask_methods!(
     controller_aux_mask,
-    controller_aux_mask_dt,
     "controller_aux_mask",
     ApiOpcode::ControllerAuxMask
 );

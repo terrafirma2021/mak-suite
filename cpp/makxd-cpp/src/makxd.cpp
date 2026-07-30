@@ -2225,16 +2225,6 @@ namespace makxd {
             static_cast<uint8_t>(enabled ? 1u : 0u)}; \
         return !command.empty() && m_impl->executeApiCommand( \
             command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    } \
-    bool Device::method(bool enabled, uint16_t dt_uframes) { \
-        const auto command = controllerCommandBuild( \
-            command_name, {enabled ? 1 : 0}, dt_uframes); \
-        const std::array<uint8_t, 3> payload{ \
-            static_cast<uint8_t>(enabled ? 1u : 0u), \
-            static_cast<uint8_t>(dt_uframes), \
-            static_cast<uint8_t>(dt_uframes >> 8u)}; \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
     }
 
     MAKXD_CONTROLLER_MASK_METHODS(
@@ -2251,20 +2241,6 @@ namespace makxd {
         return m_impl->executeApiCommand(
             "km.controller_button" + std::to_string(value) + "_mask(" +
                 (enabled ? "1)" : "0)"),
-            static_cast<ApiOpcode>(0x7Fu + value), ApiVerb::SET, payload);
-    }
-
-    bool Device::controllerButtonMask(
-        ControllerButton button, bool enabled, uint16_t dt_uframes) {
-        const auto value = static_cast<uint8_t>(button);
-        if (value < 1u || value > 32u) return false;
-        const std::array<uint8_t, 3> payload{
-            static_cast<uint8_t>(enabled ? 1u : 0u),
-            static_cast<uint8_t>(dt_uframes),
-            static_cast<uint8_t>(dt_uframes >> 8u)};
-        return m_impl->executeApiCommand(
-            "km.controller_button" + std::to_string(value) + "_mask(" +
-                (enabled ? "1," : "0,") + std::to_string(dt_uframes) + ")",
             static_cast<ApiOpcode>(0x7Fu + value), ApiVerb::SET, payload);
     }
 
@@ -2296,22 +2272,6 @@ namespace makxd {
             static_cast<uint8_t>(first_positive ? 1u : 0u), \
             static_cast<uint8_t>(second_negative ? 1u : 0u), \
             static_cast<uint8_t>(second_positive ? 1u : 0u)}; \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    } \
-    bool Device::method( \
-        bool first_negative, bool first_positive, \
-        bool second_negative, bool second_positive, uint16_t dt_uframes) { \
-        const auto command = controllerCommandBuild(command_name, { \
-            first_negative ? 1 : 0, first_positive ? 1 : 0, \
-            second_negative ? 1 : 0, second_positive ? 1 : 0}, dt_uframes); \
-        const std::array<uint8_t, 6> payload{ \
-            static_cast<uint8_t>(first_negative ? 1u : 0u), \
-            static_cast<uint8_t>(first_positive ? 1u : 0u), \
-            static_cast<uint8_t>(second_negative ? 1u : 0u), \
-            static_cast<uint8_t>(second_positive ? 1u : 0u), \
-            static_cast<uint8_t>(dt_uframes), \
-            static_cast<uint8_t>(dt_uframes >> 8u)}; \
         return !command.empty() && m_impl->executeApiCommand( \
             command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
     }

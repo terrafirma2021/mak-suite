@@ -952,10 +952,6 @@ MAKXD_C_CONTROLLER_VALUE(
     makxd_controller_left_trigger, controllerLeftTrigger, uint16_t)
 MAKXD_C_CONTROLLER_VALUE(
     makxd_controller_right_trigger, controllerRightTrigger, uint16_t)
-MAKXD_C_CONTROLLER_VALUE(
-    makxd_controller_left_trigger_mask, controllerLeftTriggerMask, bool)
-MAKXD_C_CONTROLLER_VALUE(
-    makxd_controller_right_trigger_mask, controllerRightTriggerMask, bool)
 
 #undef MAKXD_C_CONTROLLER_VALUE
 
@@ -1019,20 +1015,6 @@ makxd_error_t makxd_controller_button_mask(
     } catch (...) { return handle_exception(); }
 }
 
-makxd_error_t makxd_controller_button_mask_dt(
-    makxd_device_t* device, makxd_controller_button_t button,
-    bool enabled, uint16_t dt_uframes) {
-    makxd::ControllerButton value;
-    if (!device || !makxd_controller_button_read(button, &value)) {
-        return MAKXD_ERROR_INVALID_PARAMETER;
-    }
-    try {
-        return device->cpp_device->controllerButtonMask(
-            value, enabled, dt_uframes)
-                ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
-    } catch (...) { return handle_exception(); }
-}
-
 #define MAKXD_C_CONTROLLER_HAT(name, cpp_name) \
     makxd_error_t name##_state(makxd_device_t* device, bool* pressed) { \
         if (!device || !pressed) return MAKXD_ERROR_INVALID_PARAMETER; \
@@ -1070,15 +1052,12 @@ MAKXD_C_CONTROLLER_HAT(makxd_controller_hat_up, controllerHatUp)
         try { return device->cpp_device->cpp_name(enabled) \
             ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
         } catch (...) { return handle_exception(); } \
-    } \
-    makxd_error_t name##_dt( \
-        makxd_device_t* device, bool enabled, uint16_t dt_uframes) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(enabled, dt_uframes) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
     }
 
+MAKXD_C_CONTROLLER_MASK(
+    makxd_controller_left_trigger_mask, controllerLeftTriggerMask)
+MAKXD_C_CONTROLLER_MASK(
+    makxd_controller_right_trigger_mask, controllerRightTriggerMask)
 MAKXD_C_CONTROLLER_MASK(
     makxd_controller_hat_left_mask, controllerHatLeftMask)
 MAKXD_C_CONTROLLER_MASK(
@@ -1123,15 +1102,6 @@ MAKXD_C_CONTROLLER_PAIR(makxd_controller_aux, controllerAux, int16_t)
             first_negative, first_positive, \
             second_negative, second_positive) \
                 ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    } \
-    makxd_error_t name##_dt( \
-        makxd_device_t* device, bool first_negative, bool first_positive, \
-        bool second_negative, bool second_positive, uint16_t dt_uframes) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name( \
-            first_negative, first_positive, second_negative, second_positive, \
-            dt_uframes) ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
         } catch (...) { return handle_exception(); } \
     }
 

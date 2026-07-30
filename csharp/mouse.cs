@@ -960,69 +960,56 @@ namespace Mouse
             => ControllerPair("controller_aux", 0x47, z, rz, dtUframes);
 
         public static void controller_button_mask(
-            ControllerButton button, bool enabled,
-            ushort? dtUframes = null)
+            ControllerButton button, bool enabled)
         {
             byte value = (byte)button;
             if (value < 1 || value > 32)
                 throw new ArgumentOutOfRangeException(nameof(button));
-            var payload = new List<byte> { (byte)(enabled ? 1 : 0) };
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
-                $"km.controller_button{value}_mask({(enabled ? 1 : 0)}"
-                    + $"{DtArgument(dtUframes)})",
-                (byte)(0x7F + value), 0x01, payload.ToArray());
+                $"km.controller_button{value}_mask({(enabled ? 1 : 0)})",
+                (byte)(0x7F + value), 0x01,
+                new byte[] { (byte)(enabled ? 1 : 0) });
         }
 
-        public static void controller_hat_left_mask(
-            bool enabled, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_left_mask", 0x58, enabled, dtUframes);
-        public static void controller_hat_right_mask(
-            bool enabled, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_right_mask", 0x59, enabled, dtUframes);
-        public static void controller_hat_down_mask(
-            bool enabled, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_down_mask", 0x5A, enabled, dtUframes);
-        public static void controller_hat_up_mask(
-            bool enabled, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_up_mask", 0x5B, enabled, dtUframes);
+        public static void controller_hat_left_mask(bool enabled)
+            => ControllerPolicyMask(
+                "controller_hat_left_mask", 0x58, enabled);
+        public static void controller_hat_right_mask(bool enabled)
+            => ControllerPolicyMask(
+                "controller_hat_right_mask", 0x59, enabled);
+        public static void controller_hat_down_mask(bool enabled)
+            => ControllerPolicyMask(
+                "controller_hat_down_mask", 0x5A, enabled);
+        public static void controller_hat_up_mask(bool enabled)
+            => ControllerPolicyMask(
+                "controller_hat_up_mask", 0x5B, enabled);
 
-        public static void controller_left_trigger_mask(
-            bool enabled, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_lt_mask", 0x52, enabled, dtUframes);
+        public static void controller_left_trigger_mask(bool enabled)
+            => ControllerPolicyMask(
+                "controller_lt_mask", 0x52, enabled);
 
-        public static void controller_right_trigger_mask(
-            bool enabled, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_rt_mask", 0x53, enabled, dtUframes);
+        public static void controller_right_trigger_mask(bool enabled)
+            => ControllerPolicyMask(
+                "controller_rt_mask", 0x53, enabled);
 
         public static void controller_left_stick_mask(
-            bool left, bool right, bool down, bool up,
-            ushort? dtUframes = null)
+            bool left, bool right, bool down, bool up)
             => ControllerDirectionMask(
                 "controller_left_stick_mask", 0x54,
-                left, right, down, up, dtUframes);
+                left, right, down, up);
 
         public static void controller_right_stick_mask(
-            bool left, bool right, bool down, bool up,
-            ushort? dtUframes = null)
+            bool left, bool right, bool down, bool up)
             => ControllerDirectionMask(
                 "controller_right_stick_mask", 0x55,
-                left, right, down, up, dtUframes);
+                left, right, down, up);
 
         public static void controller_aux_mask(
             bool zNegative, bool zPositive,
-            bool rzNegative, bool rzPositive,
-            ushort? dtUframes = null)
+            bool rzNegative, bool rzPositive)
             => ControllerDirectionMask(
                 "controller_aux_mask", 0x56,
-                zNegative, zPositive, rzNegative, rzPositive, dtUframes);
+                zNegative, zPositive, rzNegative, rzPositive);
 
         private static void ControllerSingle(
             string command, byte opcode, object value, ushort? dtUframes)
@@ -1064,6 +1051,12 @@ namespace Mouse
             => ControllerSingle(
                 command, opcode, enabled ? 1 : 0, dtUframes);
 
+        private static void ControllerPolicyMask(
+            string command, byte opcode, bool enabled)
+            => SendApiCommand(
+                $"km.{command}({(enabled ? 1 : 0)})",
+                opcode, 0x01, new byte[] { (byte)(enabled ? 1 : 0) });
+
         private static bool ControllerQuery(
             string command, byte opcode, byte[] payload = null)
         {
@@ -1081,24 +1074,20 @@ namespace Mouse
         private static void ControllerDirectionMask(
             string command, byte opcode,
             bool firstNegative, bool firstPositive,
-            bool secondNegative, bool secondPositive,
-            ushort? dtUframes)
+            bool secondNegative, bool secondPositive)
         {
-            var payload = new List<byte> {
+            var payload = new byte[] {
                 (byte)(firstNegative ? 1 : 0),
                 (byte)(firstPositive ? 1 : 0),
                 (byte)(secondNegative ? 1 : 0),
                 (byte)(secondPositive ? 1 : 0)
             };
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
                 $"km.{command}({(firstNegative ? 1 : 0)},"
                     + $"{(firstPositive ? 1 : 0)},"
                     + $"{(secondNegative ? 1 : 0)},"
-                    + $"{(secondPositive ? 1 : 0)}"
-                    + $"{DtArgument(dtUframes)})",
-                opcode, 0x01, payload.ToArray());
+                    + $"{(secondPositive ? 1 : 0)})",
+                opcode, 0x01, payload);
         }
 
         public static void keyboard_down(

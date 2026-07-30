@@ -295,45 +295,23 @@ MAKXD_C_API makxd_error_t makxd_controller_aux(makxd_device_t* device, int16_t z
 MAKXD_C_API makxd_error_t makxd_controller_aux_dt(makxd_device_t* device, int16_t z, int16_t rz, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_button_mask(
     makxd_device_t* device, makxd_controller_button_t button, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_button_mask_dt(
-    makxd_device_t* device, makxd_controller_button_t button,
-    bool enabled, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_hat_left_mask(
     makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_left_mask_dt(
-    makxd_device_t* device, bool enabled, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_hat_right_mask(
     makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_right_mask_dt(
-    makxd_device_t* device, bool enabled, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_hat_down_mask(
     makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_down_mask_dt(
-    makxd_device_t* device, bool enabled, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_hat_up_mask(
     makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_up_mask_dt(
-    makxd_device_t* device, bool enabled, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_left_trigger_mask(makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_left_trigger_mask_dt(makxd_device_t* device, bool enabled, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_right_trigger_mask(makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_right_trigger_mask_dt(makxd_device_t* device, bool enabled, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_left_stick_mask(
     makxd_device_t* device, bool left, bool right, bool down, bool up);
-MAKXD_C_API makxd_error_t makxd_controller_left_stick_mask_dt(
-    makxd_device_t* device, bool left, bool right, bool down, bool up,
-    uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_right_stick_mask(
     makxd_device_t* device, bool left, bool right, bool down, bool up);
-MAKXD_C_API makxd_error_t makxd_controller_right_stick_mask_dt(
-    makxd_device_t* device, bool left, bool right, bool down, bool up,
-    uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_aux_mask(
     makxd_device_t* device, bool z_negative, bool z_positive,
     bool rz_negative, bool rz_positive);
-MAKXD_C_API makxd_error_t makxd_controller_aux_mask_dt(
-    makxd_device_t* device, bool z_negative, bool z_positive,
-    bool rz_negative, bool rz_positive, uint16_t dt_uframes);
 MAKXD_C_API bool makxd_controller_stream_decode(
     const uint8_t* values, size_t values_size, makxd_controller_state_t* state);
 

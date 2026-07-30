@@ -252,65 +252,51 @@ class Gamepad:
         self,
         button: ControllerButton | int,
         enabled: bool | int,
-        dt_uframes: int | None = None,
     ) -> None:
         button_value = _integer("button", int(button), 1, 32)
         enabled_value = _enabled("enabled", enabled)
         opcode = ApiOpcode(0x7F + button_value)
         self.transport.send_api(
-            f"km.controller_button{button_value}_mask("
-            f"{enabled_value}{_dt_argument(dt_uframes)})",
+            f"km.controller_button{button_value}_mask({enabled_value})",
             opcode,
             ApiVerb.SET,
-            bytes((enabled_value,)) + _dt_bytes(dt_uframes),
+            bytes((enabled_value,)),
         )
 
-    def hat_left_mask(
-        self, enabled: bool | int, dt_uframes: int | None = None
-    ) -> None:
+    def hat_left_mask(self, enabled: bool | int) -> None:
         self._mask_single(
             "controller_hat_left_mask", ApiOpcode.CONTROLLER_HAT_LEFT_MASK,
-            "hat left", enabled, dt_uframes
+            "hat left", enabled
         )
 
-    def hat_right_mask(
-        self, enabled: bool | int, dt_uframes: int | None = None
-    ) -> None:
+    def hat_right_mask(self, enabled: bool | int) -> None:
         self._mask_single(
             "controller_hat_right_mask", ApiOpcode.CONTROLLER_HAT_RIGHT_MASK,
-            "hat right", enabled, dt_uframes
+            "hat right", enabled
         )
 
-    def hat_down_mask(
-        self, enabled: bool | int, dt_uframes: int | None = None
-    ) -> None:
+    def hat_down_mask(self, enabled: bool | int) -> None:
         self._mask_single(
             "controller_hat_down_mask", ApiOpcode.CONTROLLER_HAT_DOWN_MASK,
-            "hat down", enabled, dt_uframes
+            "hat down", enabled
         )
 
-    def hat_up_mask(
-        self, enabled: bool | int, dt_uframes: int | None = None
-    ) -> None:
+    def hat_up_mask(self, enabled: bool | int) -> None:
         self._mask_single(
             "controller_hat_up_mask", ApiOpcode.CONTROLLER_HAT_UP_MASK,
-            "hat up", enabled, dt_uframes
+            "hat up", enabled
         )
 
-    def left_trigger_mask(
-        self, enabled: bool | int, dt_uframes: int | None = None
-    ) -> None:
+    def left_trigger_mask(self, enabled: bool | int) -> None:
         self._mask_single(
             "controller_lt_mask", ApiOpcode.CONTROLLER_LT_MASK,
-            "lt", enabled, dt_uframes
+            "lt", enabled
         )
 
-    def right_trigger_mask(
-        self, enabled: bool | int, dt_uframes: int | None = None
-    ) -> None:
+    def right_trigger_mask(self, enabled: bool | int) -> None:
         self._mask_single(
             "controller_rt_mask", ApiOpcode.CONTROLLER_RT_MASK,
-            "rt", enabled, dt_uframes
+            "rt", enabled
         )
 
     def left_stick_mask(
@@ -319,13 +305,11 @@ class Gamepad:
         right: bool | int,
         down: bool | int,
         up: bool | int,
-        dt_uframes: int | None = None,
     ) -> None:
         self._mask_directions(
             "controller_left_stick_mask",
             ApiOpcode.CONTROLLER_LEFT_STICK_MASK,
             ("left", left, "right", right, "down", down, "up", up),
-            dt_uframes,
         )
 
     def right_stick_mask(
@@ -334,13 +318,11 @@ class Gamepad:
         right: bool | int,
         down: bool | int,
         up: bool | int,
-        dt_uframes: int | None = None,
     ) -> None:
         self._mask_directions(
             "controller_right_stick_mask",
             ApiOpcode.CONTROLLER_RIGHT_STICK_MASK,
             ("left", left, "right", right, "down", down, "up", up),
-            dt_uframes,
         )
 
     def aux_mask(
@@ -349,7 +331,6 @@ class Gamepad:
         z_positive: bool | int,
         rz_negative: bool | int,
         rz_positive: bool | int,
-        dt_uframes: int | None = None,
     ) -> None:
         self._mask_directions(
             "controller_aux_mask",
@@ -358,7 +339,6 @@ class Gamepad:
                 "z negative", z_negative, "z positive", z_positive,
                 "rz negative", rz_negative, "rz positive", rz_positive,
             ),
-            dt_uframes,
         )
 
     def _hat_direction(
@@ -431,14 +411,13 @@ class Gamepad:
         opcode: ApiOpcode,
         name: str,
         enabled: bool | int,
-        dt_uframes: int | None,
     ) -> None:
         enabled_value = _enabled(name, enabled)
         self.transport.send_api(
-            f"km.{command}({enabled_value}{_dt_argument(dt_uframes)})",
+            f"km.{command}({enabled_value})",
             opcode,
             ApiVerb.SET,
-            bytes((enabled_value,)) + _dt_bytes(dt_uframes),
+            bytes((enabled_value,)),
         )
 
     def _mask_directions(
@@ -449,7 +428,6 @@ class Gamepad:
             str, bool | int, str, bool | int,
             str, bool | int, str, bool | int,
         ],
-        dt_uframes: int | None,
     ) -> None:
         enabled_values = (
             _enabled(values[0], values[1]),
@@ -459,10 +437,10 @@ class Gamepad:
         )
         self.transport.send_api(
             f"km.{command}(" + ",".join(map(str, enabled_values))
-            + f"{_dt_argument(dt_uframes)})",
+            + ")",
             opcode,
             ApiVerb.SET,
-            bytes(enabled_values) + _dt_bytes(dt_uframes),
+            bytes(enabled_values),
         )
 
 
