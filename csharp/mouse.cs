@@ -345,11 +345,12 @@ namespace Mouse
         private static bool transportEncryptionEnabled = false;
         private static byte[] transportEncryptionKey = null;
         private static ApiProtocol apiProtocol = ApiProtocol.Km;
+        private static bool kmEchoEnabled = false;
         private static ConnectionConfig connectionConfig =
             ConnectionConfig.Com();
         private static UdpClient udp = null;
-        private static readonly Queue<byte[]> udpRawTransactions =
-            new Queue<byte[]>();
+        private static readonly List<byte[]> udpRawTransactions =
+            new List<byte[]>();
         private static readonly Queue<byte> transportReadBytes =
             new Queue<byte>();
         public static string version = "";
@@ -454,6 +455,7 @@ namespace Mouse
             udpRawTransactions.Clear();
             transportReadBytes.Clear();
             apiProtocol = connection.Protocol;
+            kmEchoEnabled = false;
             transportEncryptionEnabled =
                 !string.IsNullOrEmpty(connection.Aes128Key);
             transportEncryptionKey = transportEncryptionEnabled
@@ -477,6 +479,9 @@ namespace Mouse
                             "km.version() did not return km.MAKXD");
                     version = detectedVersion;
                 }
+                if (apiProtocol == ApiProtocol.Km)
+                    kmEchoEnabled =
+                        WriteCommandInternal("km.echo()", true) == "1";
                 if (connection.Method == ConnectionMethod.Com)
                 {
                     Console.WriteLine(
@@ -484,10 +489,7 @@ namespace Mouse
                     if (apiProtocol == ApiProtocol.MakApi)
                         WriteMakApiInternal(0x10, 0x01, new byte[] { 1 });
                     else
-                    {
-                        WriteCommandInternal("km.buttons(1)", false);
-                        WriteCommandInternal("km.echo(0)", false);
-                    }
+                        WriteCommandInternal("km.buttons(1)", kmEchoEnabled);
                     port.DiscardInBuffer();
                     start_listening();
                 }
@@ -645,7 +647,7 @@ namespace Mouse
                 if (apiProtocol == ApiProtocol.MakApi)
                     WriteMakApiInternal(0x10, 0x01, new byte[] { 0 });
                 else
-                    WriteCommandInternal("km.buttons(0)", false);
+                    WriteCommandInternal("km.buttons(0)", kmEchoEnabled);
                 Thread.Sleep(10);
                 port.BaseStream.Flush();
                 port.Close();
@@ -883,7 +885,15 @@ namespace Mouse
 
         public static void echo(bool enabled)
         {
-            send_keyboard_command($"km.echo({(enabled ? 1 : 0)})");
+            if (!connected)
+                return;
+            if (apiProtocol == ApiProtocol.MakApi)
+                throw new InvalidOperationException(
+                    "This KM-only command is unavailable in MAK_API mode");
+            WriteCommandInternal(
+                $"km.echo({(enabled ? 1 : 0)})",
+                enabled);
+            kmEchoEnabled = enabled;
         }
 
         private static void send_keyboard_command(string command)
@@ -894,7 +904,7 @@ namespace Mouse
                 throw new InvalidOperationException(
                     "This KM-only command is unavailable in MAK_API mode");
 
-            WriteCommandInternal(command, false);
+            WriteCommandInternal(command, kmEchoEnabled);
         }
 
         private static string send_keyboard_query(string command)
@@ -1549,7 +1559,7 @@ namespace Mouse
             if (apiProtocol == ApiProtocol.MakApi)
                 return WriteMakApiInternal(
                     opcode, verb, payload ?? Array.Empty<byte>());
-            WriteCommandInternal(kmCommand, false);
+            WriteCommandInternal(kmCommand, kmEchoEnabled);
             return Array.Empty<byte>();
         }
 
@@ -1575,7 +1585,9 @@ namespace Mouse
                     byte[] transactionNonce;
                     byte[] encrypted = EncodeEncryptedCommand(
                         identified, out transactionNonce);
-                    WriteTransport(encrypted);
+                    WriteTransport(encrypted, verb != 0x01);
+                    if (verb == 0x01)
+                        return Array.Empty<byte>();
                     response = DecodeEncryptedResponseBytes(
                         ReadEncryptedFrame(), transactionNonce);
                 }
@@ -1589,7 +1601,9 @@ namespace Mouse
                     frame[4] = 0;
                     Buffer.BlockCopy(
                         identified, 0, frame, 5, identified.Length);
-                    WriteTransport(frame);
+                    WriteTransport(frame, verb != 0x01);
+                    if (verb == 0x01)
+                        return Array.Empty<byte>();
                     response = ReadFrame(0, 1);
                 }
 
@@ -1607,7 +1621,8 @@ namespace Mouse
             }
         }
 
-        private static void WriteTransport(byte[] frame)
+        private static void WriteTransport(
+            byte[] frame, bool responseExpected)
         {
             if (connectionConfig.Method == ConnectionMethod.Com)
             {
@@ -1631,7 +1646,8 @@ namespace Mouse
                     var transaction = new byte[8];
                     using (var random = RandomNumberGenerator.Create())
                         random.GetBytes(transaction);
-                    udpRawTransactions.Enqueue(transaction);
+                    if (responseExpected)
+                        udpRawTransactions.Add(transaction);
                     wire = new byte[] { 0x55 }
                         .Concat(transaction)
                         .Concat(wire)
@@ -1654,18 +1670,25 @@ namespace Mouse
             if (connectionConfig.Method == ConnectionMethod.Udp)
             {
                 IPEndPoint source = null;
-                packet = udp.Receive(ref source);
-                if (connectionConfig.UdpMode == UdpWireMode.Raw &&
-                    packet.Length > 0 && packet[0] == 0x55)
+                while (true)
                 {
-                    if (packet.Length < 10 || udpRawTransactions.Count == 0)
+                    packet = udp.Receive(ref source);
+                    if (connectionConfig.UdpMode != UdpWireMode.Raw ||
+                        packet.Length == 0 || packet[0] != 0x55)
+                        break;
+                    if (packet.Length < 10)
                         throw new InvalidDataException(
                             "Raw UDP response header is invalid");
-                    byte[] expected = udpRawTransactions.Dequeue();
-                    if (!packet.Skip(1).Take(8).SequenceEqual(expected))
-                        throw new InvalidDataException(
-                            "Raw UDP transaction does not match");
+                    int transactionIndex = udpRawTransactions.FindIndex(
+                        expected => packet
+                            .Skip(1)
+                            .Take(8)
+                            .SequenceEqual(expected));
+                    if (transactionIndex < 0)
+                        continue;
+                    udpRawTransactions.RemoveAt(transactionIndex);
                     packet = packet.Skip(9).ToArray();
+                    break;
                 }
             }
             else
@@ -1680,8 +1703,18 @@ namespace Mouse
             }
             if (packet[0] != 0x00 && packet[0] != 0x03)
                 return packet;
-            int payloadLength =
-                packet[0] == 0x03 ? packet.Length - 1 : packet.Length;
+            if (packet[0] == 0x00)
+            {
+                return new byte[] {
+                        0xDE, 0xAD,
+                        (byte)packet.Length,
+                        (byte)(packet.Length >> 8),
+                        0x00
+                    }
+                    .Concat(packet)
+                    .ToArray();
+            }
+            int payloadLength = packet.Length - 1;
             return new byte[] {
                     0xDE, 0xAD,
                     (byte)payloadLength,
@@ -1711,7 +1744,7 @@ namespace Mouse
             {
                 if (!transportEncryptionEnabled)
                 {
-                    WriteTransport(plaintext);
+                    WriteTransport(plaintext, returnValue);
                     return returnValue
                         ? ParseCommandResponseValue(ReadPlaintextResponse())
                         : "";
@@ -1719,7 +1752,9 @@ namespace Mouse
 
                 byte[] transactionNonce;
                 byte[] frame = EncodeEncryptedCommand(plaintext, out transactionNonce);
-                WriteTransport(frame);
+                WriteTransport(frame, returnValue);
+                if (!returnValue)
+                    return "";
                 string response = DecodeEncryptedResponse(
                     ReadEncryptedFrame(), transactionNonce);
                 return returnValue ? ParseCommandResponseValue(response) : "";

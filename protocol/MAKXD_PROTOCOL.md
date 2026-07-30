@@ -61,12 +61,21 @@ KM commands are lowercase ASCII. `dt` is always optional where shown, uses
 | --- |
 | `km.version()` |
 | `km.device()` |
+| `km.echo()` |
+| `km.echo(0|1)` |
 
 `km.version()` returns exactly `km.MAKXD`.
 
 `km.device()` reports the routed mouse, keyboard, and controller outputs and
 their exact report cadences. Mouse true cadence is independent from keyboard
 and controller cadence. A zero cadence means that output is not routed.
+
+Successful KM actions send no response by default. GET queries and rejected
+commands still return their normal response through the `>>> ` prompt.
+`km.echo(1)` persistently enables successful action echoes and returns its own
+enabled acknowledgement. `km.echo(0)` persistently disables them and sends no
+successful acknowledgement. Blank or invalid storage defaults to echo off.
+Event streams are unaffected.
 
 ### Digital input merge
 
@@ -343,7 +352,9 @@ before mask/remap. Repeated states emit nothing.
 ## MAK_API
 
 `MAK_API_ID` is `0x00`. Verbs are `GET=0x00`, `SET=0x01`, and `EXEC=0x02`.
-Successful responses use status `0x01`; rejected calls use `0xFF`.
+Successful SET calls send no response. GET and EXEC responses use status
+`0x01`; rejected calls, including rejected SET calls, respond with `0xFF`.
+Event streams are unaffected.
 
 ### Common
 
@@ -552,10 +563,12 @@ Successful `API_VERSION GET`:
 DE AD 08 00 00 00 01 01 4D 41 4B 58 44
 ```
 
-Successful controller button 1 SET:
+Successful controller button 1 SET sends no response frame.
+
+Rejected controller button 1 SET:
 
 ```text
-DE AD 03 00 00 00 60 01
+DE AD 03 00 00 00 60 FF
 ```
 
 Successful controller button 1 GET while pressed:
@@ -575,7 +588,7 @@ The public identified request record is:
 00 opcode verb payload...
 ```
 
-The matching response record is:
+GET, EXEC, and rejected-call response records are:
 
 ```text
 00 opcode status result...
@@ -587,8 +600,8 @@ For example, controller button 1 SET is sent as:
 00 60 01 01
 ```
 
-and a successful reply is:
+and a successful SET sends no response record. A rejected SET returns:
 
 ```text
-00 60 01
+00 60 FF
 ```

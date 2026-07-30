@@ -28,9 +28,9 @@ ASCII_PROMPT = b">>> "
 def parse_ascii_response_body(body: bytes) -> str:
     """Return the value portion of one prompt-delimited KM response.
 
-    SET responses contain only the echoed command. GET responses contain the
-    echoed query followed by one or more result lines. The prompt is removed
-    by the stream collector before this function is called.
+    Echo-enabled action responses contain only the command. GET responses
+    contain the echoed query followed by one or more result lines. The prompt
+    is removed by the stream collector before this function is called.
     """
     text = body.decode("ascii", "ignore")
     lines = [line.strip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n") if line.strip()]
@@ -138,6 +138,7 @@ class SerialTransport:
         self._command_counter = 0
         self._pending_commands: Dict[int, PendingCommand] = {}
         self._command_lock = threading.Lock()
+        self._km_echo_enabled = False
         
 
         self._parse_buffer = bytearray(1024)
@@ -688,6 +689,11 @@ class SerialTransport:
             self._listener_thread.start()
             self._log(f"Listener thread started: {self._listener_thread.name}")
 
+            if self.api_protocol is ApiProtocol.KM:
+                self._km_echo_enabled = (
+                    self.send_command("km.echo()", expect_response=True) == "1"
+                )
+
             if (
                 self.send_init
                 and self.connection.method is ConnectionMethod.COM
@@ -698,7 +704,7 @@ class SerialTransport:
                         ApiOpcode.BUTTONS, ApiVerb.SET, b"\x01"
                     )
                 else:
-                    self.send_command("km.buttons(1)", expect_response=True)
+                    self.send_km_action("km.buttons(1)")
             
         except Exception as e:
             self._log(f"Connection failed: {e}", "ERROR")
@@ -753,7 +759,10 @@ class SerialTransport:
         
         if not expect_response:
             command_bytes, _ = self._wire_command(command)
-            self.serial.write(command_bytes)
+            write_no_response = getattr(
+                self.serial, "write_no_response", self.serial.write
+            )
+            write_no_response(command_bytes)
             self.serial.flush()
             send_time = time.time() - command_start
             self._log(f"Command '{command}' written in {send_time:.5f}s (Makxd echo not awaited)")
@@ -810,6 +819,13 @@ class SerialTransport:
         command_bytes, transaction_nonce = self._wire_mak_api(
             opcode_value, verb_value, payload
         )
+        if verb_value == int(ApiVerb.SET):
+            write_no_response = getattr(
+                self.serial, "write_no_response", self.serial.write
+            )
+            write_no_response(command_bytes)
+            self.serial.flush()
+            return b""
         command_id = self._generate_command_id()
         future = Future()
         with self._command_lock:
@@ -845,7 +861,30 @@ class SerialTransport:
     ) -> Optional[str] | bytes:
         if self.api_protocol is ApiProtocol.MAK_API:
             return self.send_mak_api(opcode, verb, payload, timeout)
-        return self.send_command(km_command, expect_response, timeout)
+        km_expect_response = (
+            expect_response
+            if int(verb) == int(ApiVerb.GET)
+            else self._km_echo_enabled
+        )
+        return self.send_command(km_command, km_expect_response, timeout)
+
+    @property
+    def km_echo_enabled(self) -> bool:
+        return self._km_echo_enabled
+
+    def send_km_action(
+        self,
+        command: str,
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> Optional[str]:
+        return self.send_command(command, self._km_echo_enabled, timeout)
+
+    def set_km_echo(self, enabled: bool) -> None:
+        self.send_command(
+            f"km.echo({1 if enabled else 0})",
+            expect_response=enabled,
+        )
+        self._km_echo_enabled = enabled
 
     async def async_send_command(self, command: str, expect_response: bool = True,
                                timeout: float = DEFAULT_TIMEOUT) -> Optional[str]:

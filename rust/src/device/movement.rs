@@ -162,7 +162,10 @@ impl Device {
     pub fn set_echo(&self, enabled: bool) -> Result<()> {
         timed!(
             "set_echo",
-            self.exec_dynamic(builder::build_echo(Some(enabled)).as_bytes())
+            self.set_km_echo(
+                enabled,
+                builder::build_echo(Some(enabled)).as_bytes(),
+            )
         )
     }
 
@@ -374,7 +377,10 @@ impl AsyncDevice {
     pub async fn set_echo(&self, enabled: bool) -> Result<()> {
         timed!(
             "set_echo",
-            self.exec_dynamic(builder::build_echo(Some(enabled)).as_bytes())
+            self.set_km_echo(
+                enabled,
+                builder::build_echo(Some(enabled)).as_bytes(),
+            )
                 .await
         )
     }

@@ -174,7 +174,7 @@ class Mouse:
         )
 
     def silent_move(self, x: int, y: int) -> None:
-        self.transport.send_command(f"km.silent({x},{y})")
+        self.transport.send_km_action(f"km.silent({x},{y})")
 
     def move_abs(self,
         target: tuple[int, int],
@@ -223,10 +223,12 @@ class Mouse:
         self.release(button, dt_uframes)
 
     def move_smooth(self, x: int, y: int, segments: int) -> None:
-        self.transport.send_command(f"km.move({x},{y},{segments})")
+        self.transport.send_km_action(f"km.move({x},{y},{segments})")
 
     def move_bezier(self, x: int, y: int, segments: int, ctrl_x: int, ctrl_y: int) -> None:
-        self.transport.send_command(f"km.move({x},{y},{segments},{ctrl_x},{ctrl_y})")
+        self.transport.send_km_action(
+            f"km.move({x},{y},{segments},{ctrl_x},{ctrl_y})"
+        )
 
     def move_controls(
         self,
@@ -242,7 +244,7 @@ class Mouse:
             raise MakxdCommandError("Both second control coordinates are required")
         if ctrl_x2 is None:
             ctrl_x2, ctrl_y2 = ctrl_x1, ctrl_y1
-        self.transport.send_command(
+        self.transport.send_km_action(
             f"km.move({x},{y},{segments},{ctrl_x1},{ctrl_y1},{ctrl_x2},{ctrl_y2})"
         )
 
@@ -252,7 +254,9 @@ class Mouse:
         if count < 1 or delay_ms < 1:
             raise MakxdCommandError("Click count and delay must be positive")
         button_number = button.value + 1
-        self.transport.send_command(f"km.click({button_number},{count},{delay_ms})")
+        self.transport.send_km_action(
+            f"km.click({button_number},{count},{delay_ms})"
+        )
 
     def _stream(self, command: str, mode: str | None = None, period_ms: int | None = None) -> str | None:
         if mode is None:
@@ -262,7 +266,7 @@ class Mouse:
         if not mode:
             raise MakxdCommandError("Stream mode cannot be empty")
         suffix = f",{period_ms}" if period_ms is not None else ""
-        self.transport.send_command(f"km.{command}({mode}{suffix})")
+        self.transport.send_km_action(f"km.{command}({mode}{suffix})")
         return None
 
     def axis_stream(self, mode: str | None = None, period_ms: int | None = None) -> str | None:
@@ -277,7 +281,7 @@ class Mouse:
     def echo(self, enabled: bool | None = None) -> str | None:
         if enabled is None:
             return self.transport.send_command("km.echo()", expect_response=True)
-        self.transport.send_command(f"km.echo({1 if enabled else 0})")
+        self.transport.set_km_echo(enabled)
         return None
 
     def catch(self, button: MouseButton, enabled: bool | None = None) -> str | None:
@@ -291,7 +295,9 @@ class Mouse:
             raise MakxdCommandError(f"Unsupported button: {button}") from exc
         if enabled is None:
             return self.transport.send_command(f"km.catch_{alias}()", expect_response=True)
-        self.transport.send_command(f"km.catch_{alias}({0 if enabled else 1})")
+        self.transport.send_km_action(
+            f"km.catch_{alias}({0 if enabled else 1})"
+        )
         return None
 
     def scroll(self, delta: int, dt_uframes: int | None = None) -> None:
@@ -321,7 +327,7 @@ class Mouse:
         else:
             cmd, bit = self._UNLOCK_COMMANDS[name]
         
-        self.transport.send_command(cmd)
+        self.transport.send_km_action(cmd)
         
         if lock:
             self._lock_states_cache |= (1 << bit)
@@ -355,13 +361,15 @@ class Mouse:
         if axis not in ("x", "y"):
             raise MakxdCommandError("Directional lock axis must be x or y")
         sign = "+" if positive else "-"
-        self.transport.send_command(f"km.lock_m{axis}{sign}({1 if lock else 0})")
+        self.transport.send_km_action(
+            f"km.lock_m{axis}{sign}({1 if lock else 0})"
+        )
 
     def spoof_serial(self, serial: str) -> None:
-        self.transport.send_command(f"km.serial('{serial}')")
+        self.transport.send_km_action(f"km.serial('{serial}')")
 
     def reset_serial(self) -> None:
-        self.transport.send_command("km.serial(0)")
+        self.transport.send_km_action("km.serial(0)")
 
     def get_device_info(self) -> Dict[str, Union[str, bool]]:
         port_name = self.transport.port

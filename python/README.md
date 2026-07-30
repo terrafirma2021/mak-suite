@@ -201,14 +201,15 @@ select sources. `StreamRequest.stop()` and `status()` control the stream.
 
 ## ASCII response contract
 
-Normal SET and EXEC calls wait for Makxd to echo the accepted command and
-prompt. GET calls echo the query, return the result line, and then emit the
-prompt. The final prompt byte is one ASCII space (`0x20`):
+Successful KM actions are silent by default. GET calls echo the query, return
+the result line, and then emit the prompt. `km.echo(1)` persistently enables
+action echoes; `km.echo(0)` persistently disables them. The SDK reads this
+setting when it connects. The final prompt byte is one ASCII space (`0x20`):
 
 ```text
 SET:
   input:  km.left(1)
-  output: km.left(1)\r\n>>>␠
+  output: <no bytes>
 
 GET:
   input:  km.left()
@@ -216,6 +217,8 @@ GET:
 ```
 
 Here `␠` denotes the required final ASCII space byte in `>>> `.
+Successful `MAK_API` SET calls are also silent; GETs, EXECs, errors, and event
+streams retain their response behavior.
 
 ## Command line
 

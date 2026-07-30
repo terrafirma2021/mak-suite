@@ -109,6 +109,10 @@ namespace makxd {
             ApiVerb verb,
             std::span<const uint8_t> payload = {},
             std::chrono::milliseconds timeout = std::chrono::milliseconds(100));
+        [[nodiscard]] bool sendMakApi(
+            ApiOpcode opcode,
+            ApiVerb verb,
+            std::span<const uint8_t> payload = {});
         void setApiProtocol(ApiProtocol apiProtocol) noexcept;
         [[nodiscard]] ApiProtocol getApiProtocol() const noexcept;
 
@@ -202,7 +206,8 @@ namespace makxd {
         bool platformConfigurePort();
         void platformUpdateTimeouts();
         void platformUpdateTimeoutsUnlocked();
-        ssize_t platformWrite(const void* data, size_t length);
+        ssize_t platformWrite(
+            const void* data, size_t length, bool responseExpected);
         ssize_t platformRead(void* buffer, size_t maxBytes);
         size_t platformBytesAvailable() const;
         bool platformFlush();

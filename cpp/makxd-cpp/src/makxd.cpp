@@ -518,6 +518,7 @@ namespace makxd {
         std::atomic<ConnectionStatus> atomicStatus{ConnectionStatus::DISCONNECTED};
         std::atomic<bool> connected;
         std::atomic<bool> highPerformanceMode;
+        std::atomic<bool> kmEchoEnabled{false};
         mutable std::mutex mutex;
         static std::string lastError;
 
@@ -628,16 +629,22 @@ namespace makxd {
             try {
                 if (apiProtocol == ApiProtocol::MAK_API) {
                     constexpr std::array<uint8_t, 1> enabled{1u};
-                    serialPort->sendTrackedMakApi(
+                    return serialPort->sendMakApi(
                         ApiOpcode::BUTTONS,
                         ApiVerb::SET,
-                        enabled,
-                        std::chrono::milliseconds(100)).get();
-                    return true;
+                        enabled);
                 }
-                return serialPort->sendTrackedCommand(
-                    "km.buttons(1)", true,
-                    std::chrono::milliseconds(100)).get() == "km.buttons(1)";
+                kmEchoEnabled.store(
+                    serialPort->sendTrackedCommand(
+                        "km.echo()", true,
+                        std::chrono::milliseconds(100)).get() == "1",
+                    std::memory_order_release);
+                if (kmEchoEnabled.load(std::memory_order_acquire)) {
+                    return serialPort->sendTrackedCommand(
+                        "km.buttons(1)", true,
+                        std::chrono::milliseconds(100)).get() == "km.buttons(1)";
+                }
+                return serialPort->sendCommand("km.buttons(1)");
             }
             catch (...) {
                 return false;
@@ -761,8 +768,13 @@ namespace makxd {
 
             bool result = false;
             try {
-                result = serialPort->sendTrackedCommand(
-                    command, true, std::chrono::milliseconds(100)).get() == command;
+                if (kmEchoEnabled.load(std::memory_order_acquire)) {
+                    result = serialPort->sendTrackedCommand(
+                        command, true,
+                        std::chrono::milliseconds(100)).get() == command;
+                } else {
+                    result = serialPort->sendCommand(command);
+                }
             }
             catch (...) {
                 result = false;
@@ -788,6 +800,9 @@ namespace makxd {
                 return executeCommand(command);
             }
             try {
+                if (verb == ApiVerb::SET) {
+                    return serialPort->sendMakApi(opcode, verb, payload);
+                }
                 serialPort->sendTrackedMakApi(
                     opcode, verb, payload,
                     std::chrono::milliseconds(100)).get();
@@ -1714,7 +1729,22 @@ namespace makxd {
 
     bool Device::setEcho(bool enabled) {
         if (!m_impl->connected.load()) return false;
-        return m_impl->executeCommand("km.echo(" + std::to_string(enabled ? 1 : 0) + ")");
+        const std::string command =
+            "km.echo(" + std::to_string(enabled ? 1 : 0) + ")";
+        bool result = false;
+        try {
+            result = enabled
+                ? m_impl->serialPort->sendTrackedCommand(
+                    command, true, std::chrono::milliseconds(100)).get() ==
+                    command
+                : m_impl->serialPort->sendCommand(command);
+        } catch (...) {
+            result = false;
+        }
+        if (result) {
+            m_impl->kmEchoEnabled.store(enabled, std::memory_order_release);
+        }
+        return result;
     }
 
     std::string Device::getEcho() {

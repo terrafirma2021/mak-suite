@@ -232,8 +232,10 @@ features as appropriate.
 
 ## KM response contract
 
-Accepted SET/EXEC commands echo the command and prompt only. GET queries echo
-the query, return the result line, and then emit the prompt:
+Successful KM actions are silent by default. GET queries echo the query,
+return the result line, and then emit the prompt. `km.echo(1)` persistently
+enables action echoes; `km.echo(0)` persistently disables them. The SDK reads
+this setting when it connects.
 
 In the examples below, `␠` denotes the required final ASCII space byte
 (`0x20`) in the prompt.
@@ -241,12 +243,15 @@ In the examples below, `␠` denotes the required final ASCII space byte
 ```text
 SET:
   input:  km.left(1)
-  output: km.left(1)\r\n>>>␠
+  output: <no bytes>
 
 GET:
   input:  km.left()
   output: km.left()\r\n1\r\n>>>␠
 ```
+
+Successful `MAK_API` SET calls are also silent; GETs, EXECs, errors, and event
+streams retain their response behavior.
 
 ## Mock transport
 

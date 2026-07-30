@@ -373,6 +373,28 @@ impl TransportHandle {
         payload: &[u8],
         timeout: Duration,
     ) -> Result<Vec<u8>> {
+        self.send_mak_api_submit(opcode, verb, payload, false, timeout)
+    }
+
+    pub fn send_mak_api_no_response(
+        &self,
+        opcode: ApiOpcode,
+        verb: ApiVerb,
+        payload: &[u8],
+        timeout: Duration,
+    ) -> Result<()> {
+        self.send_mak_api_submit(opcode, verb, payload, true, timeout)?;
+        Ok(())
+    }
+
+    fn send_mak_api_submit(
+        &self,
+        opcode: ApiOpcode,
+        verb: ApiVerb,
+        payload: &[u8],
+        fire_and_forget: bool,
+        timeout: Duration,
+    ) -> Result<Vec<u8>> {
         if !self.is_connected() {
             return Err(MakxdError::Disconnected);
         }
@@ -389,6 +411,15 @@ impl TransportHandle {
             } else {
                 (mak_api_command(opcode, verb, payload)?, None)
             };
+        if fire_and_forget {
+            self.inner.send_payload(WritePayload {
+                data,
+                response_tx: None,
+                expected_nonce,
+                expected_opcode: Some(opcode as u8),
+            })?;
+            return Ok(Vec::new());
+        }
         let (tx, rx) = channel::bounded(1);
         self.inner.send_payload(WritePayload {
             data,
@@ -420,9 +451,28 @@ impl TransportHandle {
     ) -> Result<Vec<u8>> {
         let handle = self.clone();
         let payload = payload.to_vec();
-        tokio::task::spawn_blocking(move || handle.send_mak_api(opcode, verb, &payload, timeout))
-            .await
-            .map_err(|error| MakxdError::Protocol(format!("tokio join error: {error}")))?
+        tokio::task::spawn_blocking(move || {
+            handle.send_mak_api(opcode, verb, &payload, timeout)
+        })
+        .await
+        .map_err(|error| MakxdError::Protocol(format!("tokio join error: {error}")))?
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn send_mak_api_no_response_async(
+        &self,
+        opcode: ApiOpcode,
+        verb: ApiVerb,
+        payload: &[u8],
+        timeout: Duration,
+    ) -> Result<()> {
+        let handle = self.clone();
+        let payload = payload.to_vec();
+        tokio::task::spawn_blocking(move || {
+            handle.send_mak_api_no_response(opcode, verb, &payload, timeout)
+        })
+        .await
+        .map_err(|error| MakxdError::Protocol(format!("tokio join error: {error}")))?
     }
 
     /// Convenience: send pre-built command bytes.

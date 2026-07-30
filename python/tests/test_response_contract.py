@@ -1,7 +1,7 @@
 from makxd.connection import parse_ascii_response_body
 
 
-def test_ascii_set_response_returns_echo_only():
+def test_ascii_echo_enabled_set_response_returns_echo_only():
     assert parse_ascii_response_body(b"km.left(1)\r\n") == "km.left(1)"
 
 

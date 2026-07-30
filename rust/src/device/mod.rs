@@ -9,6 +9,7 @@ mod stream;
 
 use std::cell::Cell;
 use std::ops::Deref;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crossbeam_channel as channel;
@@ -155,6 +156,7 @@ fn connect_transport(config: &DeviceConfig) -> Result<TransportHandle> {
 pub struct Device {
     transport: TransportHandle,
     config: DeviceConfig,
+    km_echo_enabled: AtomicBool,
 }
 
 impl std::fmt::Debug for Device {
@@ -192,8 +194,18 @@ impl Device {
     /// Connect with a custom configuration.
     pub fn with_config(config: DeviceConfig) -> Result<Self> {
         let transport = connect_transport(&config)?;
-
-        Ok(Self { transport, config })
+        let device = Self {
+            transport,
+            config,
+            km_echo_enabled: AtomicBool::new(false),
+        };
+        if device.config.api_protocol == ApiProtocol::Km {
+            device.km_echo_enabled.store(
+                device.query(b"km.echo()\r\n")? == "1",
+                Ordering::Release,
+            );
+        }
+        Ok(device)
     }
 
     /// Disconnect from the device, shutting down all threads.
@@ -262,7 +274,7 @@ impl Device {
 
     pub(crate) fn exec(&self, cmd: &[u8]) -> Result<()> {
         self.require_km()?;
-        if self.is_ff() {
+        if self.is_ff() || !self.km_echo_enabled.load(Ordering::Acquire) {
             self.transport
                 .send_static(cmd, true, self.config.command_timeout)?;
             return Ok(());
@@ -286,8 +298,35 @@ impl Device {
 
     pub(crate) fn exec_dynamic(&self, cmd: &[u8]) -> Result<()> {
         self.require_km()?;
-        self.transport
-            .send_command(cmd.to_vec(), self.is_ff(), self.config.command_timeout)?;
+        let fire_and_forget =
+            self.is_ff() || !self.km_echo_enabled.load(Ordering::Acquire);
+        let response = self.transport.send_command(
+            cmd.to_vec(),
+            fire_and_forget,
+            self.config.command_timeout,
+        )?;
+        match response {
+            Some(raw) => {
+                parser::classify_response(&raw);
+                Ok(())
+            }
+            None if fire_and_forget => Ok(()),
+            None => Err(MakxdError::Timeout),
+        }
+    }
+
+    pub(crate) fn set_km_echo(&self, enabled: bool, cmd: &[u8]) -> Result<()> {
+        self.require_km()?;
+        let response = self.transport.send_command(
+            cmd.to_vec(),
+            !enabled,
+            self.config.command_timeout,
+        )?;
+        if enabled {
+            let raw = response.ok_or(MakxdError::Timeout)?;
+            parser::classify_response(&raw);
+        }
+        self.km_echo_enabled.store(enabled, Ordering::Release);
         Ok(())
     }
 
@@ -319,8 +358,21 @@ impl Device {
         match self.config.api_protocol {
             ApiProtocol::Km => self.exec(km_command),
             ApiProtocol::MakApi => {
-                self.transport
-                    .send_mak_api(opcode, verb, payload, self.config.command_timeout)?;
+                if verb == ApiVerb::Set {
+                    self.transport.send_mak_api_no_response(
+                        opcode,
+                        verb,
+                        payload,
+                        self.config.command_timeout,
+                    )?;
+                } else {
+                    self.transport.send_mak_api(
+                        opcode,
+                        verb,
+                        payload,
+                        self.config.command_timeout,
+                    )?;
+                }
                 Ok(())
             }
         }
@@ -337,7 +389,12 @@ impl Device {
             ApiProtocol::Km => Ok(self.query(km_command)?.into_bytes()),
             ApiProtocol::MakApi => {
                 self.transport
-                    .send_mak_api(opcode, verb, payload, self.config.command_timeout)
+                    .send_mak_api(
+                        opcode,
+                        verb,
+                        payload,
+                        self.config.command_timeout,
+                    )
             }
         }
     }
@@ -361,6 +418,7 @@ impl Device {
         let device = Self {
             transport,
             config: DeviceConfig::default(),
+            km_echo_enabled: AtomicBool::new(false),
         };
         (device, mock)
     }
@@ -398,6 +456,7 @@ impl Deref for FireAndForget<'_> {
 pub struct AsyncDevice {
     transport: TransportHandle,
     config: DeviceConfig,
+    km_echo_enabled: AtomicBool,
 }
 
 // Compile-time assertions that AsyncDevice is Send + Sync.
@@ -446,7 +505,18 @@ impl AsyncDevice {
         .await
         .map_err(|e| MakxdError::Protocol(format!("join error: {}", e)))??;
 
-        Ok(Self { transport, config })
+        let device = Self {
+            transport,
+            config,
+            km_echo_enabled: AtomicBool::new(false),
+        };
+        if device.config.api_protocol == ApiProtocol::Km {
+            device.km_echo_enabled.store(
+                device.query(b"km.echo()\r\n").await? == "1",
+                Ordering::Release,
+            );
+        }
+        Ok(device)
     }
 
     /// Disconnect from the device, shutting down all threads.
@@ -513,7 +583,7 @@ impl AsyncDevice {
 
     pub(crate) async fn exec(&self, cmd: &[u8]) -> Result<()> {
         self.require_km()?;
-        if self.is_ff() {
+        if self.is_ff() || !self.km_echo_enabled.load(Ordering::Acquire) {
             self.transport
                 .send_static(cmd, true, self.config.command_timeout)?;
             return Ok(());
@@ -538,9 +608,41 @@ impl AsyncDevice {
 
     pub(crate) async fn exec_dynamic(&self, cmd: &[u8]) -> Result<()> {
         self.require_km()?;
-        self.transport
-            .send_command_async(cmd.to_vec(), self.is_ff(), self.config.command_timeout)
+        let fire_and_forget =
+            self.is_ff() || !self.km_echo_enabled.load(Ordering::Acquire);
+        let response = self
+            .transport
+            .send_command_async(
+                cmd.to_vec(),
+                fire_and_forget,
+                self.config.command_timeout,
+            )
             .await?;
+        match response {
+            Some(raw) => {
+                parser::classify_response(&raw);
+                Ok(())
+            }
+            None if fire_and_forget => Ok(()),
+            None => Err(MakxdError::Timeout),
+        }
+    }
+
+    pub(crate) async fn set_km_echo(&self, enabled: bool, cmd: &[u8]) -> Result<()> {
+        self.require_km()?;
+        let response = self
+            .transport
+            .send_command_async(
+                cmd.to_vec(),
+                !enabled,
+                self.config.command_timeout,
+            )
+            .await?;
+        if enabled {
+            let raw = response.ok_or(MakxdError::Timeout)?;
+            parser::classify_response(&raw);
+        }
+        self.km_echo_enabled.store(enabled, Ordering::Release);
         Ok(())
     }
 
@@ -568,9 +670,25 @@ impl AsyncDevice {
         match self.config.api_protocol {
             ApiProtocol::Km => self.exec(km_command).await,
             ApiProtocol::MakApi => {
-                self.transport
-                    .send_mak_api_async(opcode, verb, payload, self.config.command_timeout)
-                    .await?;
+                if verb == ApiVerb::Set {
+                    self.transport
+                        .send_mak_api_no_response_async(
+                            opcode,
+                            verb,
+                            payload,
+                            self.config.command_timeout,
+                        )
+                        .await?;
+                } else {
+                    self.transport
+                        .send_mak_api_async(
+                            opcode,
+                            verb,
+                            payload,
+                            self.config.command_timeout,
+                        )
+                        .await?;
+                }
                 Ok(())
             }
         }
@@ -587,7 +705,12 @@ impl AsyncDevice {
             ApiProtocol::Km => Ok(self.query(km_command).await?.into_bytes()),
             ApiProtocol::MakApi => {
                 self.transport
-                    .send_mak_api_async(opcode, verb, payload, self.config.command_timeout)
+                    .send_mak_api_async(
+                        opcode,
+                        verb,
+                        payload,
+                        self.config.command_timeout,
+                    )
                     .await
             }
         }
@@ -617,6 +740,7 @@ impl AsyncDevice {
         let device = Self {
             transport,
             config: DeviceConfig::default(),
+            km_echo_enabled: AtomicBool::new(false),
         };
         (device, mock)
     }

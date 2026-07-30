@@ -1,4 +1,5 @@
 import asyncio
+from collections import deque
 import os
 import queue
 import socket
@@ -20,7 +21,12 @@ def _network_response_normalize(data: bytes, raw: bool) -> bytes:
             return b""
         data = data[9:]
     if data[:1] == b"\x00":
-        return b"\xDE\xAD" + len(data).to_bytes(2, "little") + data
+        return (
+            b"\xDE\xAD"
+            + len(data).to_bytes(2, "little")
+            + b"\x00"
+            + data
+        )
     if data[:1] == b"\x03":
         payload = data[1:]
         return b"\xDE\xAD" + len(payload).to_bytes(2, "little") + data
@@ -48,7 +54,8 @@ class UdpWireTransport:
             self._socket.bind((config.udp_bind_address, 0))
         self._socket.connect((config.udp_host, config.udp_port))
         self._open = True
-        self._raw_transactions: queue.Queue[bytes] = queue.Queue()
+        self._raw_transactions: deque[bytes] = deque()
+        self._raw_transactions_lock = threading.Lock()
         self.port = f"udp://{config.udp_host}:{config.udp_port}"
 
     @property
@@ -60,13 +67,21 @@ class UdpWireTransport:
         return 1 if self._open else 0
 
     def write(self, data: bytes) -> int:
+        return self._write(data, True)
+
+    def write_no_response(self, data: bytes) -> int:
+        return self._write(data, False)
+
+    def _write(self, data: bytes, response_expected: bool) -> int:
         wire = data
         if (
             self._config.udp_mode is UdpWireMode.RAW
             and data[:1] != b"\x03"
         ):
             transaction = secrets.token_bytes(8)
-            self._raw_transactions.put(transaction)
+            if response_expected:
+                with self._raw_transactions_lock:
+                    self._raw_transactions.append(transaction)
             wire = b"\x55" + transaction + data
         sent = self._socket.send(wire)
         return len(data) if sent == len(wire) else 0
@@ -79,12 +94,12 @@ class UdpWireTransport:
         if self._config.udp_mode is UdpWireMode.RAW and data[:1] == b"\x55":
             if len(data) < 10:
                 return b""
-            try:
-                expected = self._raw_transactions.get_nowait()
-            except queue.Empty:
-                return b""
-            if data[1:9] != expected:
-                return b""
+            transaction = data[1:9]
+            with self._raw_transactions_lock:
+                try:
+                    self._raw_transactions.remove(transaction)
+                except ValueError:
+                    return b""
         return _network_response_normalize(
             data, self._config.udp_mode is UdpWireMode.RAW
         )

@@ -58,6 +58,11 @@ connect/write/notification-read/close delegates for the fixed MAKXD UUIDs.
 The SDK invokes them in lifecycle order. BLE carries
 plain application records and has no MAKXD AES transport option.
 
+Successful KM actions and `MAK_API` SET calls are silent by default. GETs,
+EXECs, errors, and event streams keep their response behavior. `km.echo(1)`
+persistently enables KM action echoes and `km.echo(0)` persistently disables
+them; the client reads the saved state when it connects.
+
 ## Encrypted COM or UDP API
 
 Configure the device for the matching 16-byte key, then pass that key when

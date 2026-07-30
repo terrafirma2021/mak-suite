@@ -429,7 +429,8 @@ std::future<std::string> SerialPort::sendTrackedCommand(const std::string& comma
 
 	// Unified write operation
 	ssize_t bytesWritten = platformWrite(
-	    encodedCommand.bytes.data(), encodedCommand.bytes.size());
+	    encodedCommand.bytes.data(), encodedCommand.bytes.size(),
+	    expectResponse);
 
 	if (bytesWritten != static_cast<ssize_t>(encodedCommand.bytes.size())) {
 		std::lock_guard<std::mutex> lock(m_commandMutex);
@@ -538,7 +539,7 @@ std::future<std::string> SerialPort::sendTrackedMakApi(
 	}
 
 	const ssize_t bytesWritten = platformWrite(
-		encodedCommand.bytes.data(), encodedCommand.bytes.size());
+		encodedCommand.bytes.data(), encodedCommand.bytes.size(), true);
 	if (bytesWritten != static_cast<ssize_t>(encodedCommand.bytes.size())) {
 		std::lock_guard<std::mutex> lock(m_commandMutex);
 		auto pending = m_pendingCommands.find(commandId);
@@ -561,6 +562,48 @@ std::future<std::string> SerialPort::sendTrackedMakApi(
 	}
 	platformFlush();
 	return future;
+}
+
+bool SerialPort::sendMakApi(
+        ApiOpcode opcode,
+        ApiVerb verb,
+        std::span<const uint8_t> payload) {
+	if (!m_isOpen.load(std::memory_order_acquire) || payload.size() > 248u) {
+		return false;
+	}
+
+	std::vector<uint8_t> identified;
+	identified.reserve(3u + payload.size());
+	identified.push_back(0x00u);
+	identified.push_back(static_cast<uint8_t>(opcode));
+	identified.push_back(static_cast<uint8_t>(verb));
+	identified.insert(identified.end(), payload.begin(), payload.end());
+
+	TransportEncodedCommand encodedCommand;
+	try {
+		if (m_transportEncryption->enabled()) {
+			encodedCommand = m_transportEncryption->encodeCommand(identified);
+		} else {
+			encodedCommand.bytes.resize(5u + identified.size());
+			encodedCommand.bytes[0] = 0xDEu;
+			encodedCommand.bytes[1] = 0xADu;
+			encodedCommand.bytes[2] =
+				static_cast<uint8_t>(identified.size());
+			encodedCommand.bytes[3] =
+				static_cast<uint8_t>(identified.size() >> 8u);
+			encodedCommand.bytes[4] = 0x00u;
+			std::copy(
+				identified.begin(), identified.end(),
+				encodedCommand.bytes.begin() + 5);
+		}
+	} catch (...) {
+		return false;
+	}
+
+	const ssize_t bytesWritten = platformWrite(
+		encodedCommand.bytes.data(), encodedCommand.bytes.size(), false);
+	return bytesWritten == static_cast<ssize_t>(encodedCommand.bytes.size()) &&
+		platformFlush();
 }
 
 bool SerialPort::sendCommand(const std::string& command) {
@@ -592,7 +635,7 @@ bool SerialPort::sendCommand(const std::string& command) {
 
 	// Unified write and flush operation
 	ssize_t bytesWritten = platformWrite(
-	    encodedCommand.bytes.data(), encodedCommand.bytes.size());
+	    encodedCommand.bytes.data(), encodedCommand.bytes.size(), false);
 	if (bytesWritten == static_cast<ssize_t>(encodedCommand.bytes.size())) {
 		return platformFlush();
 	}
@@ -1060,7 +1103,7 @@ bool SerialPort::write(std::span<const uint8_t> data) {
 	}
 
 	// Raw MAK_API write path: do not append CRLF.
-	ssize_t bytesWritten = platformWrite(data.data(), data.size());
+	ssize_t bytesWritten = platformWrite(data.data(), data.size(), true);
 	if (bytesWritten != static_cast<ssize_t>(data.size())) {
 		return false;
 	}
@@ -1538,7 +1581,8 @@ void SerialPort::platformUpdateTimeoutsUnlocked() {
 #endif
 }
 
-ssize_t SerialPort::platformWrite(const void* data, size_t length) {
+ssize_t SerialPort::platformWrite(
+	const void* data, size_t length, bool responseExpected) {
 	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 	if (m_connectionIo->config.method != ConnectionMethod::COM) {
 		if (data == nullptr || length == 0u) {
@@ -1560,7 +1604,9 @@ ssize_t SerialPort::platformWrite(const void* data, size_t length) {
 			for (auto& byte : transaction) {
 				byte = static_cast<uint8_t>(random());
 			}
-			m_connectionIo->rawTransactions.push_back(transaction);
+			if (responseExpected) {
+				m_connectionIo->rawTransactions.push_back(transaction);
+			}
 			std::vector<uint8_t> raw;
 			raw.reserve(9u + wire.size());
 			raw.push_back(0x55u);
@@ -1674,15 +1720,21 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 		if (m_connectionIo->config.method == ConnectionMethod::UDP &&
 			m_connectionIo->config.udpMode == UdpWireMode::RAW &&
 			incoming[0] == 0x55u) {
-			if (incomingBytes < 10u ||
-				m_connectionIo->rawTransactions.empty() ||
-				!std::equal(
-					m_connectionIo->rawTransactions.front().begin(),
-					m_connectionIo->rawTransactions.front().end(),
-					incoming.begin() + 1u)) {
+			if (incomingBytes < 10u) {
 				return 0;
 			}
-			m_connectionIo->rawTransactions.pop_front();
+			const auto transaction = std::find_if(
+				m_connectionIo->rawTransactions.begin(),
+				m_connectionIo->rawTransactions.end(),
+				[&](const std::array<uint8_t, 8>& expected) {
+					return std::equal(
+						expected.begin(), expected.end(),
+						incoming.begin() + 1u);
+				});
+			if (transaction == m_connectionIo->rawTransactions.end()) {
+				return 0;
+			}
+			m_connectionIo->rawTransactions.erase(transaction);
 			offset = 9u;
 		}
 		const size_t bodyBytes = incomingBytes - offset;
@@ -1696,6 +1748,9 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 			normalized.push_back(0xADu);
 			normalized.push_back(static_cast<uint8_t>(payloadBytes));
 			normalized.push_back(static_cast<uint8_t>(payloadBytes >> 8u));
+			if (incoming[offset] == 0x00u) {
+				normalized.push_back(0x00u);
+			}
 			normalized.insert(
 				normalized.end(), incoming.begin() + offset, incoming.begin() + incomingBytes);
 		} else {

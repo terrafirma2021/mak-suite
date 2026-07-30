@@ -1,4 +1,7 @@
+from collections import deque
+
 from makxd.connection import SerialTransport
+from makxd.connection_config import ConnectionConfig, UdpWireMode
 from makxd.enums import MouseButton
 from makxd.gamepad import ControllerButton, Gamepad
 from makxd.keyboard import Keyboard
@@ -11,6 +14,7 @@ from makxd.protocol import (
     parse_device_route_mak_api,
     parse_device_route_km,
 )
+from makxd.wire_transport import UdpWireTransport
 
 
 class MakApiCaptureTransport:
@@ -28,6 +32,51 @@ class MakApiCaptureTransport:
     ) -> bytes:
         self.calls.append((int(opcode), int(verb), payload))
         return b""
+
+
+class WireCapture:
+    def __init__(self) -> None:
+        self.is_open = True
+        self.writes: list[bytes] = []
+
+    def write(self, data: bytes) -> int:
+        self.writes.append(bytes(data))
+        return len(data)
+
+    def flush(self) -> None:
+        return None
+
+
+class NoResponseWireCapture(WireCapture):
+    def __init__(self) -> None:
+        super().__init__()
+        self.no_response_writes: list[bytes] = []
+
+    def write_no_response(self, data: bytes) -> int:
+        self.no_response_writes.append(bytes(data))
+        return len(data)
+
+
+class UdpSocketCapture:
+    def __init__(self) -> None:
+        self.sent: list[bytes] = []
+        self.received: deque[bytes] = deque()
+
+    def settimeout(self, _timeout: float) -> None:
+        return
+
+    def connect(self, _address: tuple[str, int]) -> None:
+        return
+
+    def send(self, data: bytes) -> int:
+        self.sent.append(bytes(data))
+        return len(data)
+
+    def recv(self, _size: int) -> bytes:
+        return self.received.popleft()
+
+    def close(self) -> None:
+        return
 
 
 def test_mak_api_serial_frame_has_generic_command_and_public_identifier() -> None:
@@ -87,6 +136,83 @@ def test_mak_api_named_controller_button_hat_and_direction_locks() -> None:
         (0x48, 0x01, b"\x01"),
         (0x59, 0x01, b"\x01"),
         (0x54, 0x01, b"\x01\x00\x01\x00"),
+    ]
+
+
+def test_mak_api_set_writes_without_registering_a_pending_response() -> None:
+    transport = SerialTransport(api_protocol=ApiProtocol.MAK_API)
+    wire = NoResponseWireCapture()
+    transport.serial = wire
+    transport._is_connected = True
+
+    assert transport.send_mak_api(
+        ApiOpcode.LEFT,
+        ApiVerb.SET,
+        b"\x01",
+    ) == b""
+    assert wire.writes == []
+    assert wire.no_response_writes == [
+        b"\xDE\xAD\x04\x00\x00\x00\x11\x01\x01"
+    ]
+    assert transport._pending_commands == {}
+
+
+def test_raw_udp_silent_set_does_not_own_next_get_transaction(
+    monkeypatch,
+) -> None:
+    socket_capture = UdpSocketCapture()
+    transactions = iter((b"SET_____", b"GET_____"))
+    monkeypatch.setattr(
+        "makxd.wire_transport.socket.socket",
+        lambda *_args, **_kwargs: socket_capture,
+    )
+    monkeypatch.setattr(
+        "makxd.wire_transport.secrets.token_bytes",
+        lambda _size: next(transactions),
+    )
+    transport = UdpWireTransport(
+        ConnectionConfig.udp("192.0.2.1", mode=UdpWireMode.RAW)
+    )
+
+    assert transport.write_no_response(b"\x00\x11\x01\x01") == 4
+    assert transport.write(b"\x00\x11\x00") == 3
+    assert list(transport._raw_transactions) == [b"GET_____"]
+
+    socket_capture.received.extend(
+        (
+            b"\x55SET_____\x00\x11\xFF",
+            b"\x55GET_____\x00\x11\x01\x01",
+        )
+    )
+    assert transport.read(64) == b""
+    assert transport.read(64) == (
+        b"\xDE\xAD\x04\x00\x00\x00\x11\x01\x01"
+    )
+    assert list(transport._raw_transactions) == []
+
+
+def test_km_actions_follow_saved_echo_state_but_gets_always_wait() -> None:
+    transport = SerialTransport(api_protocol=ApiProtocol.KM)
+    calls: list[tuple[str, bool]] = []
+    transport.send_command = lambda command, expect_response=True, timeout=0: (
+        calls.append((command, expect_response)) or None
+    )
+
+    transport.send_api(
+        "km.left(1)", ApiOpcode.LEFT, ApiVerb.SET, b"\x01"
+    )
+    transport._km_echo_enabled = True
+    transport.send_api(
+        "km.left(0)", ApiOpcode.LEFT, ApiVerb.SET, b"\x00"
+    )
+    transport.send_api(
+        "km.left()", ApiOpcode.LEFT, ApiVerb.GET
+    )
+
+    assert calls == [
+        ("km.left(1)", False),
+        ("km.left(0)", True),
+        ("km.left()", True),
     ]
 
 

@@ -55,9 +55,10 @@ All Device methods take `&self` (not `&mut self`). I/O goes through channels. De
 ### Protocol details
 
 - Serial probes 115200, 1 Mbaud, then 4 Mbaud with `km.version()`
-- Commands are `km.foo(args)\r\n`. Accepted SET/EXEC responses echo the
-  command and the `>>> ` prompt only; GET responses echo the query, result,
-  and the `>>> ` prompt. The prompt's final byte is ASCII space (`0x20`).
+- Commands are `km.foo(args)\r\n`. Successful actions are silent by default;
+  `km.echo(1)` persistently enables action echoes. GET responses echo the
+  query, result, and the `>>> ` prompt. The prompt's final byte is ASCII space
+  (`0x20`).
 - Button stream events use `km.` prefix followed by a raw button mask byte
 - Static commands use compile-time `&[u8]` constants; parametric commands use stack-allocated `CommandBuf` (no heap on hot paths)
 

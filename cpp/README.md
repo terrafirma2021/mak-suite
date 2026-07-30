@@ -140,15 +140,16 @@ See `examples/` for complete integration examples.
 
 ## ASCII response contract
 
-The serial collector consumes the complete response through the `>>> ` prompt.
-Normal SET and EXEC calls wait for Makxd to echo the accepted command and
-prompt. GET calls echo the query, return the result line, and then emit the
-prompt:
+The serial collector consumes complete responses through the `>>> ` prompt.
+Successful KM actions are silent by default. GET calls echo the query, return
+the result line, and then emit the prompt. `km.echo(1)` persistently enables
+action echoes; `km.echo(0)` persistently disables them. The library reads this
+setting when it connects:
 
 ```text
 SET:
   input:  km.left(1)
-  output: km.left(1)\r\n>>>[space]
+  output: <no bytes>
 
 GET:
   input:  km.left()
@@ -156,6 +157,8 @@ GET:
 ```
 
 `[space]` is the required final ASCII byte `0x20`.
+Successful `MAK_API` SET calls are also silent; GETs, EXECs, errors, and event
+streams retain their response behavior.
 
 ## Examples
 

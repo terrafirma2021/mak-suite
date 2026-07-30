@@ -10,8 +10,13 @@ use crate::types::{BleConnectionIo, ConnectionConfig, UdpWireMode};
 
 pub(crate) trait WirePort: Send {
     fn try_clone_wire(&self) -> Result<Box<dyn WirePort>>;
+    fn write_coalescing_supported(&self) -> bool;
     fn read_wire(&mut self, bytes: &mut [u8]) -> std::io::Result<usize>;
-    fn write_all_wire(&mut self, bytes: &[u8]) -> std::io::Result<()>;
+    fn write_all_wire(
+        &mut self,
+        bytes: &[u8],
+        response_expected: bool,
+    ) -> std::io::Result<()>;
     fn flush_wire(&mut self) -> std::io::Result<()>;
 }
 
@@ -32,11 +37,19 @@ impl WirePort for SerialWirePort {
         )))
     }
 
+    fn write_coalescing_supported(&self) -> bool {
+        true
+    }
+
     fn read_wire(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
         self.port.read(bytes)
     }
 
-    fn write_all_wire(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+    fn write_all_wire(
+        &mut self,
+        bytes: &[u8],
+        _response_expected: bool,
+    ) -> std::io::Result<()> {
         self.port.write_all(bytes)
     }
 
@@ -115,24 +128,16 @@ impl UdpWirePort {
                     "raw UDP response header is invalid",
                 ));
             }
-            let expected = self
-                .shared
-                .transactions
-                .lock()
-                .unwrap()
-                .pop_front()
-                .ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "raw UDP response has no pending transaction",
-                    )
-                })?;
-            if body[1..9] != expected {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "raw UDP transaction does not match",
-                ));
+            let mut transactions = self.shared.transactions.lock().unwrap();
+            let matching_index = transactions
+                .iter()
+                .position(|transaction| body[1..9] == transaction[..]);
+            if let Some(index) = matching_index {
+                transactions.remove(index);
+            } else {
+                return Ok(());
             }
+            drop(transactions);
             body = &body[9..];
         }
         network_response_normalize(body, &mut self.pending);
@@ -148,6 +153,10 @@ impl WirePort for UdpWirePort {
         }))
     }
 
+    fn write_coalescing_supported(&self) -> bool {
+        false
+    }
+
     fn read_wire(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
         if self.pending.is_empty() {
             self.receive_packet()?;
@@ -159,17 +168,23 @@ impl WirePort for UdpWirePort {
         Ok(count)
     }
 
-    fn write_all_wire(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+    fn write_all_wire(
+        &mut self,
+        bytes: &[u8],
+        response_expected: bool,
+    ) -> std::io::Result<()> {
         let mut wire = network_request(bytes)?;
         if self.shared.mode == UdpWireMode::Raw && wire.first() != Some(&0x03) {
             let mut transaction = [0u8; 8];
             getrandom::fill(&mut transaction)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
-            self.shared
-                .transactions
-                .lock()
-                .unwrap()
-                .push_back(transaction);
+            if response_expected {
+                self.shared
+                    .transactions
+                    .lock()
+                    .unwrap()
+                    .push_back(transaction);
+            }
             let mut raw = Vec::with_capacity(9 + wire.len());
             raw.push(0x55);
             raw.extend_from_slice(&transaction);
@@ -211,6 +226,10 @@ impl WirePort for BleWirePort {
         Ok(Box::new(Self::new(Arc::clone(&self.io))))
     }
 
+    fn write_coalescing_supported(&self) -> bool {
+        false
+    }
+
     fn read_wire(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
         if self.pending.is_empty() {
             let packet = self
@@ -232,7 +251,11 @@ impl WirePort for BleWirePort {
         Ok(count)
     }
 
-    fn write_all_wire(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+    fn write_all_wire(
+        &mut self,
+        bytes: &[u8],
+        _response_expected: bool,
+    ) -> std::io::Result<()> {
         let wire = network_request(bytes)?;
         if wire.len() > 64 {
             return Err(std::io::Error::new(
@@ -269,6 +292,7 @@ fn network_response_normalize(bytes: &[u8], output: &mut VecDeque<u8>) {
         Some(0x00) => {
             output.extend([0xde, 0xad]);
             output.extend((bytes.len() as u16).to_le_bytes());
+            output.push_back(0x00);
             output.extend(bytes);
         }
         Some(0x03) => {
@@ -277,6 +301,65 @@ fn network_response_normalize(bytes: &[u8], output: &mut VecDeque<u8>) {
             output.extend(bytes);
         }
         _ => output.extend(bytes),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_udp_silent_set_does_not_own_next_get_transaction() {
+        let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let client = UdpSocket::bind("127.0.0.1:0").unwrap();
+        client.connect(server.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let shared = Arc::new(UdpShared {
+            socket: client,
+            mode: UdpWireMode::Raw,
+            transactions: Mutex::new(VecDeque::new()),
+        });
+        let mut port = UdpWirePort {
+            shared: Arc::clone(&shared),
+            pending: VecDeque::new(),
+        };
+
+        port.write_all_wire(&[0x00, 0x11, 0x01, 0x01], false)
+            .unwrap();
+        let mut silent_packet = [0u8; 64];
+        let (silent_bytes, client_address) =
+            server.recv_from(&mut silent_packet).unwrap();
+        assert_eq!(silent_bytes, 13);
+        assert!(shared.transactions.lock().unwrap().is_empty());
+
+        port.write_all_wire(&[0x00, 0x11, 0x00], true)
+            .unwrap();
+        let mut get_packet = [0u8; 64];
+        let (get_bytes, _) = server.recv_from(&mut get_packet).unwrap();
+        assert_eq!(get_bytes, 12);
+        assert_eq!(shared.transactions.lock().unwrap().len(), 1);
+
+        let mut silent_error = Vec::from(&silent_packet[..9]);
+        silent_error.extend([0x00, 0x11, 0xff]);
+        server.send_to(&silent_error, client_address).unwrap();
+        port.receive_packet().unwrap();
+        assert!(port.pending.is_empty());
+        assert_eq!(shared.transactions.lock().unwrap().len(), 1);
+
+        let mut get_response = Vec::from(&get_packet[..9]);
+        get_response.extend([0x00, 0x11, 0x01, 0x01]);
+        server.send_to(&get_response, client_address).unwrap();
+        port.receive_packet().unwrap();
+        assert_eq!(
+            port.pending,
+            VecDeque::from([0xde, 0xad, 4, 0, 0, 0, 0x11, 1, 1])
+        );
+        assert!(shared.transactions.lock().unwrap().is_empty());
     }
 }
 
@@ -304,7 +387,7 @@ pub(crate) fn establish_network_connection(
         } else {
             (command.to_vec(), None)
         };
-        port.write_all_wire(&wire)?;
+        port.write_all_wire(&wire, true)?;
         port.flush_wire()?;
         let deadline = std::time::Instant::now() + Duration::from_millis(750);
         let mut response = Vec::new();
