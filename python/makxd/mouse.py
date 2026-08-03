@@ -2,7 +2,7 @@ from typing import Dict, Union
 from .enums import MouseButton
 from .connection import SerialTransport
 from .errors import MakxdCommandError
-from .protocol import ApiOpcode, ApiVerb
+from .protocol import ApiOpcode, ApiProtocol, ApiVerb
 from serial.tools import list_ports
 import ctypes
 import time
@@ -407,9 +407,11 @@ class Mouse:
         return info
 
     def get_firmware_version(self) -> str:
+        if self.transport.api_protocol is ApiProtocol.MAK_API:
+            return ""
         response = self.transport.send_api(
             "km.version()",
-            ApiOpcode.VERSION,
+            ApiOpcode.DEVICE,
             ApiVerb.GET,
             expect_response=True,
             timeout=0.1,

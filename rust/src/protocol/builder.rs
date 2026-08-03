@@ -41,29 +41,6 @@ fn check_dt_uframes(dt_uframes: u16) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn build_controller_command(
-    name: &str,
-    values: &[i64],
-    dt_uframes: Option<u16>,
-) -> Result<CommandBuf> {
-    if let Some(dt) = dt_uframes {
-        check_dt_uframes(dt)?;
-    }
-    build_cmd(|buf| {
-        write!(buf, "km.{name}(")?;
-        for (index, value) in values.iter().enumerate() {
-            if index != 0 {
-                write!(buf, ",")?;
-            }
-            write!(buf, "{value}")?;
-        }
-        if let Some(dt) = dt_uframes {
-            write!(buf, ",{dt}")?;
-        }
-        write!(buf, ")\r\n")
-    })
-}
-
 pub(crate) fn build_mouse_mask(name: &str, values: &[bool]) -> Result<CommandBuf> {
     build_cmd(|buf| {
         write!(buf, "km.{name}(")?;
@@ -255,23 +232,6 @@ mod dt_tests {
         assert!(build_button_dt(Button::Left, true, 16384).is_err());
         assert!(build_move_dt(0, 0, 16384).is_err());
         assert!(build_wheel_dt(0, 16384).is_err());
-        assert!(build_controller_command("controller_hat_up", &[1], Some(16384)).is_err());
-    }
-
-    #[test]
-    fn builds_controller_tuple_and_single_mask_commands() {
-        assert_eq!(
-            build_controller_command("controller", &[3, 8, 10, 20, -1, 2, -3, 4, -5, 6], None,)
-                .unwrap()
-                .as_bytes(),
-            b"km.controller(3,8,10,20,-1,2,-3,4,-5,6)\r\n"
-        );
-        assert_eq!(
-            build_controller_command("controller_right_stick_mask", &[1, 0, 1, 0], None,)
-                .unwrap()
-                .as_bytes(),
-            b"km.controller_right_stick_mask(1,0,1,0)\r\n"
-        );
     }
 
     #[test]

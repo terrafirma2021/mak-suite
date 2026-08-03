@@ -1,5 +1,5 @@
 use crate::error::{MakxdError, Result};
-use crate::types::{Button, ControllerButton, KeyboardKey};
+use crate::types::{Button, KeyboardKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
@@ -20,7 +20,6 @@ pub enum ApiVerb {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ApiOpcode {
-    Version = 0x01,
     Device = 0x02,
     Buttons = 0x10,
     Left = 0x11,
@@ -50,88 +49,8 @@ pub enum ApiOpcode {
     KeyRemap = 0x2a,
     KeyKeys = 0x2b,
     ControllerState = 0x40,
-    ControllerLt = 0x43,
-    ControllerRt = 0x44,
-    ControllerLeftStick = 0x45,
-    ControllerRightStick = 0x46,
-    ControllerAux = 0x47,
-    ControllerHatLeft = 0x48,
-    ControllerHatRight = 0x49,
-    ControllerHatDown = 0x4a,
-    ControllerHatUp = 0x4b,
-    ControllerLtMask = 0x52,
-    ControllerRtMask = 0x53,
-    ControllerLeftStickMask = 0x54,
-    ControllerRightStickMask = 0x55,
-    ControllerAuxMask = 0x56,
-    ControllerHatLeftMask = 0x58,
-    ControllerHatRightMask = 0x59,
-    ControllerHatDownMask = 0x5a,
-    ControllerHatUpMask = 0x5b,
-    ControllerButton1 = 0x60,
-    ControllerButton2 = 0x61,
-    ControllerButton3 = 0x62,
-    ControllerButton4 = 0x63,
-    ControllerButton5 = 0x64,
-    ControllerButton6 = 0x65,
-    ControllerButton7 = 0x66,
-    ControllerButton8 = 0x67,
-    ControllerButton9 = 0x68,
-    ControllerButton10 = 0x69,
-    ControllerButton11 = 0x6a,
-    ControllerButton12 = 0x6b,
-    ControllerButton13 = 0x6c,
-    ControllerButton14 = 0x6d,
-    ControllerButton15 = 0x6e,
-    ControllerButton16 = 0x6f,
-    ControllerButton17 = 0x70,
-    ControllerButton18 = 0x71,
-    ControllerButton19 = 0x72,
-    ControllerButton20 = 0x73,
-    ControllerButton21 = 0x74,
-    ControllerButton22 = 0x75,
-    ControllerButton23 = 0x76,
-    ControllerButton24 = 0x77,
-    ControllerButton25 = 0x78,
-    ControllerButton26 = 0x79,
-    ControllerButton27 = 0x7a,
-    ControllerButton28 = 0x7b,
-    ControllerButton29 = 0x7c,
-    ControllerButton30 = 0x7d,
-    ControllerButton31 = 0x7e,
-    ControllerButton32 = 0x7f,
-    ControllerButton1Mask = 0x80,
-    ControllerButton2Mask = 0x81,
-    ControllerButton3Mask = 0x82,
-    ControllerButton4Mask = 0x83,
-    ControllerButton5Mask = 0x84,
-    ControllerButton6Mask = 0x85,
-    ControllerButton7Mask = 0x86,
-    ControllerButton8Mask = 0x87,
-    ControllerButton9Mask = 0x88,
-    ControllerButton10Mask = 0x89,
-    ControllerButton11Mask = 0x8a,
-    ControllerButton12Mask = 0x8b,
-    ControllerButton13Mask = 0x8c,
-    ControllerButton14Mask = 0x8d,
-    ControllerButton15Mask = 0x8e,
-    ControllerButton16Mask = 0x8f,
-    ControllerButton17Mask = 0x90,
-    ControllerButton18Mask = 0x91,
-    ControllerButton19Mask = 0x92,
-    ControllerButton20Mask = 0x93,
-    ControllerButton21Mask = 0x94,
-    ControllerButton22Mask = 0x95,
-    ControllerButton23Mask = 0x96,
-    ControllerButton24Mask = 0x97,
-    ControllerButton25Mask = 0x98,
-    ControllerButton26Mask = 0x99,
-    ControllerButton27Mask = 0x9a,
-    ControllerButton28Mask = 0x9b,
-    ControllerButton29Mask = 0x9c,
-    ControllerButton30Mask = 0x9d,
-    ControllerButton31Mask = 0x9e,
-    ControllerButton32Mask = 0x9f,
+    ControllerControl = 0x41,
+    ControllerMask = 0x51,
 }
 
 pub(crate) fn mak_api_command(opcode: ApiOpcode, verb: ApiVerb, payload: &[u8]) -> Result<Vec<u8>> {
@@ -167,80 +86,6 @@ pub(crate) fn button_mask_opcode(button: Button) -> ApiOpcode {
         Button::Middle => ApiOpcode::MiddleMask,
         Button::Side1 => ApiOpcode::Side1Mask,
         Button::Side2 => ApiOpcode::Side2Mask,
-    }
-}
-
-pub(crate) fn controller_button_opcode(button: ControllerButton) -> ApiOpcode {
-    match button {
-        ControllerButton::Button1 => ApiOpcode::ControllerButton1,
-        ControllerButton::Button2 => ApiOpcode::ControllerButton2,
-        ControllerButton::Button3 => ApiOpcode::ControllerButton3,
-        ControllerButton::Button4 => ApiOpcode::ControllerButton4,
-        ControllerButton::Button5 => ApiOpcode::ControllerButton5,
-        ControllerButton::Button6 => ApiOpcode::ControllerButton6,
-        ControllerButton::Button7 => ApiOpcode::ControllerButton7,
-        ControllerButton::Button8 => ApiOpcode::ControllerButton8,
-        ControllerButton::Button9 => ApiOpcode::ControllerButton9,
-        ControllerButton::Button10 => ApiOpcode::ControllerButton10,
-        ControllerButton::Button11 => ApiOpcode::ControllerButton11,
-        ControllerButton::Button12 => ApiOpcode::ControllerButton12,
-        ControllerButton::Button13 => ApiOpcode::ControllerButton13,
-        ControllerButton::Button14 => ApiOpcode::ControllerButton14,
-        ControllerButton::Button15 => ApiOpcode::ControllerButton15,
-        ControllerButton::Button16 => ApiOpcode::ControllerButton16,
-        ControllerButton::Button17 => ApiOpcode::ControllerButton17,
-        ControllerButton::Button18 => ApiOpcode::ControllerButton18,
-        ControllerButton::Button19 => ApiOpcode::ControllerButton19,
-        ControllerButton::Button20 => ApiOpcode::ControllerButton20,
-        ControllerButton::Button21 => ApiOpcode::ControllerButton21,
-        ControllerButton::Button22 => ApiOpcode::ControllerButton22,
-        ControllerButton::Button23 => ApiOpcode::ControllerButton23,
-        ControllerButton::Button24 => ApiOpcode::ControllerButton24,
-        ControllerButton::Button25 => ApiOpcode::ControllerButton25,
-        ControllerButton::Button26 => ApiOpcode::ControllerButton26,
-        ControllerButton::Button27 => ApiOpcode::ControllerButton27,
-        ControllerButton::Button28 => ApiOpcode::ControllerButton28,
-        ControllerButton::Button29 => ApiOpcode::ControllerButton29,
-        ControllerButton::Button30 => ApiOpcode::ControllerButton30,
-        ControllerButton::Button31 => ApiOpcode::ControllerButton31,
-        ControllerButton::Button32 => ApiOpcode::ControllerButton32,
-    }
-}
-
-pub(crate) fn controller_button_mask_opcode(button: ControllerButton) -> ApiOpcode {
-    match button {
-        ControllerButton::Button1 => ApiOpcode::ControllerButton1Mask,
-        ControllerButton::Button2 => ApiOpcode::ControllerButton2Mask,
-        ControllerButton::Button3 => ApiOpcode::ControllerButton3Mask,
-        ControllerButton::Button4 => ApiOpcode::ControllerButton4Mask,
-        ControllerButton::Button5 => ApiOpcode::ControllerButton5Mask,
-        ControllerButton::Button6 => ApiOpcode::ControllerButton6Mask,
-        ControllerButton::Button7 => ApiOpcode::ControllerButton7Mask,
-        ControllerButton::Button8 => ApiOpcode::ControllerButton8Mask,
-        ControllerButton::Button9 => ApiOpcode::ControllerButton9Mask,
-        ControllerButton::Button10 => ApiOpcode::ControllerButton10Mask,
-        ControllerButton::Button11 => ApiOpcode::ControllerButton11Mask,
-        ControllerButton::Button12 => ApiOpcode::ControllerButton12Mask,
-        ControllerButton::Button13 => ApiOpcode::ControllerButton13Mask,
-        ControllerButton::Button14 => ApiOpcode::ControllerButton14Mask,
-        ControllerButton::Button15 => ApiOpcode::ControllerButton15Mask,
-        ControllerButton::Button16 => ApiOpcode::ControllerButton16Mask,
-        ControllerButton::Button17 => ApiOpcode::ControllerButton17Mask,
-        ControllerButton::Button18 => ApiOpcode::ControllerButton18Mask,
-        ControllerButton::Button19 => ApiOpcode::ControllerButton19Mask,
-        ControllerButton::Button20 => ApiOpcode::ControllerButton20Mask,
-        ControllerButton::Button21 => ApiOpcode::ControllerButton21Mask,
-        ControllerButton::Button22 => ApiOpcode::ControllerButton22Mask,
-        ControllerButton::Button23 => ApiOpcode::ControllerButton23Mask,
-        ControllerButton::Button24 => ApiOpcode::ControllerButton24Mask,
-        ControllerButton::Button25 => ApiOpcode::ControllerButton25Mask,
-        ControllerButton::Button26 => ApiOpcode::ControllerButton26Mask,
-        ControllerButton::Button27 => ApiOpcode::ControllerButton27Mask,
-        ControllerButton::Button28 => ApiOpcode::ControllerButton28Mask,
-        ControllerButton::Button29 => ApiOpcode::ControllerButton29Mask,
-        ControllerButton::Button30 => ApiOpcode::ControllerButton30Mask,
-        ControllerButton::Button31 => ApiOpcode::ControllerButton31Mask,
-        ControllerButton::Button32 => ApiOpcode::ControllerButton32Mask,
     }
 }
 
@@ -368,47 +213,23 @@ mod tests {
     }
 
     #[test]
-    fn mak_api_controller_buttons_have_exact_named_opcodes() {
-        let buttons = [
-            ControllerButton::Button1,
-            ControllerButton::Button2,
-            ControllerButton::Button3,
-            ControllerButton::Button4,
-            ControllerButton::Button5,
-            ControllerButton::Button6,
-            ControllerButton::Button7,
-            ControllerButton::Button8,
-            ControllerButton::Button9,
-            ControllerButton::Button10,
-            ControllerButton::Button11,
-            ControllerButton::Button12,
-            ControllerButton::Button13,
-            ControllerButton::Button14,
-            ControllerButton::Button15,
-            ControllerButton::Button16,
-            ControllerButton::Button17,
-            ControllerButton::Button18,
-            ControllerButton::Button19,
-            ControllerButton::Button20,
-            ControllerButton::Button21,
-            ControllerButton::Button22,
-            ControllerButton::Button23,
-            ControllerButton::Button24,
-            ControllerButton::Button25,
-            ControllerButton::Button26,
-            ControllerButton::Button27,
-            ControllerButton::Button28,
-            ControllerButton::Button29,
-            ControllerButton::Button30,
-            ControllerButton::Button31,
-            ControllerButton::Button32,
-        ];
-        for (index, button) in buttons.into_iter().enumerate() {
-            assert_eq!(controller_button_opcode(button) as u8, 0x60 + index as u8);
-            assert_eq!(
-                controller_button_mask_opcode(button) as u8,
-                0x80 + index as u8
-            );
-        }
+    fn mak_api_controller_has_one_semantic_opcode_set() {
+        assert_eq!(ApiOpcode::ControllerState as u8, 0x40);
+        assert_eq!(ApiOpcode::ControllerControl as u8, 0x41);
+        assert_eq!(ApiOpcode::ControllerMask as u8, 0x51);
+    }
+
+    #[test]
+    fn public_default_and_controller_names_match_the_final_contract() {
+        use crate::device::DeviceConfig;
+        use crate::types::ControllerControl;
+
+        assert_eq!(DeviceConfig::default().api_protocol, ApiProtocol::MakApi);
+        assert_eq!(ControllerControl::South as u8, 0);
+        assert_eq!(ControllerControl::GripRight as u8, 22);
+        assert_eq!(ControllerControl::Extra32 as u8, 54);
+        assert_eq!(ControllerControl::South.name(), "south");
+        assert_eq!(ControllerControl::LeftStickX.name(), "left_stick_x");
+        assert_eq!(ControllerControl::Extra32.name(), "extra_32");
     }
 }

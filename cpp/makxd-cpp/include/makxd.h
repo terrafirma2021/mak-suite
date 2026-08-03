@@ -38,17 +38,16 @@
 namespace makxd {
 
     struct ControllerState {
-        uint32_t buttons;
-        uint8_t hat;
-        uint16_t lt;
-        uint16_t rt;
-        int16_t x;
-        int16_t y;
-        int16_t rx;
-        int16_t ry;
-        int16_t z;
-        int16_t rz;
+        uint32_t digitalLow{};
+        uint32_t digitalHigh{};
+        uint16_t leftTrigger{};
+        uint16_t rightTrigger{};
+        int16_t leftStickX{};
+        int16_t leftStickY{};
+        int16_t rightStickX{};
+        int16_t rightStickY{};
     };
+
 
     // Forward declaration
     class SerialPort;
@@ -63,15 +62,33 @@ namespace makxd {
         UNKNOWN = 255
     };
 
-    enum class ControllerButton : uint8_t {
-        BUTTON1 = 1, BUTTON2 = 2, BUTTON3 = 3, BUTTON4 = 4,
-        BUTTON5 = 5, BUTTON6 = 6, BUTTON7 = 7, BUTTON8 = 8,
-        BUTTON9 = 9, BUTTON10 = 10, BUTTON11 = 11, BUTTON12 = 12,
-        BUTTON13 = 13, BUTTON14 = 14, BUTTON15 = 15, BUTTON16 = 16,
-        BUTTON17 = 17, BUTTON18 = 18, BUTTON19 = 19, BUTTON20 = 20,
-        BUTTON21 = 21, BUTTON22 = 22, BUTTON23 = 23, BUTTON24 = 24,
-        BUTTON25 = 25, BUTTON26 = 26, BUTTON27 = 27, BUTTON28 = 28,
-        BUTTON29 = 29, BUTTON30 = 30, BUTTON31 = 31, BUTTON32 = 32
+    enum class ControllerControl : uint8_t {
+        SOUTH = 0, EAST, WEST, NORTH,
+        DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT,
+        LEFT_SHOULDER, RIGHT_SHOULDER,
+        LEFT_TRIGGER, RIGHT_TRIGGER,
+        LEFT_STICK_X, LEFT_STICK_Y, RIGHT_STICK_X, RIGHT_STICK_Y,
+        LEFT_STICK_BUTTON, RIGHT_STICK_BUTTON,
+        SELECT, START, MODE, GRIP_LEFT, GRIP_RIGHT,
+        EXTRA_1, EXTRA_2, EXTRA_3, EXTRA_4, EXTRA_5, EXTRA_6, EXTRA_7, EXTRA_8,
+        EXTRA_9, EXTRA_10, EXTRA_11, EXTRA_12, EXTRA_13, EXTRA_14, EXTRA_15,
+        EXTRA_16, EXTRA_17, EXTRA_18, EXTRA_19, EXTRA_20, EXTRA_21, EXTRA_22,
+        EXTRA_23, EXTRA_24, EXTRA_25, EXTRA_26, EXTRA_27, EXTRA_28, EXTRA_29,
+        EXTRA_30, EXTRA_31, EXTRA_32
+    };
+
+    enum class ControllerFamily : uint8_t {
+        NONE = 0, GENERIC_HID = 1, DS4 = 2, DUALSENSE = 3,
+        DS5 = DUALSENSE, DUALSENSE_EDGE = 4, XBOX_GIP = 5,
+        XBOX_360 = 6, X_INPUT = XBOX_360
+    };
+
+    enum class ControllerProtocol : uint8_t {
+        NONE = 0, HID = 1, GIP = 2, XINPUT = 3, X_INPUT = XINPUT
+    };
+
+    enum class ControllerMaskMode : uint8_t {
+        DISABLED = 0, COMPLETE = 1, NEGATIVE = 2, POSITIVE = 3, BOTH = 4
     };
 
     enum class ConnectionStatus {
@@ -85,7 +102,7 @@ namespace makxd {
 
     struct ConnectionConfig {
         ConnectionMethod method{ConnectionMethod::COM};
-        ApiProtocol apiProtocol{ApiProtocol::KM};
+        ApiProtocol apiProtocol{ApiProtocol::MAK_API};
         std::string aes128Key;
         std::string comPort;
         std::string udpHost;
@@ -102,13 +119,13 @@ namespace makxd {
 
         [[nodiscard]] static ConnectionConfig com(
             std::string port = {},
-            ApiProtocol protocol = ApiProtocol::KM,
+            ApiProtocol protocol = ApiProtocol::MAK_API,
             std::string aes128Key = {});
         [[nodiscard]] static ConnectionConfig udp(
             std::string host,
             uint16_t port = 8080,
             UdpWireMode mode = UdpWireMode::HOST,
-            ApiProtocol protocol = ApiProtocol::KM,
+            ApiProtocol protocol = ApiProtocol::MAK_API,
             std::string aes128Key = {},
             std::string bindAddress = {},
             std::string interfaceName = {},
@@ -119,7 +136,7 @@ namespace makxd {
             std::function<bool(std::span<const uint8_t>)> write,
             std::function<size_t(std::span<uint8_t>)> read,
             std::function<void()> close,
-            ApiProtocol protocol = ApiProtocol::KM);
+            ApiProtocol protocol = ApiProtocol::MAK_API);
     };
 
     // Simple structs
@@ -204,7 +221,7 @@ namespace makxd {
         // Constructor and destructor
         Device(bool encryptionEnabled = false,
             std::string_view encryptionKey = {},
-            ApiProtocol apiProtocol = ApiProtocol::KM);
+            ApiProtocol apiProtocol = ApiProtocol::MAK_API);
         explicit Device(ConnectionConfig connection);
         ~Device();
 
@@ -303,56 +320,19 @@ namespace makxd {
         [[nodiscard]] std::string getKeyboardKeys();
         [[nodiscard]] bool setKeyboardKeys(bool enabled);
 
-        // Controller state injection and physical-input masking.
-        [[nodiscard]] bool controllerState(const ControllerState& state);
-        [[nodiscard]] bool controllerState(
+        // Unified semantic controller API.
+        [[nodiscard]] std::optional<int32_t> controllerControl(
+            ControllerControl control);
+        [[nodiscard]] bool controllerControl(
+            ControllerControl control, int32_t value);
+        [[nodiscard]] bool controllerControl(
+            ControllerControl control, int32_t value, uint16_t dt_uframes);
+        [[nodiscard]] bool controllerMask(
+            ControllerControl control, ControllerMaskMode mode);
+        [[nodiscard]] std::optional<ControllerState> controllerState();
+        [[nodiscard]] bool setControllerState(const ControllerState& state);
+        [[nodiscard]] bool setControllerState(
             const ControllerState& state, uint16_t dt_uframes);
-        [[nodiscard]] std::optional<bool> controllerButton(
-            ControllerButton button);
-        [[nodiscard]] bool controllerButton(
-            ControllerButton button, bool pressed);
-        [[nodiscard]] bool controllerButton(
-            ControllerButton button, bool pressed, uint16_t dt_uframes);
-        [[nodiscard]] std::optional<bool> controllerHatLeft();
-        [[nodiscard]] bool controllerHatLeft(bool pressed);
-        [[nodiscard]] bool controllerHatLeft(bool pressed, uint16_t dt_uframes);
-        [[nodiscard]] std::optional<bool> controllerHatRight();
-        [[nodiscard]] bool controllerHatRight(bool pressed);
-        [[nodiscard]] bool controllerHatRight(bool pressed, uint16_t dt_uframes);
-        [[nodiscard]] std::optional<bool> controllerHatDown();
-        [[nodiscard]] bool controllerHatDown(bool pressed);
-        [[nodiscard]] bool controllerHatDown(bool pressed, uint16_t dt_uframes);
-        [[nodiscard]] std::optional<bool> controllerHatUp();
-        [[nodiscard]] bool controllerHatUp(bool pressed);
-        [[nodiscard]] bool controllerHatUp(bool pressed, uint16_t dt_uframes);
-        [[nodiscard]] bool controllerLeftTrigger(uint16_t value);
-        [[nodiscard]] bool controllerLeftTrigger(uint16_t value, uint16_t dt_uframes);
-        [[nodiscard]] bool controllerRightTrigger(uint16_t value);
-        [[nodiscard]] bool controllerRightTrigger(uint16_t value, uint16_t dt_uframes);
-        [[nodiscard]] bool controllerLeftStick(int16_t x, int16_t y);
-        [[nodiscard]] bool controllerLeftStick(
-            int16_t x, int16_t y, uint16_t dt_uframes);
-        [[nodiscard]] bool controllerRightStick(int16_t rx, int16_t ry);
-        [[nodiscard]] bool controllerRightStick(
-            int16_t rx, int16_t ry, uint16_t dt_uframes);
-        [[nodiscard]] bool controllerAux(int16_t z, int16_t rz);
-        [[nodiscard]] bool controllerAux(
-            int16_t z, int16_t rz, uint16_t dt_uframes);
-        [[nodiscard]] bool controllerButtonMask(
-            ControllerButton button, bool enabled);
-        [[nodiscard]] bool controllerHatLeftMask(bool enabled);
-        [[nodiscard]] bool controllerHatRightMask(bool enabled);
-        [[nodiscard]] bool controllerHatDownMask(bool enabled);
-        [[nodiscard]] bool controllerHatUpMask(bool enabled);
-        [[nodiscard]] bool controllerLeftTriggerMask(bool enabled);
-        [[nodiscard]] bool controllerRightTriggerMask(bool enabled);
-        [[nodiscard]] bool controllerLeftStickMask(
-            bool left, bool right, bool down, bool up);
-        [[nodiscard]] bool controllerRightStickMask(
-            bool left, bool right, bool down, bool up);
-        [[nodiscard]] bool controllerAuxMask(
-            bool z_negative, bool z_positive,
-            bool rz_negative, bool rz_positive);
 
         // Mouse locking with state caching
         [[nodiscard]] bool lockMouseX(bool lock = true);

@@ -19,7 +19,7 @@ class UdpWireMode(str, Enum):
 @dataclass(frozen=True)
 class ConnectionConfig:
     method: ConnectionMethod
-    api_protocol: ApiProtocol = ApiProtocol.KM
+    api_protocol: ApiProtocol = ApiProtocol.MAK_API
     aes128_key: Union[str, bytes, bytearray] = b""
     com_port: str = ""
     udp_host: str = ""
@@ -39,7 +39,7 @@ class ConnectionConfig:
         cls,
         port: str = "",
         *,
-        api_protocol: ApiProtocol | str = ApiProtocol.KM,
+        api_protocol: ApiProtocol | str = ApiProtocol.MAK_API,
         aes128_key: Union[str, bytes, bytearray] = b"",
     ) -> "ConnectionConfig":
         return cls(
@@ -59,7 +59,7 @@ class ConnectionConfig:
         bind_address: str = "",
         interface: str = "",
         vlan_id: int | None = None,
-        api_protocol: ApiProtocol | str = ApiProtocol.KM,
+        api_protocol: ApiProtocol | str = ApiProtocol.MAK_API,
         aes128_key: Union[str, bytes, bytearray] = b"",
     ) -> "ConnectionConfig":
         return cls(
@@ -79,7 +79,7 @@ class ConnectionConfig:
         cls,
         address: str,
         *,
-        api_protocol: ApiProtocol | str = ApiProtocol.KM,
+        api_protocol: ApiProtocol | str = ApiProtocol.MAK_API,
     ) -> "ConnectionConfig":
         return cls(
             method=ConnectionMethod.BLE,

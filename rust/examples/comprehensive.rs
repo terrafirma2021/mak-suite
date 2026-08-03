@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
         fire_and_forget: false,
         encryption_enabled: false,
         encryption_key: None,
-        api_protocol: ApiProtocol::Km,
+        api_protocol: ApiProtocol::MakApi,
     };
     println!(
         "  DeviceConfig: timeout={:?}, reconnect={}, ff={}",

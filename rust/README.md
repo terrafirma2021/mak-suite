@@ -211,6 +211,28 @@ while let Some(frame) = decoder.next() {
 Use `StreamRequest::mouse()`, `keyboard()`, `controller()`, or `all()` to
 select sources. `StreamRequest::stop()` and `status()` control the stream.
 
+## Semantic controller API
+
+Typed methods require `ApiProtocol::MakApi` and never fall back to KM. Set
+`ApiProtocol::Km` only for explicit legacy/raw ASCII calls.
+
+```rust
+use makxd::{ControllerControl, ControllerMaskMode, ControllerState};
+
+device.controller_control(ControllerControl::South, 1)?;
+device.controller_control_dt(ControllerControl::LeftStickX, -12_000, 250)?;
+device.controller_mask(ControllerControl::DpadUp, ControllerMaskMode::Complete)?;
+device.set_controller_state_dt(ControllerState {
+    digital_low: 1,
+    left_trigger: 32_768,
+    left_stick_x: -12_000,
+    ..ControllerState::default()
+}, 250)?;
+```
+
+`device.device()` returns the routed family, protocol, layout, capability
+words, generation, and exact cadence. KM is not a backend for typed methods.
+
 ## Async, batching, and extras
 
 ```rust

@@ -10,7 +10,9 @@ mod lock;
 pub use button::{Button, ButtonMask};
 pub use catch::CatchEvent;
 pub use connection::{BleConnectionIo, ConnectionConfig, UdpWireMode};
-pub use controller::{ControllerButton, ControllerState};
+pub use controller::{
+    ControllerControl, ControllerFamily, ControllerMaskMode, ControllerProtocol, ControllerState,
+};
 pub use device_info::{ConnectionState, DeviceInfo};
 pub use device_route::DeviceRoute;
 pub use keyboard::KeyboardKey;

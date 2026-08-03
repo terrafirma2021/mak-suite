@@ -26,16 +26,36 @@ namespace Mouse
         mouse5 = 5
     }
 
-    public enum ControllerButton : byte
+    public enum ControllerControl : byte
     {
-        Button1 = 1, Button2 = 2, Button3 = 3, Button4 = 4,
-        Button5 = 5, Button6 = 6, Button7 = 7, Button8 = 8,
-        Button9 = 9, Button10 = 10, Button11 = 11, Button12 = 12,
-        Button13 = 13, Button14 = 14, Button15 = 15, Button16 = 16,
-        Button17 = 17, Button18 = 18, Button19 = 19, Button20 = 20,
-        Button21 = 21, Button22 = 22, Button23 = 23, Button24 = 24,
-        Button25 = 25, Button26 = 26, Button27 = 27, Button28 = 28,
-        Button29 = 29, Button30 = 30, Button31 = 31, Button32 = 32
+        South = 0, East, West, North,
+        DpadUp, DpadDown, DpadLeft, DpadRight,
+        LeftShoulder, RightShoulder, LeftTrigger, RightTrigger,
+        LeftStickX, LeftStickY, RightStickX, RightStickY,
+        LeftStickButton, RightStickButton, Select, Start, Mode,
+        GripLeft, GripRight,
+        Extra1, Extra2, Extra3, Extra4, Extra5, Extra6, Extra7, Extra8,
+        Extra9, Extra10, Extra11, Extra12, Extra13, Extra14, Extra15,
+        Extra16, Extra17, Extra18, Extra19, Extra20, Extra21, Extra22,
+        Extra23, Extra24, Extra25, Extra26, Extra27, Extra28, Extra29,
+        Extra30, Extra31, Extra32
+    }
+
+    public enum ControllerFamily : byte
+    {
+        None = 0, GenericHid = 1, Ds4 = 2, DualSense = 3,
+        Ds5 = DualSense, DualSenseEdge = 4, XboxGip = 5,
+        Xbox360 = 6, XInput = Xbox360
+    }
+
+    public enum ControllerProtocol : byte
+    {
+        None = 0, Hid = 1, Gip = 2, XInput = 3
+    }
+
+    public enum ControllerMaskMode : byte
+    {
+        Disabled = 0, Complete = 1, Negative = 2, Positive = 3, Both = 4
     }
 
     public enum ApiProtocol : byte
@@ -77,7 +97,7 @@ namespace Mouse
         private ConnectionConfig() { }
 
         public static ConnectionConfig Com(
-            string port = "", ApiProtocol protocol = ApiProtocol.Km,
+            string port = "", ApiProtocol protocol = ApiProtocol.MakApi,
             string aes128Key = "")
             => new ConnectionConfig {
                 Method = ConnectionMethod.Com, Protocol = protocol,
@@ -87,7 +107,7 @@ namespace Mouse
         public static ConnectionConfig Udp(
             string host, int port = 8080,
             UdpWireMode mode = UdpWireMode.Host,
-            ApiProtocol protocol = ApiProtocol.Km,
+            ApiProtocol protocol = ApiProtocol.MakApi,
             string aes128Key = "", string bindAddress = "",
             int vlanId = 0)
         {
@@ -114,7 +134,7 @@ namespace Mouse
             string address, Func<string, bool> connect,
             Func<byte[], bool> write,
             Func<byte[]> read, Action close = null,
-            ApiProtocol protocol = ApiProtocol.Km)
+            ApiProtocol protocol = ApiProtocol.MakApi)
         {
             if (string.IsNullOrWhiteSpace(address))
                 throw new ArgumentException("BLE address is required", nameof(address));
@@ -272,34 +292,27 @@ namespace Mouse
 
     public readonly struct ControllerState
     {
-        public ControllerState(uint buttons, byte hat, ushort lt, ushort rt,
-            short x, short y, short rx, short ry, short z, short rz)
+        public ControllerState(
+            ulong digital, ushort leftTrigger, ushort rightTrigger,
+            short leftStickX, short leftStickY,
+            short rightStickX, short rightStickY)
         {
-            if (hat > 8)
-                throw new ArgumentOutOfRangeException(
-                    nameof(hat), "Hat must be in the range 0..8");
-            Buttons = buttons;
-            Hat = hat;
-            Lt = lt;
-            Rt = rt;
-            X = x;
-            Y = y;
-            Rx = rx;
-            Ry = ry;
-            Z = z;
-            Rz = rz;
+            Digital = digital;
+            LeftTrigger = leftTrigger;
+            RightTrigger = rightTrigger;
+            LeftStickX = leftStickX;
+            LeftStickY = leftStickY;
+            RightStickX = rightStickX;
+            RightStickY = rightStickY;
         }
 
-        public uint Buttons { get; }
-        public byte Hat { get; }
-        public ushort Lt { get; }
-        public ushort Rt { get; }
-        public short X { get; }
-        public short Y { get; }
-        public short Rx { get; }
-        public short Ry { get; }
-        public short Z { get; }
-        public short Rz { get; }
+        public ulong Digital { get; }
+        public ushort LeftTrigger { get; }
+        public ushort RightTrigger { get; }
+        public short LeftStickX { get; }
+        public short LeftStickY { get; }
+        public short RightStickX { get; }
+        public short RightStickY { get; }
     }
 
     public readonly struct DeviceRoute
@@ -309,13 +322,23 @@ namespace Mouse
             ushort mouseUframes,
             ushort keyboardUframes,
             ushort controllerUframes,
-            uint generation)
+            uint generation,
+            ControllerFamily controllerFamily,
+            ControllerProtocol controllerProtocol,
+            byte controllerLayout,
+            uint controllerSupportedLow,
+            uint controllerSupportedHigh)
         {
             RouteMask = routeMask;
             MouseUframes = mouseUframes;
             KeyboardUframes = keyboardUframes;
             ControllerUframes = controllerUframes;
             Generation = generation;
+            ControllerFamily = controllerFamily;
+            ControllerProtocol = controllerProtocol;
+            ControllerLayout = controllerLayout;
+            ControllerSupportedLow = controllerSupportedLow;
+            ControllerSupportedHigh = controllerSupportedHigh;
         }
 
         public byte RouteMask { get; }
@@ -323,18 +346,33 @@ namespace Mouse
         public ushort KeyboardUframes { get; }
         public ushort ControllerUframes { get; }
         public uint Generation { get; }
+        public ControllerFamily ControllerFamily { get; }
+        public ControllerProtocol ControllerProtocol { get; }
+        public byte ControllerLayout { get; }
+        public uint ControllerSupportedLow { get; }
+        public uint ControllerSupportedHigh { get; }
         public bool Mouse => (RouteMask & 0x01) != 0;
         public bool Keyboard => (RouteMask & 0x02) != 0;
         public bool Controller => (RouteMask & 0x04) != 0;
         public double MouseHz => MouseUframes == 0 ? 0.0 : 8000.0 / MouseUframes;
         public double KeyboardHz => KeyboardUframes == 0 ? 0.0 : 8000.0 / KeyboardUframes;
         public double ControllerHz => ControllerUframes == 0 ? 0.0 : 8000.0 / ControllerUframes;
+        public bool ControllerSupports(ControllerControl control)
+        {
+            byte id = (byte)control;
+            if (id < 32)
+                return (ControllerSupportedLow & (1u << id)) != 0;
+            return id < 55 &&
+                (ControllerSupportedHigh & (1u << (id - 32))) != 0;
+        }
     }
 
     class device
     {
         private static readonly int[] baudCandidates = { 115200, 1000000, 4000000 };
         private const byte apiControllerState = 0x40;
+        private const byte apiControllerControl = 0x41;
+        private const byte apiControllerMask = 0x51;
         private const int baudOpenSettleMs = 180;
         private const int baudCloseSettleMs = 120;
         private const int baudProbeTimeoutMs = 750;
@@ -344,7 +382,7 @@ namespace Mouse
         private static readonly object ioLock = new object();
         private static bool transportEncryptionEnabled = false;
         private static byte[] transportEncryptionKey = null;
-        private static ApiProtocol apiProtocol = ApiProtocol.Km;
+        private static ApiProtocol apiProtocol = ApiProtocol.MakApi;
         private static bool kmEchoEnabled = false;
         private static ConnectionConfig connectionConfig =
             ConnectionConfig.Com();
@@ -390,6 +428,12 @@ namespace Mouse
                 bytes[offset + 2] << 16 |
                 bytes[offset + 3] << 24);
 
+        private static short ReadInt16(byte[] bytes, int offset)
+            => unchecked((short)ReadUInt16(bytes, offset));
+
+        private static int ReadInt32(byte[] bytes, int offset)
+            => unchecked((int)ReadUInt32(bytes, offset));
+
         private static void AppendUInt16(List<byte> bytes, ushort value)
         {
             bytes.Add((byte)value);
@@ -404,46 +448,14 @@ namespace Mouse
             bytes.Add((byte)(value >> 24));
         }
 
+        private static void AppendInt32(List<byte> bytes, int value)
+            => AppendUInt32(bytes, unchecked((uint)value));
+
         private static void AppendInt16(List<byte> bytes, short value)
             => AppendUInt16(bytes, unchecked((ushort)value));
 
-        private static DeviceRoute ParseKmDeviceRoute(string response)
-        {
-            string[] parts = response.Split(';');
-            if (parts.Length != 4 ||
-                !parts[0].StartsWith("R:") ||
-                !parts[1].StartsWith("M:") ||
-                !parts[2].StartsWith("K:") ||
-                !parts[3].StartsWith("C:"))
-                throw new InvalidDataException(
-                    "km.device() response is invalid");
-            string route = parts[0].Substring(2);
-            byte mask = 0;
-            if (route.Contains("M")) mask |= 0x01;
-            if (route.Contains("K")) mask |= 0x02;
-            if (route.Contains("C")) mask |= 0x04;
-            ushort ParseUframes(string value)
-            {
-                if (!value.EndsWith("uf") ||
-                    !ushort.TryParse(
-                        value.Substring(2, value.Length - 4),
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out ushort parsed))
-                    throw new InvalidDataException(
-                        "km.device() cadence is invalid");
-                return parsed;
-            }
-            return new DeviceRoute(
-                mask,
-                ParseUframes(parts[1]),
-                ParseUframes(parts[2]),
-                ParseUframes(parts[3]),
-                0);
-        }
-
         public static void connect(string com = "", bool encryptionEnabled = false,
-            string encryptionKey = "", ApiProtocol protocol = ApiProtocol.Km)
+            string encryptionKey = "", ApiProtocol protocol = ApiProtocol.MakApi)
             => connect(ConnectionConfig.Com(
                 com, protocol, encryptionEnabled ? encryptionKey : ""));
 
@@ -488,8 +500,6 @@ namespace Mouse
                         $"[+] Device connected to {port.PortName} at {port.BaudRate} baudrate");
                     if (apiProtocol == ApiProtocol.MakApi)
                         WriteMakApiInternal(0x10, 0x01, new byte[] { 1 });
-                    else
-                        WriteCommandInternal("km.buttons(1)", kmEchoEnabled);
                     port.DiscardInBuffer();
                     start_listening();
                 }
@@ -646,8 +656,6 @@ namespace Mouse
             {
                 if (apiProtocol == ApiProtocol.MakApi)
                     WriteMakApiInternal(0x10, 0x01, new byte[] { 0 });
-                else
-                    WriteCommandInternal("km.buttons(0)", kmEchoEnabled);
                 Thread.Sleep(10);
                 port.BaseStream.Flush();
                 port.Close();
@@ -683,8 +691,7 @@ namespace Mouse
         public static void GetVersion()
         {
             version = apiProtocol == ApiProtocol.MakApi
-                ? Encoding.ASCII.GetString(
-                    WriteMakApiInternal(0x01, 0x00, Array.Empty<byte>()))
+                ? ""
                 : WriteCommandInternal("km.version()", true);
         }
 
@@ -694,22 +701,22 @@ namespace Mouse
         {
             if (!connected)
                 throw new InvalidOperationException("Device is not connected");
-            if (apiProtocol == ApiProtocol.MakApi)
-            {
-                byte[] response = WriteMakApiInternal(
-                    0x02, 0x00, Array.Empty<byte>());
-                if (response.Length != 11)
-                    throw new InvalidDataException(
-                        "MAK_API device response length is invalid");
-                return new DeviceRoute(
-                    response[0],
-                    ReadUInt16(response, 1),
-                    ReadUInt16(response, 3),
-                    ReadUInt16(response, 5),
-                    ReadUInt32(response, 7));
-            }
-            string responseText = WriteCommandInternal("km.device()", true);
-            return ParseKmDeviceRoute(responseText);
+            byte[] response = WriteMakApiInternal(
+                0x02, 0x00, Array.Empty<byte>());
+            if (response.Length != 22)
+                throw new InvalidDataException(
+                    "MAK_API device response length is invalid");
+            return new DeviceRoute(
+                response[0],
+                ReadUInt16(response, 1),
+                ReadUInt16(response, 3),
+                ReadUInt16(response, 5),
+                ReadUInt32(response, 7),
+                (ControllerFamily)response[11],
+                (ControllerProtocol)response[12],
+                response[13],
+                ReadUInt32(response, 14),
+                ReadUInt32(response, 18));
         }
 
         public static void move(int x, int y, ushort? dtUframes = null)
@@ -925,231 +932,138 @@ namespace Mouse
             }
         }
 
-        public static void controller(
-            ControllerState state, ushort? dtUframes = null)
+        private static readonly string[] controllerControlNames = {
+            "south", "east", "west", "north",
+            "dpad_up", "dpad_down", "dpad_left", "dpad_right",
+            "left_shoulder", "right_shoulder",
+            "left_trigger", "right_trigger",
+            "left_stick_x", "left_stick_y",
+            "right_stick_x", "right_stick_y",
+            "left_stick_button", "right_stick_button",
+            "select", "start", "mode", "grip_left", "grip_right"
+        };
+
+        private static string ControllerControlName(ControllerControl control)
         {
-            var payload = new List<byte>();
-            AppendUInt32(payload, state.Buttons);
-            payload.Add(state.Hat);
-            AppendUInt16(payload, state.Lt);
-            AppendUInt16(payload, state.Rt);
-            AppendInt16(payload, state.X);
-            AppendInt16(payload, state.Y);
-            AppendInt16(payload, state.Rx);
-            AppendInt16(payload, state.Ry);
-            AppendInt16(payload, state.Z);
-            AppendInt16(payload, state.Rz);
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
+            byte id = (byte)control;
+            if (id < controllerControlNames.Length)
+                return controllerControlNames[id];
+            if (id < 55)
+                return "extra_" + (id - 22).ToString(CultureInfo.InvariantCulture);
+            throw new ArgumentOutOfRangeException(nameof(control));
+        }
+
+        private static void ValidateControllerValue(
+            ControllerControl control, int value)
+        {
+            byte id = (byte)control;
+            if (id >= 12 && id <= 15)
+            {
+                if (value < short.MinValue || value > short.MaxValue)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                return;
+            }
+            if (id == 10 || id == 11)
+            {
+                if (value < 0 || value > ushort.MaxValue)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                return;
+            }
+            if (value != 0 && value != 1)
+                throw new ArgumentOutOfRangeException(nameof(value));
+        }
+
+        public static int controller_control(ControllerControl control)
+        {
+            string name = ControllerControlName(control);
+            if (!connected)
+                throw new InvalidOperationException("Device is not connected");
+            byte[] response = WriteMakApiInternal(
+                apiControllerControl, 0x00, new byte[] { (byte)control });
+            if (response.Length != 9 || response[0] != (byte)control)
+                throw new InvalidDataException(
+                    "MAK_API controller control response is invalid");
+            return ReadInt32(response, 1);
+        }
+
+        public static void controller_control(
+            ControllerControl control, int value, ushort? dtUframes = null)
+        {
+            string name = ControllerControlName(control);
+            ValidateControllerValue(control, value);
+            ushort dt = dtUframes ?? 0;
+            DtValue(dt);
+            uint generation = device_route().Generation;
+            var payload = new List<byte> { (byte)control };
+            AppendInt32(payload, value);
+            AppendUInt16(payload, dt);
+            AppendUInt32(payload, generation);
             SendApiCommand(
-                $"km.controller({state.Buttons},{state.Hat},{state.Lt},"
-                    + $"{state.Rt},{state.X},{state.Y},{state.Rx},{state.Ry},"
-                    + $"{state.Z},{state.Rz}{DtArgument(dtUframes)})",
-                apiControllerState, 0x01, payload.ToArray());
+                $"km.controller({name},{value}{DtArgument(dtUframes)})",
+                apiControllerControl, 0x01, payload.ToArray());
         }
 
-        public static bool controller_button(ControllerButton button)
+        public static void controller_mask(
+            ControllerControl control, ControllerMaskMode mode)
         {
-            byte value = (byte)button;
-            if (value < 1 || value > 32)
-                throw new ArgumentOutOfRangeException(nameof(button));
-            return ControllerQuery(
-                $"controller_button{value}", (byte)(0x5F + value));
-        }
-
-        public static void controller_button(
-            ControllerButton button, bool pressed, ushort? dtUframes = null)
-        {
-            byte value = (byte)button;
-            if (value < 1 || value > 32)
-                throw new ArgumentOutOfRangeException(nameof(button));
-            var payload = new List<byte> { (byte)(pressed ? 1 : 0) };
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
+            string name = ControllerControlName(control);
+            if ((byte)mode > 4)
+                throw new ArgumentOutOfRangeException(nameof(mode));
+            uint generation = device_route().Generation;
+            var payload = new List<byte> { (byte)control, (byte)mode };
+            AppendUInt32(payload, generation);
             SendApiCommand(
-                $"km.controller_button{value}({(pressed ? 1 : 0)}"
-                    + $"{DtArgument(dtUframes)})",
-                (byte)(0x5F + value), 0x01, payload.ToArray());
+                $"km.controller_mask({name},{(byte)mode})",
+                apiControllerMask, 0x01, payload.ToArray());
         }
 
-        public static bool controller_hat_left()
-            => ControllerQuery("controller_hat_left", 0x48);
-        public static void controller_hat_left(
-            bool pressed, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_left", 0x48, pressed, dtUframes);
-        public static bool controller_hat_right()
-            => ControllerQuery("controller_hat_right", 0x49);
-        public static void controller_hat_right(
-            bool pressed, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_right", 0x49, pressed, dtUframes);
-        public static bool controller_hat_down()
-            => ControllerQuery("controller_hat_down", 0x4A);
-        public static void controller_hat_down(
-            bool pressed, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_down", 0x4A, pressed, dtUframes);
-        public static bool controller_hat_up()
-            => ControllerQuery("controller_hat_up", 0x4B);
-        public static void controller_hat_up(
-            bool pressed, ushort? dtUframes = null)
-            => ControllerMask(
-                "controller_hat_up", 0x4B, pressed, dtUframes);
-
-        public static void controller_left_trigger(
-            ushort value, ushort? dtUframes = null)
-            => ControllerSingle("controller_lt", 0x43, value, dtUframes);
-
-        public static void controller_right_trigger(
-            ushort value, ushort? dtUframes = null)
-            => ControllerSingle("controller_rt", 0x44, value, dtUframes);
-
-        public static void controller_left_stick(
-            short x, short y, ushort? dtUframes = null)
-            => ControllerPair(
-                "controller_left_stick", 0x45, x, y, dtUframes);
-
-        public static void controller_right_stick(
-            short rx, short ry, ushort? dtUframes = null)
-            => ControllerPair(
-                "controller_right_stick", 0x46, rx, ry, dtUframes);
-
-        public static void controller_aux(
-            short z, short rz, ushort? dtUframes = null)
-            => ControllerPair("controller_aux", 0x47, z, rz, dtUframes);
-
-        public static void controller_button_mask(
-            ControllerButton button, bool enabled)
-        {
-            byte value = (byte)button;
-            if (value < 1 || value > 32)
-                throw new ArgumentOutOfRangeException(nameof(button));
-            SendApiCommand(
-                $"km.controller_button{value}_mask({(enabled ? 1 : 0)})",
-                (byte)(0x7F + value), 0x01,
-                new byte[] { (byte)(enabled ? 1 : 0) });
-        }
-
-        public static void controller_hat_left_mask(bool enabled)
-            => ControllerPolicyMask(
-                "controller_hat_left_mask", 0x58, enabled);
-        public static void controller_hat_right_mask(bool enabled)
-            => ControllerPolicyMask(
-                "controller_hat_right_mask", 0x59, enabled);
-        public static void controller_hat_down_mask(bool enabled)
-            => ControllerPolicyMask(
-                "controller_hat_down_mask", 0x5A, enabled);
-        public static void controller_hat_up_mask(bool enabled)
-            => ControllerPolicyMask(
-                "controller_hat_up_mask", 0x5B, enabled);
-
-        public static void controller_left_trigger_mask(bool enabled)
-            => ControllerPolicyMask(
-                "controller_lt_mask", 0x52, enabled);
-
-        public static void controller_right_trigger_mask(bool enabled)
-            => ControllerPolicyMask(
-                "controller_rt_mask", 0x53, enabled);
-
-        public static void controller_left_stick_mask(
-            bool left, bool right, bool down, bool up)
-            => ControllerDirectionMask(
-                "controller_left_stick_mask", 0x54,
-                left, right, down, up);
-
-        public static void controller_right_stick_mask(
-            bool left, bool right, bool down, bool up)
-            => ControllerDirectionMask(
-                "controller_right_stick_mask", 0x55,
-                left, right, down, up);
-
-        public static void controller_aux_mask(
-            bool zNegative, bool zPositive,
-            bool rzNegative, bool rzPositive)
-            => ControllerDirectionMask(
-                "controller_aux_mask", 0x56,
-                zNegative, zPositive, rzNegative, rzPositive);
-
-        private static void ControllerSingle(
-            string command, byte opcode, object value, ushort? dtUframes)
-        {
-            var payload = new List<byte>();
-            if (value is uint uintValue)
-                AppendUInt32(payload, uintValue);
-            else if (value is ushort ushortValue)
-                AppendUInt16(payload, ushortValue);
-            else if (value is byte byteValue)
-                payload.Add(byteValue);
-            else if (value is int intValue && intValue >= 0 && intValue <= 1)
-                payload.Add((byte)intValue);
-            else
-                throw new ArgumentException("Unsupported controller value");
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
-            SendApiCommand(
-                $"km.{command}({value}{DtArgument(dtUframes)})",
-                opcode, 0x01, payload.ToArray());
-        }
-
-        private static void ControllerPair(
-            string command, byte opcode,
-            short first, short second, ushort? dtUframes)
-        {
-            var payload = new List<byte>();
-            AppendInt16(payload, first);
-            AppendInt16(payload, second);
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
-            SendApiCommand(
-                $"km.{command}({first},{second}{DtArgument(dtUframes)})",
-                opcode, 0x01, payload.ToArray());
-        }
-
-        private static void ControllerMask(
-            string command, byte opcode, bool enabled, ushort? dtUframes)
-            => ControllerSingle(
-                command, opcode, enabled ? 1 : 0, dtUframes);
-
-        private static void ControllerPolicyMask(
-            string command, byte opcode, bool enabled)
-            => SendApiCommand(
-                $"km.{command}({(enabled ? 1 : 0)})",
-                opcode, 0x01, new byte[] { (byte)(enabled ? 1 : 0) });
-
-        private static bool ControllerQuery(
-            string command, byte opcode, byte[] payload = null)
+        public static ControllerState controller_state()
         {
             if (!connected)
-                return false;
-            if (apiProtocol == ApiProtocol.MakApi)
-            {
-                byte[] response = WriteMakApiInternal(
-                    opcode, 0x00, payload ?? Array.Empty<byte>());
-                return response.Length == 1 && response[0] == 1;
-            }
-            return WriteCommandInternal($"km.{command}()", true) == "1";
+                throw new InvalidOperationException("Device is not connected");
+            byte[] response = WriteMakApiInternal(
+                apiControllerState, 0x00, Array.Empty<byte>());
+            if (response.Length != 24)
+                throw new InvalidDataException(
+                    "MAK_API controller state response is invalid");
+            ulong digital = ReadUInt32(response, 0) |
+                ((ulong)ReadUInt32(response, 4) << 32);
+            return new ControllerState(
+                digital,
+                ReadUInt16(response, 8),
+                ReadUInt16(response, 10),
+                ReadInt16(response, 12),
+                ReadInt16(response, 14),
+                ReadInt16(response, 16),
+                ReadInt16(response, 18));
         }
 
-        private static void ControllerDirectionMask(
-            string command, byte opcode,
-            bool firstNegative, bool firstPositive,
-            bool secondNegative, bool secondPositive)
+        public static void controller_state(
+            ControllerState state, ushort? dtUframes = null)
         {
-            var payload = new byte[] {
-                (byte)(firstNegative ? 1 : 0),
-                (byte)(firstPositive ? 1 : 0),
-                (byte)(secondNegative ? 1 : 0),
-                (byte)(secondPositive ? 1 : 0)
-            };
+            ushort dt = dtUframes ?? 0;
+            DtValue(dt);
+            uint generation = device_route().Generation;
+            uint low = (uint)state.Digital;
+            uint high = (uint)(state.Digital >> 32);
+            var payload = new List<byte>();
+            AppendUInt32(payload, low);
+            AppendUInt32(payload, high);
+            AppendUInt16(payload, state.LeftTrigger);
+            AppendUInt16(payload, state.RightTrigger);
+            AppendInt16(payload, state.LeftStickX);
+            AppendInt16(payload, state.LeftStickY);
+            AppendInt16(payload, state.RightStickX);
+            AppendInt16(payload, state.RightStickY);
+            AppendUInt16(payload, dt);
+            AppendUInt32(payload, generation);
             SendApiCommand(
-                $"km.{command}({(firstNegative ? 1 : 0)},"
-                    + $"{(firstPositive ? 1 : 0)},"
-                    + $"{(secondNegative ? 1 : 0)},"
-                    + $"{(secondPositive ? 1 : 0)})",
-                opcode, 0x01, payload);
+                $"km.controller_state({low},{high},{state.LeftTrigger},"
+                    + $"{state.RightTrigger},{state.LeftStickX},"
+                    + $"{state.LeftStickY},{state.RightStickX},"
+                    + $"{state.RightStickY},{dt})",
+                apiControllerState, 0x01, payload.ToArray());
         }
-
         public static void keyboard_down(
             KeyboardKey key,
             ushort? dtUframes = null)
@@ -1204,7 +1118,7 @@ namespace Mouse
         {
             if (text == null || text.Length > 256 ||
                 text.Any(character => character > 0x7F) ||
-                (apiProtocol == ApiProtocol.MakApi && text.Length > 248))
+                text.Length > 248)
                 throw new ArgumentException("Keyboard string must contain at most 256 ASCII characters", nameof(text));
 
             SendApiCommand(
@@ -1224,14 +1138,9 @@ namespace Mouse
 
         public static bool keyboard_is_down(KeyboardKey key)
         {
-            if (apiProtocol == ApiProtocol.MakApi)
-            {
-                byte[] response = WriteMakApiInternal(
-                    0x25, 0x00, new byte[] { key.ToHidCode() });
-                return response.Length == 1 && response[0] != 0;
-            }
-            return send_keyboard_query(
-                $"km.isdown({key.ToCommandArgument()})") == "1";
+            byte[] response = WriteMakApiInternal(
+                0x25, 0x00, new byte[] { key.ToHidCode() });
+            return response.Length == 1 && response[0] != 0;
         }
 
         public static void keyboard_mask(KeyboardKey key, bool enable)
@@ -1267,13 +1176,9 @@ namespace Mouse
 
         public static string keyboard_keys()
         {
-            if (apiProtocol == ApiProtocol.MakApi)
-            {
-                byte[] response = WriteMakApiInternal(
-                    0x2B, 0x00, Array.Empty<byte>());
-                return response.Length == 1 ? response[0].ToString() : "";
-            }
-            return send_keyboard_query("km.keys()");
+            byte[] response = WriteMakApiInternal(
+                0x2B, 0x00, Array.Empty<byte>());
+            return response.Length == 1 ? response[0].ToString() : "";
         }
 
         public static void keyboard_keys(bool enabled)
@@ -1556,16 +1461,16 @@ namespace Mouse
         {
             if (!connected)
                 return Array.Empty<byte>();
-            if (apiProtocol == ApiProtocol.MakApi)
-                return WriteMakApiInternal(
-                    opcode, verb, payload ?? Array.Empty<byte>());
-            WriteCommandInternal(kmCommand, kmEchoEnabled);
-            return Array.Empty<byte>();
+            return WriteMakApiInternal(
+                opcode, verb, payload ?? Array.Empty<byte>());
         }
 
         private static byte[] WriteMakApiInternal(
             byte opcode, byte verb, byte[] payload)
         {
+            if (apiProtocol != ApiProtocol.MakApi)
+                throw new InvalidOperationException(
+                    "Typed SDK commands require MAK_API mode");
             if (payload == null)
                 payload = Array.Empty<byte>();
             if (payload.Length > 248)

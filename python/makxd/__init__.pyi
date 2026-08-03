@@ -1,7 +1,10 @@
 from typing import List, Optional, Sequence, Union
 from .controller import MakxdController
 from .keyboard import Keyboard, KeyboardKey
-from .gamepad import ControllerButton, ControllerState, Gamepad
+from .gamepad import (
+    ControllerControl, ControllerFamily, ControllerMaskMode,
+    ControllerProtocol, ControllerState, Gamepad,
+)
 from .protocol import ApiOpcode, ApiProtocol, ApiVerb, DeviceRoute
 from .connection_config import ConnectionConfig, ConnectionMethod, UdpWireMode
 from .stream import (

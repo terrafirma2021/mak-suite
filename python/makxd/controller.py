@@ -16,7 +16,6 @@ from .protocol import (
     ApiVerb,
     DeviceRoute,
     parse_device_route_mak_api,
-    parse_device_route_km,
 )
 from functools import wraps
 
@@ -50,7 +49,7 @@ class MakxdController:
                  override_port: bool = False,
                  encryption_enabled: bool = False,
                  encryption_key: str = "",
-                 api_protocol: ApiProtocol | str = ApiProtocol.KM,
+                 api_protocol: ApiProtocol | str = ApiProtocol.MAK_API,
                  connection: ConnectionConfig | None = None) -> None:
         self.transport = SerialTransport(
             fallback_com_port, 
@@ -432,9 +431,9 @@ class MakxdController:
             expect_response=True,
             timeout=0.1,
         )
-        if isinstance(response, bytes):
-            return parse_device_route_mak_api(response)
-        return parse_device_route_km(response or "")
+        if not isinstance(response, bytes):
+            raise MakxdResponseError("MAK_API device response is invalid")
+        return parse_device_route_mak_api(response)
 
     @maybe_async
     def get_button_mask(self) -> int:
@@ -578,7 +577,7 @@ def create_controller(fallback_com_port: str = "", debug: bool = False,
                      override_port: bool = False,
                      encryption_enabled: bool = False,
                      encryption_key: str = "",
-                     api_protocol: ApiProtocol | str = ApiProtocol.KM,
+                     api_protocol: ApiProtocol | str = ApiProtocol.MAK_API,
                      connection: ConnectionConfig | None = None,
                      ) -> MakxdController:
     """Create and connect a controller synchronously"""
@@ -602,7 +601,7 @@ async def create_async_controller(fallback_com_port: str = "", debug: bool = Fal
                                  override_port: bool = False,
                                  encryption_enabled: bool = False,
                                  encryption_key: str = "",
-                                 api_protocol: ApiProtocol | str = ApiProtocol.KM,
+                                 api_protocol: ApiProtocol | str = ApiProtocol.MAK_API,
                                  connection: ConnectionConfig | None = None,
                                  ) -> MakxdController:
     """Create and connect a controller asynchronously"""

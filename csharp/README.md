@@ -90,6 +90,28 @@ DeviceRoute route = device.device_route();
 device.move(100, 100, 250);
 ```
 
+Typed methods require `MakApi` and never fall back to KM. Select
+`ApiProtocol.Km` only for explicit legacy/raw ASCII calls.
+
+## Semantic controller API
+
+```csharp
+DeviceRoute route = device.device_route();
+if (route.Controller)
+{
+    device.controller_control(ControllerControl.South, 1);
+    device.controller_control(ControllerControl.LeftStickX, -12000, 250);
+    device.controller_mask(
+        ControllerControl.DpadUp,
+        ControllerMaskMode.Complete);
+    device.controller_state(new ControllerState(
+        1, 32768, 0, -12000, 0, 0, 0), 250);
+}
+```
+
+`DeviceRoute` reports the controller family, protocol, layout, capability
+words, generation, and cadence. KM is not a backend for typed methods.
+
 Baud discovery still uses `km.version()`. If encryption is enabled the probe
 uses AES-CCM and accepts only the matching authenticated `km.MAKXD` response;
 there is no plaintext fallback.

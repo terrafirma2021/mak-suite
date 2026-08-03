@@ -25,7 +25,7 @@ struct makxd_device {
 
     makxd_device(bool encryption_enabled = false,
                  const char* encryption_key_hex = nullptr,
-                 makxd::ApiProtocol api_protocol = makxd::ApiProtocol::KM) :
+                 makxd::ApiProtocol api_protocol = makxd::ApiProtocol::MAK_API) :
         cpp_device(std::make_unique<makxd::Device>(
             encryption_enabled,
             encryption_key_hex ? encryption_key_hex : "",
@@ -400,6 +400,13 @@ makxd_error_t makxd_get_output_device(
         route->keyboard_uframes = result->keyboardUframes;
         route->controller_uframes = result->controllerUframes;
         route->generation = result->generation;
+        route->controller_family = static_cast<makxd_controller_family_t>(
+            result->controllerFamily);
+        route->controller_protocol = static_cast<makxd_controller_protocol_t>(
+            result->controllerProtocol);
+        route->controller_layout = result->controllerLayout;
+        route->controller_supported_low = result->controllerSupportedLow;
+        route->controller_supported_high = result->controllerSupportedHigh;
         route->mouse_hz = result->mouseHz();
         route->keyboard_hz = result->keyboardHz();
         route->controller_hz = result->controllerHz();
@@ -959,215 +966,110 @@ makxd_device_t* makxd_device_create_with_protocol(
     }
 }
 
-makxd_error_t makxd_controller_state(
-    makxd_device_t* device, const makxd_controller_state_t* state) {
-    if (!device || !state) return MAKXD_ERROR_INVALID_PARAMETER;
-    try {
-        const makxd::ControllerState value{
-            state->buttons, state->hat, state->lt, state->rt, state->x,
-            state->y, state->rx, state->ry, state->z, state->rz};
-        return device->cpp_device->controllerState(value)
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
-    } catch (...) { return handle_exception(); }
-}
-
-makxd_error_t makxd_controller_state_dt(
-    makxd_device_t* device, const makxd_controller_state_t* state,
-    uint16_t dt_uframes) {
-    if (!device || !state) return MAKXD_ERROR_INVALID_PARAMETER;
-    try {
-        const makxd::ControllerState value{
-            state->buttons, state->hat, state->lt, state->rt, state->x,
-            state->y, state->rx, state->ry, state->z, state->rz};
-        return device->cpp_device->controllerState(value, dt_uframes)
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
-    } catch (...) { return handle_exception(); }
-}
-
-#define MAKXD_C_CONTROLLER_VALUE(name, cpp_name, type) \
-    makxd_error_t name(makxd_device_t* device, type value) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(value) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    } \
-    makxd_error_t name##_dt( \
-        makxd_device_t* device, type value, uint16_t dt_uframes) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(value, dt_uframes) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    }
-
-MAKXD_C_CONTROLLER_VALUE(
-    makxd_controller_left_trigger, controllerLeftTrigger, uint16_t)
-MAKXD_C_CONTROLLER_VALUE(
-    makxd_controller_right_trigger, controllerRightTrigger, uint16_t)
-
-#undef MAKXD_C_CONTROLLER_VALUE
-
-static bool makxd_controller_button_read(
-    makxd_controller_button_t button, makxd::ControllerButton* value) {
-    const auto number = static_cast<uint8_t>(button);
-    if (number < 1u || number > 32u || !value) return false;
-    *value = static_cast<makxd::ControllerButton>(number);
-    return true;
-}
-
-makxd_error_t makxd_controller_button_state(
-    makxd_device_t* device, makxd_controller_button_t button, bool* pressed) {
-    makxd::ControllerButton value;
-    if (!device || !pressed || !makxd_controller_button_read(button, &value)) {
+makxd_error_t makxd_controller_control_get(
+    makxd_device_t* device, makxd_controller_control_t control, int32_t* value) {
+    const auto id = static_cast<int>(control);
+    if (!device || !value || id < 0 || id > 54) {
         return MAKXD_ERROR_INVALID_PARAMETER;
     }
     try {
-        const auto result = device->cpp_device->controllerButton(value);
+        const auto result = device->cpp_device->controllerControl(
+            static_cast<makxd::ControllerControl>(static_cast<uint8_t>(id)));
         if (!result) return MAKXD_ERROR_COMMAND_FAILED;
-        *pressed = *result;
+        *value = *result;
         return MAKXD_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
 
-makxd_error_t makxd_controller_button(
-    makxd_device_t* device, makxd_controller_button_t button, bool pressed) {
-    makxd::ControllerButton value;
-    if (!device || !makxd_controller_button_read(button, &value)) {
-        return MAKXD_ERROR_INVALID_PARAMETER;
-    }
-    try {
-        return device->cpp_device->controllerButton(value, pressed)
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
-    } catch (...) { return handle_exception(); }
+makxd_error_t makxd_controller_control(
+    makxd_device_t* device, makxd_controller_control_t control, int32_t value) {
+    return makxd_controller_control_dt(device, control, value, 0u);
 }
 
-makxd_error_t makxd_controller_button_dt(
-    makxd_device_t* device, makxd_controller_button_t button,
-    bool pressed, uint16_t dt_uframes) {
-    makxd::ControllerButton value;
-    if (!device || !makxd_controller_button_read(button, &value)) {
+makxd_error_t makxd_controller_control_dt(
+    makxd_device_t* device, makxd_controller_control_t control,
+    int32_t value, uint16_t dt_uframes) {
+    const auto id = static_cast<int>(control);
+    if (!device || id < 0 || id > 54 || dt_uframes > 0x3FFFu) {
         return MAKXD_ERROR_INVALID_PARAMETER;
     }
     try {
-        return device->cpp_device->controllerButton(
-            value, pressed, dt_uframes)
+        return device->cpp_device->controllerControl(
+            static_cast<makxd::ControllerControl>(static_cast<uint8_t>(id)),
+            value, dt_uframes)
                 ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
     } catch (...) { return handle_exception(); }
 }
 
-makxd_error_t makxd_controller_button_mask(
-    makxd_device_t* device, makxd_controller_button_t button, bool enabled) {
-    makxd::ControllerButton value;
-    if (!device || !makxd_controller_button_read(button, &value)) {
+makxd_error_t makxd_controller_mask(
+    makxd_device_t* device, makxd_controller_control_t control,
+    makxd_controller_mask_mode_t mode) {
+    const auto id = static_cast<int>(control);
+    const auto mask = static_cast<int>(mode);
+    if (!device || id < 0 || id > 54 || mask < 0 || mask > 4) {
         return MAKXD_ERROR_INVALID_PARAMETER;
     }
     try {
-        return device->cpp_device->controllerButtonMask(value, enabled)
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+        return device->cpp_device->controllerMask(
+            static_cast<makxd::ControllerControl>(static_cast<uint8_t>(id)),
+            static_cast<makxd::ControllerMaskMode>(static_cast<uint8_t>(mask)))
+                ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
     } catch (...) { return handle_exception(); }
 }
 
-#define MAKXD_C_CONTROLLER_HAT(name, cpp_name) \
-    makxd_error_t name##_state(makxd_device_t* device, bool* pressed) { \
-        if (!device || !pressed) return MAKXD_ERROR_INVALID_PARAMETER; \
-        try { \
-            const auto result = device->cpp_device->cpp_name(); \
-            if (!result) return MAKXD_ERROR_COMMAND_FAILED; \
-            *pressed = *result; \
-            return MAKXD_SUCCESS; \
-        } catch (...) { return handle_exception(); } \
-    } \
-    makxd_error_t name(makxd_device_t* device, bool pressed) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(pressed) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    } \
-    makxd_error_t name##_dt( \
-        makxd_device_t* device, bool pressed, uint16_t dt_uframes) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(pressed, dt_uframes) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
+makxd_error_t makxd_controller_state_get(
+    makxd_device_t* device, makxd_controller_state_t* state) {
+    if (!device || !state) return MAKXD_ERROR_INVALID_PARAMETER;
+    try {
+        const auto result = device->cpp_device->controllerState();
+        if (!result) return MAKXD_ERROR_COMMAND_FAILED;
+        state->digital =
+            static_cast<uint64_t>(result->digitalLow) |
+            (static_cast<uint64_t>(result->digitalHigh) << 32u);
+        state->left_trigger = result->leftTrigger;
+        state->right_trigger = result->rightTrigger;
+        state->left_stick_x = result->leftStickX;
+        state->left_stick_y = result->leftStickY;
+        state->right_stick_x = result->rightStickX;
+        state->right_stick_y = result->rightStickY;
+        return MAKXD_SUCCESS;
+    } catch (...) { return handle_exception(); }
+}
+
+static makxd::ControllerState makxd_controller_state_read(
+    const makxd_controller_state_t& state) {
+    return {
+        static_cast<uint32_t>(state.digital),
+        static_cast<uint32_t>(state.digital >> 32u),
+        state.left_trigger,
+        state.right_trigger,
+        state.left_stick_x,
+        state.left_stick_y,
+        state.right_stick_x,
+        state.right_stick_y};
+}
+
+makxd_error_t makxd_controller_state_set(
+    makxd_device_t* device, const makxd_controller_state_t* state) {
+    return makxd_controller_state_set_dt(device, state, 0u);
+}
+
+makxd_error_t makxd_controller_state_set_dt(
+    makxd_device_t* device, const makxd_controller_state_t* state,
+    uint16_t dt_uframes) {
+    if (!device || !state || dt_uframes > 0x3FFFu) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
     }
-
-MAKXD_C_CONTROLLER_HAT(makxd_controller_hat_left, controllerHatLeft)
-MAKXD_C_CONTROLLER_HAT(makxd_controller_hat_right, controllerHatRight)
-MAKXD_C_CONTROLLER_HAT(makxd_controller_hat_down, controllerHatDown)
-MAKXD_C_CONTROLLER_HAT(makxd_controller_hat_up, controllerHatUp)
-
-#undef MAKXD_C_CONTROLLER_HAT
-
-#define MAKXD_C_CONTROLLER_MASK(name, cpp_name) \
-    makxd_error_t name(makxd_device_t* device, bool enabled) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(enabled) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    }
-
-MAKXD_C_CONTROLLER_MASK(
-    makxd_controller_left_trigger_mask, controllerLeftTriggerMask)
-MAKXD_C_CONTROLLER_MASK(
-    makxd_controller_right_trigger_mask, controllerRightTriggerMask)
-MAKXD_C_CONTROLLER_MASK(
-    makxd_controller_hat_left_mask, controllerHatLeftMask)
-MAKXD_C_CONTROLLER_MASK(
-    makxd_controller_hat_right_mask, controllerHatRightMask)
-MAKXD_C_CONTROLLER_MASK(
-    makxd_controller_hat_down_mask, controllerHatDownMask)
-MAKXD_C_CONTROLLER_MASK(
-    makxd_controller_hat_up_mask, controllerHatUpMask)
-
-#undef MAKXD_C_CONTROLLER_MASK
-
-#define MAKXD_C_CONTROLLER_PAIR(name, cpp_name, type) \
-    makxd_error_t name(makxd_device_t* device, type first, type second) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(first, second) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    } \
-    makxd_error_t name##_dt( \
-        makxd_device_t* device, type first, type second, \
-        uint16_t dt_uframes) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name(first, second, dt_uframes) \
-            ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    }
-
-MAKXD_C_CONTROLLER_PAIR(
-    makxd_controller_left_stick, controllerLeftStick, int16_t)
-MAKXD_C_CONTROLLER_PAIR(
-    makxd_controller_right_stick, controllerRightStick, int16_t)
-MAKXD_C_CONTROLLER_PAIR(makxd_controller_aux, controllerAux, int16_t)
-
-#undef MAKXD_C_CONTROLLER_PAIR
-
-#define MAKXD_C_CONTROLLER_DIRECTION_MASK(name, cpp_name) \
-    makxd_error_t name( \
-        makxd_device_t* device, bool first_negative, bool first_positive, \
-        bool second_negative, bool second_positive) { \
-        if (!device) return MAKXD_ERROR_INVALID_DEVICE; \
-        try { return device->cpp_device->cpp_name( \
-            first_negative, first_positive, \
-            second_negative, second_positive) \
-                ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; \
-        } catch (...) { return handle_exception(); } \
-    }
-
-MAKXD_C_CONTROLLER_DIRECTION_MASK(
-    makxd_controller_left_stick_mask, controllerLeftStickMask)
-MAKXD_C_CONTROLLER_DIRECTION_MASK(
-    makxd_controller_right_stick_mask, controllerRightStickMask)
-MAKXD_C_CONTROLLER_DIRECTION_MASK(
-    makxd_controller_aux_mask, controllerAuxMask)
-
-#undef MAKXD_C_CONTROLLER_DIRECTION_MASK
+    try {
+        return device->cpp_device->setControllerState(
+            makxd_controller_state_read(*state), dt_uframes)
+                ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
+    } catch (...) { return handle_exception(); }
+}
 
 bool makxd_controller_stream_decode(
     const uint8_t* values, size_t values_size,
-    makxd_controller_state_t* state) {
+    makxd_controller_stream_state_t* state) {
     if (!values || !state || values_size != 21u) {
         return false;
     }
@@ -1190,7 +1092,6 @@ bool makxd_controller_stream_decode(
     state->rz = static_cast<int16_t>(u16(19u));
     return state->hat <= 8u;
 }
-
 // Mouse locking functions
 makxd_error_t makxd_lock_mouse_x(makxd_device_t* device, bool lock) {
     if (!device) return MAKXD_ERROR_INVALID_DEVICE;

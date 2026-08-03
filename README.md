@@ -11,8 +11,9 @@ language-specific implementations in `cpp/`, `rust/`, `python/`, and
 `net/cpp/`. It requires `kmNetMakxdBridge.exe` and exposes only the Bridge
 functions documented there.
 
-All four APIs select exactly one COM, UDP, or BLE connection owner and either
-KM or `MAK_API` command encoding. COM and UDP support optional AES-128-CCM.
+All four APIs select exactly one COM, UDP, or BLE connection owner. Every
+typed SDK method uses `MAK_API` with no KM fallback. KM remains available only
+through the explicit legacy/raw surface. COM and UDP support optional AES-128-CCM.
 BLE carries plain application records as-is and rejects a MAKXD AES transport
 key. See the
 [public protocol contract](protocol/MAKXD_PROTOCOL.md#connection).

@@ -2,7 +2,7 @@ from typing import Sequence, Union
 
 from .connection import SerialTransport
 from .errors import MakxdCommandError
-from .protocol import ApiOpcode, ApiProtocol, ApiVerb
+from .protocol import ApiOpcode, ApiVerb
 
 
 KeyboardKey = Union[int, str]
@@ -210,7 +210,7 @@ class Keyboard:
         if not text.isascii():
             raise MakxdCommandError("Keyboard string must contain ASCII bytes")
         encoded = text.encode("ascii")
-        if self.transport.api_protocol is ApiProtocol.MAK_API and len(encoded) > 248:
+        if len(encoded) > 248:
             raise MakxdCommandError(
                 "MAK_API keyboard string cannot exceed 248 bytes"
             )

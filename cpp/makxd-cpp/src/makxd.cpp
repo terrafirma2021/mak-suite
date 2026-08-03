@@ -309,53 +309,6 @@ namespace makxd {
                     static_cast<uint8_t>(value[offset + 3u])) << 24u));
         }
 
-        std::optional<DeviceRoute> parseKmDeviceRoute(std::string_view value) {
-            if (!value.starts_with("R:")) {
-                return std::nullopt;
-            }
-            const auto mouse = value.find(";M:");
-            const auto keyboard = value.find("uf;K:");
-            const auto controller = value.find("uf;C:");
-            if (mouse == std::string_view::npos ||
-                keyboard == std::string_view::npos ||
-                controller == std::string_view::npos ||
-                !value.ends_with("uf")) {
-                return std::nullopt;
-            }
-            DeviceRoute route{};
-            const auto routeText = value.substr(2u, mouse - 2u);
-            route.routeMask =
-                (routeText.find('M') != std::string_view::npos ? 0x01u : 0u) |
-                (routeText.find('K') != std::string_view::npos ? 0x02u : 0u) |
-                (routeText.find('C') != std::string_view::npos ? 0x04u : 0u);
-            const auto parseU16 = [](std::string_view text)
-                -> std::optional<uint16_t> {
-                uint32_t parsed = 0u;
-                const auto [end, error] = std::from_chars(
-                    text.data(), text.data() + text.size(), parsed);
-                if (error != std::errc{} ||
-                    end != text.data() + text.size() ||
-                    parsed > 0xFFFFu) {
-                    return std::nullopt;
-                }
-                return static_cast<uint16_t>(parsed);
-            };
-            const auto mouseValue = parseU16(value.substr(
-                mouse + 3u, keyboard - (mouse + 3u)));
-            const auto keyboardValue = parseU16(value.substr(
-                keyboard + 5u, controller - (keyboard + 5u)));
-            const auto controllerValue = parseU16(value.substr(
-                controller + 5u,
-                value.size() - 2u - (controller + 5u)));
-            if (!mouseValue || !keyboardValue || !controllerValue) {
-                return std::nullopt;
-            }
-            route.mouseUframes = *mouseValue;
-            route.keyboardUframes = *keyboardValue;
-            route.controllerUframes = *controllerValue;
-            return route;
-        }
-
         std::string keyboardKeyListCommand(
             std::string_view commandName,
             const std::vector<KeyboardKey>& keys)
@@ -627,24 +580,14 @@ namespace makxd {
             }
 
             try {
-                if (apiProtocol == ApiProtocol::MAK_API) {
-                    constexpr std::array<uint8_t, 1> enabled{1u};
-                    return serialPort->sendMakApi(
-                        ApiOpcode::BUTTONS,
-                        ApiVerb::SET,
-                        enabled);
+                if (apiProtocol != ApiProtocol::MAK_API) {
+                    return true;
                 }
-                kmEchoEnabled.store(
-                    serialPort->sendTrackedCommand(
-                        "km.echo()", true,
-                        std::chrono::milliseconds(100)).get() == "1",
-                    std::memory_order_release);
-                if (kmEchoEnabled.load(std::memory_order_acquire)) {
-                    return serialPort->sendTrackedCommand(
-                        "km.buttons(1)", true,
-                        std::chrono::milliseconds(100)).get() == "km.buttons(1)";
-                }
-                return serialPort->sendCommand("km.buttons(1)");
+                constexpr std::array<uint8_t, 1> enabled{1u};
+                return serialPort->sendMakApi(
+                    ApiOpcode::BUTTONS,
+                    ApiVerb::SET,
+                    enabled);
             }
             catch (...) {
                 return false;
@@ -796,8 +739,9 @@ namespace makxd {
             if (!connected.load(std::memory_order_acquire)) {
                 return false;
             }
-            if (apiProtocol == ApiProtocol::KM) {
-                return executeCommand(command);
+            if (apiProtocol != ApiProtocol::MAK_API) {
+                setLastError("Typed SDK commands require MAK_API mode");
+                return false;
             }
             try {
                 if (verb == ApiVerb::SET) {
@@ -820,12 +764,11 @@ namespace makxd {
             if (!connected.load(std::memory_order_acquire)) {
                 return std::nullopt;
             }
+            if (apiProtocol != ApiProtocol::MAK_API) {
+                setLastError("Typed SDK commands require MAK_API mode");
+                return std::nullopt;
+            }
             try {
-                if (apiProtocol == ApiProtocol::KM) {
-                    return serialPort->sendTrackedCommand(
-                        command, true,
-                        std::chrono::milliseconds(100)).get();
-                }
                 return serialPort->sendTrackedMakApi(
                     opcode, ApiVerb::GET, payload,
                     std::chrono::milliseconds(100)).get();
@@ -1345,6 +1288,10 @@ namespace makxd {
             return "";
         }
 
+        if (m_impl->apiProtocol == ApiProtocol::MAK_API) {
+            return "";
+        }
+
         // Retry with escalating timeouts to tolerate temporary serial instability.
         constexpr std::array<std::chrono::milliseconds, 3> timeouts = {
             std::chrono::milliseconds(75),
@@ -1356,15 +1303,8 @@ namespace makxd {
             std::this_thread::sleep_for(std::chrono::milliseconds(attempt == 0 ? 10 : 20));
 
             try {
-                std::string version =
-                    m_impl->apiProtocol == ApiProtocol::MAK_API
-                    ? m_impl->serialPort->sendTrackedMakApi(
-                        ApiOpcode::VERSION,
-                        ApiVerb::GET,
-                        {},
-                        timeouts[attempt]).get()
-                    : m_impl->serialPort->sendTrackedCommand(
-                        "km.version()", true, timeouts[attempt]).get();
+                std::string version = m_impl->serialPort->sendTrackedCommand(
+                    "km.version()", true, timeouts[attempt]).get();
                 if (!version.empty()) {
                     return version;
                 }
@@ -1407,13 +1347,7 @@ namespace makxd {
         if (!response) {
             return std::unexpected(getStatus());
         }
-        if (m_impl->apiProtocol == ApiProtocol::KM) {
-            const auto route = parseKmDeviceRoute(*response);
-            return route
-                ? std::expected<DeviceRoute, ConnectionStatus>(*route)
-                : std::unexpected(getStatus());
-        }
-        if (response->size() != 11u) {
+        if (response->size() != 22u) {
             return std::unexpected(getStatus());
         }
         DeviceRoute route{};
@@ -1422,6 +1356,11 @@ namespace makxd {
         route.keyboardUframes = readU16(*response, 3u);
         route.controllerUframes = readU16(*response, 5u);
         route.generation = readU32(*response, 7u);
+        route.controllerFamily = static_cast<uint8_t>((*response)[11]);
+        route.controllerProtocol = static_cast<uint8_t>((*response)[12]);
+        route.controllerLayout = static_cast<uint8_t>((*response)[13]);
+        route.controllerSupportedLow = readU32(*response, 14u);
+        route.controllerSupportedHigh = readU32(*response, 18u);
         return route;
     }
 
@@ -1975,8 +1914,7 @@ namespace makxd {
             !std::ranges::all_of(text, [](unsigned char byte) {
                 return byte < 0x80u;
             }) ||
-            (m_impl->apiProtocol == ApiProtocol::MAK_API &&
-                text.size() > 248u)) {
+            text.size() > 248u) {
             return false;
         }
 
@@ -2032,12 +1970,8 @@ namespace makxd {
             if (!response) {
                 return false;
             }
-            if (m_impl->apiProtocol == ApiProtocol::MAK_API) {
-                return response->size() == 1u &&
-                    static_cast<uint8_t>((*response)[0]) != 0u;
-            }
-            const auto parsed = parseUint8Decimal(*response);
-            return parsed.has_value() && parsed.value() != 0u;
+            return response->size() == 1u &&
+                static_cast<uint8_t>((*response)[0]) != 0u;
         }
         catch (...) {
             return false;
@@ -2128,279 +2062,160 @@ namespace makxd {
             command, ApiOpcode::KEY_MULTI_PRESS, ApiVerb::EXEC, payload);
     }
 
-    bool Device::controllerState(const ControllerState& state) {
-        if (state.hat > 8u) {
-            return false;
+    namespace {
+        constexpr std::array<std::string_view, 55> controllerControlNames{
+            "south", "east", "west", "north", "dpad_up", "dpad_down",
+            "dpad_left", "dpad_right", "left_shoulder", "right_shoulder",
+            "left_trigger", "right_trigger", "left_stick_x", "left_stick_y",
+            "right_stick_x", "right_stick_y", "left_stick_button",
+            "right_stick_button", "select", "start", "mode", "grip_left",
+            "grip_right", "extra_1", "extra_2", "extra_3", "extra_4",
+            "extra_5", "extra_6", "extra_7", "extra_8", "extra_9",
+            "extra_10", "extra_11", "extra_12", "extra_13", "extra_14",
+            "extra_15", "extra_16", "extra_17", "extra_18", "extra_19",
+            "extra_20", "extra_21", "extra_22", "extra_23", "extra_24",
+            "extra_25", "extra_26", "extra_27", "extra_28", "extra_29",
+            "extra_30", "extra_31", "extra_32"};
+
+        bool controllerValueValid(ControllerControl control, int32_t value) {
+            const auto id = std::to_underlying(control);
+            if (id >= 55u) return false;
+            if (control == ControllerControl::LEFT_TRIGGER ||
+                control == ControllerControl::RIGHT_TRIGGER) {
+                return value >= 0 && value <= 65535;
+            }
+            if (id >= std::to_underlying(ControllerControl::LEFT_STICK_X) &&
+                id <= std::to_underlying(ControllerControl::RIGHT_STICK_Y)) {
+                return value >= -32768 && value <= 32767;
+            }
+            return value == 0 || value == 1;
         }
-        const auto command = controllerCommandBuild("controller", {
-            state.buttons, state.hat, state.lt, state.rt, state.x, state.y,
-            state.rx, state.ry, state.z, state.rz});
-        std::vector<uint8_t> payload;
-        payload.reserve(21u);
-        appendU32(payload, state.buttons);
-        payload.push_back(state.hat);
-        appendU16(payload, state.lt);
-        appendU16(payload, state.rt);
-        appendI16(payload, state.x);
-        appendI16(payload, state.y);
-        appendI16(payload, state.rx);
-        appendI16(payload, state.ry);
-        appendI16(payload, state.z);
-        appendI16(payload, state.rz);
-        return !command.empty() && m_impl->executeApiCommand(
-            command, ApiOpcode::CONTROLLER_STATE, ApiVerb::SET, payload);
-    }
 
-    bool Device::controllerState(
-        const ControllerState& state, uint16_t dt_uframes) {
-        if (state.hat > 8u) {
-            return false;
+        std::string controllerName(ControllerControl control) {
+            const auto id = std::to_underlying(control);
+            return id < controllerControlNames.size()
+                ? std::string(controllerControlNames[id]) : std::string{};
         }
-        const auto command = controllerCommandBuild("controller", {
-            state.buttons, state.hat, state.lt, state.rt, state.x, state.y,
-            state.rx, state.ry, state.z, state.rz}, dt_uframes);
-        std::vector<uint8_t> payload;
-        payload.reserve(23u);
-        appendU32(payload, state.buttons);
-        payload.push_back(state.hat);
-        appendU16(payload, state.lt);
-        appendU16(payload, state.rt);
-        appendI16(payload, state.x);
-        appendI16(payload, state.y);
-        appendI16(payload, state.rx);
-        appendI16(payload, state.ry);
-        appendI16(payload, state.z);
-        appendI16(payload, state.rz);
-        appendU16(payload, dt_uframes);
-        return !command.empty() && m_impl->executeApiCommand(
-            command, ApiOpcode::CONTROLLER_STATE, ApiVerb::SET, payload);
     }
 
-#define MAKXD_CONTROLLER_VALUE_METHODS( \
-    method, command_name, opcode_name, type, append_value) \
-    bool Device::method(type value) { \
-        const auto command = controllerCommandBuild(command_name, {value}); \
-        std::vector<uint8_t> payload; \
-        append_value(payload, value); \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    } \
-    bool Device::method(type value, uint16_t dt_uframes) { \
-        const auto command = controllerCommandBuild( \
-            command_name, {value}, dt_uframes); \
-        std::vector<uint8_t> payload; \
-        append_value(payload, value); \
-        appendU16(payload, dt_uframes); \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    }
-
-    MAKXD_CONTROLLER_VALUE_METHODS(
-        controllerLeftTrigger, "controller_lt", CONTROLLER_LT,
-        uint16_t, appendU16)
-    MAKXD_CONTROLLER_VALUE_METHODS(
-        controllerRightTrigger, "controller_rt", CONTROLLER_RT,
-        uint16_t, appendU16)
-#undef MAKXD_CONTROLLER_VALUE_METHODS
-
-    std::optional<bool> Device::controllerButton(ControllerButton button) {
-        const auto value = static_cast<uint8_t>(button);
-        if (value < 1u || value > 32u) return std::nullopt;
+    std::optional<int32_t> Device::controllerControl(ControllerControl control) {
+        const auto name = controllerName(control);
+        if (name.empty()) return std::nullopt;
+        const std::array<uint8_t, 1> payload{std::to_underlying(control)};
         const auto response = m_impl->executeApiQuery(
-            "km.controller_button" + std::to_string(value) + "()",
-            static_cast<ApiOpcode>(0x5Fu + value));
+            "km.controller(" + name + ")",
+            ApiOpcode::CONTROLLER_CONTROL, payload);
         if (!response) return std::nullopt;
-        if (m_impl->apiProtocol == ApiProtocol::MAK_API) {
-            return response->size() == 1u &&
-                static_cast<uint8_t>((*response)[0]) == 1u;
+        if (response->size() != 9u ||
+            static_cast<uint8_t>((*response)[0]) != std::to_underlying(control)) {
+            return std::nullopt;
         }
-        return *response == "1";
+        return static_cast<int32_t>(readU32(*response, 1u));
     }
 
-    bool Device::controllerButton(
-        ControllerButton button, bool pressed) {
-        const auto value = static_cast<uint8_t>(button);
-        if (value < 1u || value > 32u) return false;
-        const auto command =
-            "km.controller_button" + std::to_string(value) +
-            "(" + (pressed ? "1)" : "0)");
-        const std::array<uint8_t, 1> payload{
-            static_cast<uint8_t>(pressed ? 1u : 0u)};
+    bool Device::controllerControl(ControllerControl control, int32_t value) {
+        return controllerControl(control, value, 0u);
+    }
+
+    bool Device::controllerControl(
+        ControllerControl control, int32_t value, uint16_t dt_uframes) {
+        const auto name = controllerName(control);
+        if (name.empty() || !controllerValueValid(control, value) ||
+            dt_uframes > 0x3FFFu) return false;
+        const auto route = device();
+        if (!route) return false;
+        const uint32_t generation = route->generation;
+        std::string command = "km.controller(" + name + "," +
+            std::to_string(value);
+        if (dt_uframes != 0u) command += "," + std::to_string(dt_uframes);
+        command += ")";
+        std::vector<uint8_t> payload;
+        payload.reserve(11u);
+        payload.push_back(std::to_underlying(control));
+        appendU32(payload, static_cast<uint32_t>(value));
+        appendU16(payload, dt_uframes);
+        appendU32(payload, generation);
         return m_impl->executeApiCommand(
-            command, static_cast<ApiOpcode>(0x5Fu + value),
-            ApiVerb::SET, payload);
+            command, ApiOpcode::CONTROLLER_CONTROL, ApiVerb::SET, payload);
     }
 
-    bool Device::controllerButton(
-        ControllerButton button, bool pressed, uint16_t dt_uframes) {
-        const auto value = static_cast<uint8_t>(button);
-        if (value < 1u || value > 32u) return false;
-        const auto command =
-            "km.controller_button" + std::to_string(value) +
-            "(" + (pressed ? "1," : "0,") +
+    bool Device::controllerMask(
+        ControllerControl control, ControllerMaskMode mode) {
+        const auto name = controllerName(control);
+        if (name.empty() || std::to_underlying(mode) > 4u) return false;
+        const auto route = device();
+        if (!route) return false;
+        const uint32_t generation = route->generation;
+        std::vector<uint8_t> payload{
+            std::to_underlying(control), std::to_underlying(mode)};
+        appendU32(payload, generation);
+        return m_impl->executeApiCommand(
+            "km.controller_mask(" + name + "," +
+                std::to_string(std::to_underlying(mode)) + ")",
+            ApiOpcode::CONTROLLER_MASK, ApiVerb::SET, payload);
+    }
+
+    std::optional<ControllerState> Device::controllerState() {
+        const auto response = m_impl->executeApiQuery(
+            "km.controller_state()", ApiOpcode::CONTROLLER_STATE);
+        if (!response) return std::nullopt;
+        ControllerState state{};
+        if (response->size() != 24u) return std::nullopt;
+        state.digitalLow = readU32(*response, 0u);
+        state.digitalHigh = readU32(*response, 4u);
+        state.leftTrigger = readU16(*response, 8u);
+        state.rightTrigger = readU16(*response, 10u);
+        state.leftStickX = static_cast<int16_t>(readU16(*response, 12u));
+        state.leftStickY = static_cast<int16_t>(readU16(*response, 14u));
+        state.rightStickX = static_cast<int16_t>(readU16(*response, 16u));
+        state.rightStickY = static_cast<int16_t>(readU16(*response, 18u));
+        return state;
+    }
+
+    bool Device::setControllerState(const ControllerState& state) {
+        return setControllerState(state, 0u);
+    }
+
+    bool Device::setControllerState(
+        const ControllerState& state, uint16_t dt_uframes) {
+        if (dt_uframes > 0x3FFFu) return false;
+        const auto route = device();
+        if (!route) return false;
+        const uint32_t generation = route->generation;
+        const std::string command = "km.controller_state(" +
+            std::to_string(state.digitalLow) + "," +
+            std::to_string(state.digitalHigh) + "," +
+            std::to_string(state.leftTrigger) + "," +
+            std::to_string(state.rightTrigger) + "," +
+            std::to_string(state.leftStickX) + "," +
+            std::to_string(state.leftStickY) + "," +
+            std::to_string(state.rightStickX) + "," +
+            std::to_string(state.rightStickY) + "," +
             std::to_string(dt_uframes) + ")";
-        const std::array<uint8_t, 3> payload{
-            static_cast<uint8_t>(pressed ? 1u : 0u),
-            static_cast<uint8_t>(dt_uframes),
-            static_cast<uint8_t>(dt_uframes >> 8u)};
+        std::vector<uint8_t> payload;
+        payload.reserve(26u);
+        appendU32(payload, state.digitalLow);
+        appendU32(payload, state.digitalHigh);
+        appendU16(payload, state.leftTrigger);
+        appendU16(payload, state.rightTrigger);
+        appendI16(payload, state.leftStickX);
+        appendI16(payload, state.leftStickY);
+        appendI16(payload, state.rightStickX);
+        appendI16(payload, state.rightStickY);
+        appendU16(payload, dt_uframes);
+        appendU32(payload, generation);
         return m_impl->executeApiCommand(
-            command, static_cast<ApiOpcode>(0x5Fu + value),
-            ApiVerb::SET, payload);
+            command, ApiOpcode::CONTROLLER_STATE, ApiVerb::SET, payload);
     }
-
-#define MAKXD_CONTROLLER_HAT_METHODS(method, command_name, opcode_name) \
-    std::optional<bool> Device::method() { \
-        const auto response = m_impl->executeApiQuery( \
-            "km." command_name "()", ApiOpcode::opcode_name); \
-        if (!response) return std::nullopt; \
-        if (m_impl->apiProtocol == ApiProtocol::MAK_API) { \
-            return response->size() == 1u && \
-                static_cast<uint8_t>((*response)[0]) == 1u; \
-        } \
-        return *response == "1"; \
-    } \
-    bool Device::method(bool pressed) { \
-        const std::array<uint8_t, 1> payload{ \
-            static_cast<uint8_t>(pressed ? 1u : 0u)}; \
-        return m_impl->executeApiCommand( \
-            "km." command_name "(" + std::string(pressed ? "1)" : "0)"), \
-            ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    } \
-    bool Device::method(bool pressed, uint16_t dt_uframes) { \
-        const std::array<uint8_t, 3> payload{ \
-            static_cast<uint8_t>(pressed ? 1u : 0u), \
-            static_cast<uint8_t>(dt_uframes), \
-            static_cast<uint8_t>(dt_uframes >> 8u)}; \
-        return m_impl->executeApiCommand( \
-            "km." command_name "(" + std::string(pressed ? "1," : "0,") + \
-                std::to_string(dt_uframes) + ")", \
-            ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    }
-
-    MAKXD_CONTROLLER_HAT_METHODS(
-        controllerHatLeft, "controller_hat_left", CONTROLLER_HAT_LEFT)
-    MAKXD_CONTROLLER_HAT_METHODS(
-        controllerHatRight, "controller_hat_right", CONTROLLER_HAT_RIGHT)
-    MAKXD_CONTROLLER_HAT_METHODS(
-        controllerHatDown, "controller_hat_down", CONTROLLER_HAT_DOWN)
-    MAKXD_CONTROLLER_HAT_METHODS(
-        controllerHatUp, "controller_hat_up", CONTROLLER_HAT_UP)
-
-#undef MAKXD_CONTROLLER_HAT_METHODS
-
-#define MAKXD_CONTROLLER_PAIR_METHODS( \
-    method, command_name, opcode_name, type, append_pair) \
-    bool Device::method(type first, type second) { \
-        const auto command = controllerCommandBuild( \
-            command_name, {first, second}); \
-        std::vector<uint8_t> payload; \
-        append_pair; \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    } \
-    bool Device::method(type first, type second, uint16_t dt_uframes) { \
-        const auto command = controllerCommandBuild( \
-            command_name, {first, second}, dt_uframes); \
-        std::vector<uint8_t> payload; \
-        append_pair; \
-        appendU16(payload, dt_uframes); \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    }
-
-    MAKXD_CONTROLLER_PAIR_METHODS(
-        controllerLeftStick, "controller_left_stick", CONTROLLER_LEFT_STICK,
-        int16_t, appendI16(payload, first); appendI16(payload, second))
-    MAKXD_CONTROLLER_PAIR_METHODS(
-        controllerRightStick, "controller_right_stick",
-        CONTROLLER_RIGHT_STICK, int16_t,
-        appendI16(payload, first); appendI16(payload, second))
-    MAKXD_CONTROLLER_PAIR_METHODS(
-        controllerAux, "controller_aux", CONTROLLER_AUX, int16_t,
-        appendI16(payload, first); appendI16(payload, second))
-#undef MAKXD_CONTROLLER_PAIR_METHODS
-
-#define MAKXD_CONTROLLER_MASK_METHODS(method, command_name, opcode_name) \
-    bool Device::method(bool enabled) { \
-        const auto command = controllerCommandBuild( \
-            command_name, {enabled ? 1 : 0}); \
-        const std::array<uint8_t, 1> payload{ \
-            static_cast<uint8_t>(enabled ? 1u : 0u)}; \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    }
-
-    MAKXD_CONTROLLER_MASK_METHODS(
-        controllerLeftTriggerMask, "controller_lt_mask", CONTROLLER_LT_MASK)
-    MAKXD_CONTROLLER_MASK_METHODS(
-        controllerRightTriggerMask, "controller_rt_mask", CONTROLLER_RT_MASK)
-
-    bool Device::controllerButtonMask(
-        ControllerButton button, bool enabled) {
-        const auto value = static_cast<uint8_t>(button);
-        if (value < 1u || value > 32u) return false;
-        const std::array<uint8_t, 1> payload{
-            static_cast<uint8_t>(enabled ? 1u : 0u)};
-        return m_impl->executeApiCommand(
-            "km.controller_button" + std::to_string(value) + "_mask(" +
-                (enabled ? "1)" : "0)"),
-            static_cast<ApiOpcode>(0x7Fu + value), ApiVerb::SET, payload);
-    }
-
-    MAKXD_CONTROLLER_MASK_METHODS(
-        controllerHatLeftMask, "controller_hat_left_mask",
-        CONTROLLER_HAT_LEFT_MASK)
-    MAKXD_CONTROLLER_MASK_METHODS(
-        controllerHatRightMask, "controller_hat_right_mask",
-        CONTROLLER_HAT_RIGHT_MASK)
-    MAKXD_CONTROLLER_MASK_METHODS(
-        controllerHatDownMask, "controller_hat_down_mask",
-        CONTROLLER_HAT_DOWN_MASK)
-    MAKXD_CONTROLLER_MASK_METHODS(
-        controllerHatUpMask, "controller_hat_up_mask",
-        CONTROLLER_HAT_UP_MASK)
-
-#undef MAKXD_CONTROLLER_MASK_METHODS
-
-#define MAKXD_CONTROLLER_DIRECTION_MASK_METHODS( \
-    method, command_name, opcode_name) \
-    bool Device::method( \
-        bool first_negative, bool first_positive, \
-        bool second_negative, bool second_positive) { \
-        const auto command = controllerCommandBuild(command_name, { \
-            first_negative ? 1 : 0, first_positive ? 1 : 0, \
-            second_negative ? 1 : 0, second_positive ? 1 : 0}); \
-        const std::array<uint8_t, 4> payload{ \
-            static_cast<uint8_t>(first_negative ? 1u : 0u), \
-            static_cast<uint8_t>(first_positive ? 1u : 0u), \
-            static_cast<uint8_t>(second_negative ? 1u : 0u), \
-            static_cast<uint8_t>(second_positive ? 1u : 0u)}; \
-        return !command.empty() && m_impl->executeApiCommand( \
-            command, ApiOpcode::opcode_name, ApiVerb::SET, payload); \
-    }
-
-    MAKXD_CONTROLLER_DIRECTION_MASK_METHODS(
-        controllerLeftStickMask, "controller_left_stick_mask",
-        CONTROLLER_LEFT_STICK_MASK)
-    MAKXD_CONTROLLER_DIRECTION_MASK_METHODS(
-        controllerRightStickMask, "controller_right_stick_mask",
-        CONTROLLER_RIGHT_STICK_MASK)
-    MAKXD_CONTROLLER_DIRECTION_MASK_METHODS(
-        controllerAuxMask, "controller_aux_mask", CONTROLLER_AUX_MASK)
-
-#undef MAKXD_CONTROLLER_DIRECTION_MASK_METHODS
 
     std::string Device::getKeyboardKeys() {
         if (!m_impl->connected.load()) return {};
         const auto response = m_impl->executeApiQuery(
             "km.keys()", ApiOpcode::KEY_KEYS);
         if (!response) return {};
-        if (m_impl->apiProtocol == ApiProtocol::MAK_API) {
-            return response->size() == 1u
-                ? std::to_string(static_cast<uint8_t>((*response)[0]))
-                : std::string{};
-        }
-        return *response;
+        return response->size() == 1u
+            ? std::to_string(static_cast<uint8_t>((*response)[0]))
+            : std::string{};
     }
 
     bool Device::setKeyboardKeys(bool enabled) {

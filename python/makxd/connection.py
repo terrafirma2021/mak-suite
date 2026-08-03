@@ -90,7 +90,7 @@ class SerialTransport:
                  override_port: bool = False,
                  encryption_enabled: bool = False,
                  encryption_key: str = "",
-                 api_protocol: ApiProtocol | str = ApiProtocol.KM,
+                 api_protocol: ApiProtocol | str = ApiProtocol.MAK_API,
                  connection: ConnectionConfig | None = None) -> None:
 
         if connection is None:
@@ -697,14 +697,12 @@ class SerialTransport:
             if (
                 self.send_init
                 and self.connection.method is ConnectionMethod.COM
+                and self.api_protocol is ApiProtocol.MAK_API
             ):
                 self._log("Sending initialization command")
-                if self.api_protocol is ApiProtocol.MAK_API:
-                    self.send_mak_api(
-                        ApiOpcode.BUTTONS, ApiVerb.SET, b"\x01"
-                    )
-                else:
-                    self.send_km_action("km.buttons(1)")
+                self.send_mak_api(
+                    ApiOpcode.BUTTONS, ApiVerb.SET, b"\x01"
+                )
             
         except Exception as e:
             self._log(f"Connection failed: {e}", "ERROR")
@@ -859,14 +857,11 @@ class SerialTransport:
         expect_response: bool = True,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> Optional[str] | bytes:
-        if self.api_protocol is ApiProtocol.MAK_API:
-            return self.send_mak_api(opcode, verb, payload, timeout)
-        km_expect_response = (
-            expect_response
-            if int(verb) == int(ApiVerb.GET)
-            else self._km_echo_enabled
-        )
-        return self.send_command(km_command, km_expect_response, timeout)
+        if self.api_protocol is not ApiProtocol.MAK_API:
+            raise MakxdCommandError(
+                "typed SDK commands require MAK_API mode"
+            )
+        return self.send_mak_api(opcode, verb, payload, timeout)
 
     @property
     def km_echo_enabled(self) -> bool:

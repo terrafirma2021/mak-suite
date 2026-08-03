@@ -44,23 +44,90 @@ typedef enum {
 } makxd_mouse_button_t;
 
 typedef enum {
-    MAKXD_CONTROLLER_BUTTON1 = 1, MAKXD_CONTROLLER_BUTTON2 = 2,
-    MAKXD_CONTROLLER_BUTTON3 = 3, MAKXD_CONTROLLER_BUTTON4 = 4,
-    MAKXD_CONTROLLER_BUTTON5 = 5, MAKXD_CONTROLLER_BUTTON6 = 6,
-    MAKXD_CONTROLLER_BUTTON7 = 7, MAKXD_CONTROLLER_BUTTON8 = 8,
-    MAKXD_CONTROLLER_BUTTON9 = 9, MAKXD_CONTROLLER_BUTTON10 = 10,
-    MAKXD_CONTROLLER_BUTTON11 = 11, MAKXD_CONTROLLER_BUTTON12 = 12,
-    MAKXD_CONTROLLER_BUTTON13 = 13, MAKXD_CONTROLLER_BUTTON14 = 14,
-    MAKXD_CONTROLLER_BUTTON15 = 15, MAKXD_CONTROLLER_BUTTON16 = 16,
-    MAKXD_CONTROLLER_BUTTON17 = 17, MAKXD_CONTROLLER_BUTTON18 = 18,
-    MAKXD_CONTROLLER_BUTTON19 = 19, MAKXD_CONTROLLER_BUTTON20 = 20,
-    MAKXD_CONTROLLER_BUTTON21 = 21, MAKXD_CONTROLLER_BUTTON22 = 22,
-    MAKXD_CONTROLLER_BUTTON23 = 23, MAKXD_CONTROLLER_BUTTON24 = 24,
-    MAKXD_CONTROLLER_BUTTON25 = 25, MAKXD_CONTROLLER_BUTTON26 = 26,
-    MAKXD_CONTROLLER_BUTTON27 = 27, MAKXD_CONTROLLER_BUTTON28 = 28,
-    MAKXD_CONTROLLER_BUTTON29 = 29, MAKXD_CONTROLLER_BUTTON30 = 30,
-    MAKXD_CONTROLLER_BUTTON31 = 31, MAKXD_CONTROLLER_BUTTON32 = 32
-} makxd_controller_button_t;
+    MAKXD_CONTROLLER_SOUTH = 0,
+    MAKXD_CONTROLLER_EAST = 1,
+    MAKXD_CONTROLLER_WEST = 2,
+    MAKXD_CONTROLLER_NORTH = 3,
+    MAKXD_CONTROLLER_DPAD_UP = 4,
+    MAKXD_CONTROLLER_DPAD_DOWN = 5,
+    MAKXD_CONTROLLER_DPAD_LEFT = 6,
+    MAKXD_CONTROLLER_DPAD_RIGHT = 7,
+    MAKXD_CONTROLLER_LEFT_SHOULDER = 8,
+    MAKXD_CONTROLLER_RIGHT_SHOULDER = 9,
+    MAKXD_CONTROLLER_LEFT_TRIGGER = 10,
+    MAKXD_CONTROLLER_RIGHT_TRIGGER = 11,
+    MAKXD_CONTROLLER_LEFT_STICK_X = 12,
+    MAKXD_CONTROLLER_LEFT_STICK_Y = 13,
+    MAKXD_CONTROLLER_RIGHT_STICK_X = 14,
+    MAKXD_CONTROLLER_RIGHT_STICK_Y = 15,
+    MAKXD_CONTROLLER_LEFT_STICK_BUTTON = 16,
+    MAKXD_CONTROLLER_RIGHT_STICK_BUTTON = 17,
+    MAKXD_CONTROLLER_SELECT = 18,
+    MAKXD_CONTROLLER_START = 19,
+    MAKXD_CONTROLLER_MODE = 20,
+    MAKXD_CONTROLLER_GRIP_LEFT = 21,
+    MAKXD_CONTROLLER_GRIP_RIGHT = 22,
+    MAKXD_CONTROLLER_EXTRA_1 = 23,
+    MAKXD_CONTROLLER_EXTRA_2 = 24,
+    MAKXD_CONTROLLER_EXTRA_3 = 25,
+    MAKXD_CONTROLLER_EXTRA_4 = 26,
+    MAKXD_CONTROLLER_EXTRA_5 = 27,
+    MAKXD_CONTROLLER_EXTRA_6 = 28,
+    MAKXD_CONTROLLER_EXTRA_7 = 29,
+    MAKXD_CONTROLLER_EXTRA_8 = 30,
+    MAKXD_CONTROLLER_EXTRA_9 = 31,
+    MAKXD_CONTROLLER_EXTRA_10 = 32,
+    MAKXD_CONTROLLER_EXTRA_11 = 33,
+    MAKXD_CONTROLLER_EXTRA_12 = 34,
+    MAKXD_CONTROLLER_EXTRA_13 = 35,
+    MAKXD_CONTROLLER_EXTRA_14 = 36,
+    MAKXD_CONTROLLER_EXTRA_15 = 37,
+    MAKXD_CONTROLLER_EXTRA_16 = 38,
+    MAKXD_CONTROLLER_EXTRA_17 = 39,
+    MAKXD_CONTROLLER_EXTRA_18 = 40,
+    MAKXD_CONTROLLER_EXTRA_19 = 41,
+    MAKXD_CONTROLLER_EXTRA_20 = 42,
+    MAKXD_CONTROLLER_EXTRA_21 = 43,
+    MAKXD_CONTROLLER_EXTRA_22 = 44,
+    MAKXD_CONTROLLER_EXTRA_23 = 45,
+    MAKXD_CONTROLLER_EXTRA_24 = 46,
+    MAKXD_CONTROLLER_EXTRA_25 = 47,
+    MAKXD_CONTROLLER_EXTRA_26 = 48,
+    MAKXD_CONTROLLER_EXTRA_27 = 49,
+    MAKXD_CONTROLLER_EXTRA_28 = 50,
+    MAKXD_CONTROLLER_EXTRA_29 = 51,
+    MAKXD_CONTROLLER_EXTRA_30 = 52,
+    MAKXD_CONTROLLER_EXTRA_31 = 53,
+    MAKXD_CONTROLLER_EXTRA_32 = 54
+} makxd_controller_control_t;
+
+typedef enum {
+    MAKXD_CONTROLLER_MASK_DISABLED = 0,
+    MAKXD_CONTROLLER_MASK_COMPLETE = 1,
+    MAKXD_CONTROLLER_MASK_NEGATIVE = 2,
+    MAKXD_CONTROLLER_MASK_POSITIVE = 3,
+    MAKXD_CONTROLLER_MASK_BOTH = 4
+} makxd_controller_mask_mode_t;
+
+typedef enum {
+    MAKXD_CONTROLLER_FAMILY_NONE = 0,
+    MAKXD_CONTROLLER_FAMILY_GENERIC_HID = 1,
+    MAKXD_CONTROLLER_FAMILY_DS4 = 2,
+    MAKXD_CONTROLLER_FAMILY_DUALSENSE = 3,
+    MAKXD_CONTROLLER_FAMILY_DS5 = 3,
+    MAKXD_CONTROLLER_FAMILY_DUALSENSE_EDGE = 4,
+    MAKXD_CONTROLLER_FAMILY_XBOX_GIP = 5,
+    MAKXD_CONTROLLER_FAMILY_XBOX_360 = 6,
+    MAKXD_CONTROLLER_FAMILY_X_INPUT = 6
+} makxd_controller_family_t;
+
+typedef enum {
+    MAKXD_CONTROLLER_PROTOCOL_NONE = 0,
+    MAKXD_CONTROLLER_PROTOCOL_HID = 1,
+    MAKXD_CONTROLLER_PROTOCOL_GIP = 2,
+    MAKXD_CONTROLLER_PROTOCOL_XINPUT = 3,
+    MAKXD_CONTROLLER_PROTOCOL_X_INPUT = 3
+} makxd_controller_protocol_t;
 
 typedef enum {
     MAKXD_STATUS_DISCONNECTED = 0,
@@ -130,6 +197,16 @@ typedef struct {
 } makxd_mouse_button_states_t;
 
 typedef struct {
+    uint64_t digital;
+    uint16_t left_trigger;
+    uint16_t right_trigger;
+    int16_t left_stick_x;
+    int16_t left_stick_y;
+    int16_t right_stick_x;
+    int16_t right_stick_y;
+} makxd_controller_state_t;
+
+typedef struct {
     uint32_t buttons;
     uint8_t hat;
     uint16_t lt;
@@ -140,7 +217,7 @@ typedef struct {
     int16_t ry;
     int16_t z;
     int16_t rz;
-} makxd_controller_state_t;
+} makxd_controller_stream_state_t;
 
 typedef struct {
     uint8_t route_mask;
@@ -148,6 +225,11 @@ typedef struct {
     uint16_t keyboard_uframes;
     uint16_t controller_uframes;
     uint32_t generation;
+    makxd_controller_family_t controller_family;
+    makxd_controller_protocol_t controller_protocol;
+    uint8_t controller_layout;
+    uint32_t controller_supported_low;
+    uint32_t controller_supported_high;
     double mouse_hz;
     double keyboard_hz;
     double controller_hz;
@@ -253,73 +335,26 @@ MAKXD_C_API makxd_error_t makxd_keyboard_up_dt(makxd_device_t* device, uint8_t k
 MAKXD_C_API makxd_error_t makxd_keyboard_init(makxd_device_t* device);
 MAKXD_C_API makxd_error_t makxd_keyboard_init_dt(makxd_device_t* device, uint16_t dt_uframes);
 
-// Controller state injection and physical-input masking.
-MAKXD_C_API makxd_error_t makxd_controller_state(
+MAKXD_C_API makxd_error_t makxd_controller_control_get(
+    makxd_device_t* device, makxd_controller_control_t control, int32_t* value);
+MAKXD_C_API makxd_error_t makxd_controller_control(
+    makxd_device_t* device, makxd_controller_control_t control, int32_t value);
+MAKXD_C_API makxd_error_t makxd_controller_control_dt(
+    makxd_device_t* device, makxd_controller_control_t control,
+    int32_t value, uint16_t dt_uframes);
+MAKXD_C_API makxd_error_t makxd_controller_mask(
+    makxd_device_t* device, makxd_controller_control_t control,
+    makxd_controller_mask_mode_t mode);
+MAKXD_C_API makxd_error_t makxd_controller_state_get(
+    makxd_device_t* device, makxd_controller_state_t* state);
+MAKXD_C_API makxd_error_t makxd_controller_state_set(
     makxd_device_t* device, const makxd_controller_state_t* state);
-MAKXD_C_API makxd_error_t makxd_controller_state_dt(
-    makxd_device_t* device, const makxd_controller_state_t* state, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_button_state(
-    makxd_device_t* device, makxd_controller_button_t button, bool* pressed);
-MAKXD_C_API makxd_error_t makxd_controller_button(
-    makxd_device_t* device, makxd_controller_button_t button, bool pressed);
-MAKXD_C_API makxd_error_t makxd_controller_button_dt(
-    makxd_device_t* device, makxd_controller_button_t button,
-    bool pressed, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_hat_left_state(
-    makxd_device_t* device, bool* pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_left(
-    makxd_device_t* device, bool pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_left_dt(
-    makxd_device_t* device, bool pressed, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_hat_right_state(
-    makxd_device_t* device, bool* pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_right(
-    makxd_device_t* device, bool pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_right_dt(
-    makxd_device_t* device, bool pressed, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_hat_down_state(
-    makxd_device_t* device, bool* pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_down(
-    makxd_device_t* device, bool pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_down_dt(
-    makxd_device_t* device, bool pressed, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_hat_up_state(
-    makxd_device_t* device, bool* pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_up(
-    makxd_device_t* device, bool pressed);
-MAKXD_C_API makxd_error_t makxd_controller_hat_up_dt(
-    makxd_device_t* device, bool pressed, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_left_trigger(makxd_device_t* device, uint16_t value);
-MAKXD_C_API makxd_error_t makxd_controller_left_trigger_dt(makxd_device_t* device, uint16_t value, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_right_trigger(makxd_device_t* device, uint16_t value);
-MAKXD_C_API makxd_error_t makxd_controller_right_trigger_dt(makxd_device_t* device, uint16_t value, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_left_stick(makxd_device_t* device, int16_t x, int16_t y);
-MAKXD_C_API makxd_error_t makxd_controller_left_stick_dt(makxd_device_t* device, int16_t x, int16_t y, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_right_stick(makxd_device_t* device, int16_t rx, int16_t ry);
-MAKXD_C_API makxd_error_t makxd_controller_right_stick_dt(makxd_device_t* device, int16_t rx, int16_t ry, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_aux(makxd_device_t* device, int16_t z, int16_t rz);
-MAKXD_C_API makxd_error_t makxd_controller_aux_dt(makxd_device_t* device, int16_t z, int16_t rz, uint16_t dt_uframes);
-MAKXD_C_API makxd_error_t makxd_controller_button_mask(
-    makxd_device_t* device, makxd_controller_button_t button, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_left_mask(
-    makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_right_mask(
-    makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_down_mask(
-    makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_hat_up_mask(
-    makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_left_trigger_mask(makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_right_trigger_mask(makxd_device_t* device, bool enabled);
-MAKXD_C_API makxd_error_t makxd_controller_left_stick_mask(
-    makxd_device_t* device, bool left, bool right, bool down, bool up);
-MAKXD_C_API makxd_error_t makxd_controller_right_stick_mask(
-    makxd_device_t* device, bool left, bool right, bool down, bool up);
-MAKXD_C_API makxd_error_t makxd_controller_aux_mask(
-    makxd_device_t* device, bool z_negative, bool z_positive,
-    bool rz_negative, bool rz_positive);
+MAKXD_C_API makxd_error_t makxd_controller_state_set_dt(
+    makxd_device_t* device, const makxd_controller_state_t* state,
+    uint16_t dt_uframes);
 MAKXD_C_API bool makxd_controller_stream_decode(
-    const uint8_t* values, size_t values_size, makxd_controller_state_t* state);
+    const uint8_t* values, size_t values_size,
+    makxd_controller_stream_state_t* state);
 
 // Mouse locking
 MAKXD_C_API makxd_error_t makxd_lock_mouse_x(makxd_device_t* device, bool lock);

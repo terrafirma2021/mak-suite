@@ -26,7 +26,6 @@ class ApiVerb(IntEnum):
 
 
 class ApiOpcode(IntEnum):
-    VERSION = 0x01
     DEVICE = 0x02
     BUTTONS = 0x10
     LEFT = 0x11
@@ -56,88 +55,8 @@ class ApiOpcode(IntEnum):
     KEY_REMAP = 0x2A
     KEY_KEYS = 0x2B
     CONTROLLER_STATE = 0x40
-    CONTROLLER_LT = 0x43
-    CONTROLLER_RT = 0x44
-    CONTROLLER_LEFT_STICK = 0x45
-    CONTROLLER_RIGHT_STICK = 0x46
-    CONTROLLER_AUX = 0x47
-    CONTROLLER_HAT_LEFT = 0x48
-    CONTROLLER_HAT_RIGHT = 0x49
-    CONTROLLER_HAT_DOWN = 0x4A
-    CONTROLLER_HAT_UP = 0x4B
-    CONTROLLER_LT_MASK = 0x52
-    CONTROLLER_RT_MASK = 0x53
-    CONTROLLER_LEFT_STICK_MASK = 0x54
-    CONTROLLER_RIGHT_STICK_MASK = 0x55
-    CONTROLLER_AUX_MASK = 0x56
-    CONTROLLER_HAT_LEFT_MASK = 0x58
-    CONTROLLER_HAT_RIGHT_MASK = 0x59
-    CONTROLLER_HAT_DOWN_MASK = 0x5A
-    CONTROLLER_HAT_UP_MASK = 0x5B
-    CONTROLLER_BUTTON1 = 0x60
-    CONTROLLER_BUTTON2 = 0x61
-    CONTROLLER_BUTTON3 = 0x62
-    CONTROLLER_BUTTON4 = 0x63
-    CONTROLLER_BUTTON5 = 0x64
-    CONTROLLER_BUTTON6 = 0x65
-    CONTROLLER_BUTTON7 = 0x66
-    CONTROLLER_BUTTON8 = 0x67
-    CONTROLLER_BUTTON9 = 0x68
-    CONTROLLER_BUTTON10 = 0x69
-    CONTROLLER_BUTTON11 = 0x6A
-    CONTROLLER_BUTTON12 = 0x6B
-    CONTROLLER_BUTTON13 = 0x6C
-    CONTROLLER_BUTTON14 = 0x6D
-    CONTROLLER_BUTTON15 = 0x6E
-    CONTROLLER_BUTTON16 = 0x6F
-    CONTROLLER_BUTTON17 = 0x70
-    CONTROLLER_BUTTON18 = 0x71
-    CONTROLLER_BUTTON19 = 0x72
-    CONTROLLER_BUTTON20 = 0x73
-    CONTROLLER_BUTTON21 = 0x74
-    CONTROLLER_BUTTON22 = 0x75
-    CONTROLLER_BUTTON23 = 0x76
-    CONTROLLER_BUTTON24 = 0x77
-    CONTROLLER_BUTTON25 = 0x78
-    CONTROLLER_BUTTON26 = 0x79
-    CONTROLLER_BUTTON27 = 0x7A
-    CONTROLLER_BUTTON28 = 0x7B
-    CONTROLLER_BUTTON29 = 0x7C
-    CONTROLLER_BUTTON30 = 0x7D
-    CONTROLLER_BUTTON31 = 0x7E
-    CONTROLLER_BUTTON32 = 0x7F
-    CONTROLLER_BUTTON1_MASK = 0x80
-    CONTROLLER_BUTTON2_MASK = 0x81
-    CONTROLLER_BUTTON3_MASK = 0x82
-    CONTROLLER_BUTTON4_MASK = 0x83
-    CONTROLLER_BUTTON5_MASK = 0x84
-    CONTROLLER_BUTTON6_MASK = 0x85
-    CONTROLLER_BUTTON7_MASK = 0x86
-    CONTROLLER_BUTTON8_MASK = 0x87
-    CONTROLLER_BUTTON9_MASK = 0x88
-    CONTROLLER_BUTTON10_MASK = 0x89
-    CONTROLLER_BUTTON11_MASK = 0x8A
-    CONTROLLER_BUTTON12_MASK = 0x8B
-    CONTROLLER_BUTTON13_MASK = 0x8C
-    CONTROLLER_BUTTON14_MASK = 0x8D
-    CONTROLLER_BUTTON15_MASK = 0x8E
-    CONTROLLER_BUTTON16_MASK = 0x8F
-    CONTROLLER_BUTTON17_MASK = 0x90
-    CONTROLLER_BUTTON18_MASK = 0x91
-    CONTROLLER_BUTTON19_MASK = 0x92
-    CONTROLLER_BUTTON20_MASK = 0x93
-    CONTROLLER_BUTTON21_MASK = 0x94
-    CONTROLLER_BUTTON22_MASK = 0x95
-    CONTROLLER_BUTTON23_MASK = 0x96
-    CONTROLLER_BUTTON24_MASK = 0x97
-    CONTROLLER_BUTTON25_MASK = 0x98
-    CONTROLLER_BUTTON26_MASK = 0x99
-    CONTROLLER_BUTTON27_MASK = 0x9A
-    CONTROLLER_BUTTON28_MASK = 0x9B
-    CONTROLLER_BUTTON29_MASK = 0x9C
-    CONTROLLER_BUTTON30_MASK = 0x9D
-    CONTROLLER_BUTTON31_MASK = 0x9E
-    CONTROLLER_BUTTON32_MASK = 0x9F
+    CONTROLLER_CONTROL = 0x41
+    CONTROLLER_MASK = 0x51
 
 
 @dataclass(frozen=True)
@@ -147,6 +66,11 @@ class DeviceRoute:
     keyboard_uframes: int
     controller_uframes: int
     generation: int = 0
+    controller_family: int = 0
+    controller_protocol: int = 0
+    controller_layout: int = 0
+    controller_supported_low: int = 0
+    controller_supported_high: int = 0
 
     @property
     def mouse(self) -> bool:
@@ -202,7 +126,7 @@ def parse_device_route_km(response: str) -> DeviceRoute:
 
 
 def parse_device_route_mak_api(payload: bytes) -> DeviceRoute:
-    if len(payload) != 11:
+    if len(payload) != 22:
         raise MakxdResponseError(
             f"Invalid MAK_API device response length: {len(payload)}"
         )
@@ -212,6 +136,11 @@ def parse_device_route_mak_api(payload: bytes) -> DeviceRoute:
         keyboard_uframes=int.from_bytes(payload[3:5], "little"),
         controller_uframes=int.from_bytes(payload[5:7], "little"),
         generation=int.from_bytes(payload[7:11], "little"),
+        controller_family=payload[11],
+        controller_protocol=payload[12],
+        controller_layout=payload[13],
+        controller_supported_low=int.from_bytes(payload[14:18], "little"),
+        controller_supported_high=int.from_bytes(payload[18:22], "little"),
     )
 
 

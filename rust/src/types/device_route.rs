@@ -5,6 +5,11 @@ pub struct DeviceRoute {
     pub keyboard_uframes: u16,
     pub controller_uframes: u16,
     pub generation: u32,
+    pub controller_family: u8,
+    pub controller_protocol: u8,
+    pub controller_layout: u8,
+    pub controller_supported_low: u32,
+    pub controller_supported_high: u32,
 }
 
 impl DeviceRoute {
@@ -18,6 +23,15 @@ impl DeviceRoute {
 
     pub fn controller(self) -> bool {
         self.route_mask & 0x04 != 0
+    }
+
+    pub fn controller_supports(self, control: super::ControllerControl) -> bool {
+        let control = control as u8;
+        if control < 32 {
+            self.controller_supported_low & (1u32 << control) != 0
+        } else {
+            self.controller_supported_high & (1u32 << (control - 32)) != 0
+        }
     }
 
     fn hz(uframes: u16) -> f32 {

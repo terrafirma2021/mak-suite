@@ -1,56 +1,174 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum ControllerButton {
-    Button1 = 1,
-    Button2 = 2,
-    Button3 = 3,
-    Button4 = 4,
-    Button5 = 5,
-    Button6 = 6,
-    Button7 = 7,
-    Button8 = 8,
-    Button9 = 9,
-    Button10 = 10,
-    Button11 = 11,
-    Button12 = 12,
-    Button13 = 13,
-    Button14 = 14,
-    Button15 = 15,
-    Button16 = 16,
-    Button17 = 17,
-    Button18 = 18,
-    Button19 = 19,
-    Button20 = 20,
-    Button21 = 21,
-    Button22 = 22,
-    Button23 = 23,
-    Button24 = 24,
-    Button25 = 25,
-    Button26 = 26,
-    Button27 = 27,
-    Button28 = 28,
-    Button29 = 29,
-    Button30 = 30,
-    Button31 = 31,
-    Button32 = 32,
+pub enum ControllerControl {
+    South = 0,
+    East,
+    West,
+    North,
+    DpadUp,
+    DpadDown,
+    DpadLeft,
+    DpadRight,
+    LeftShoulder,
+    RightShoulder,
+    LeftTrigger,
+    RightTrigger,
+    LeftStickX,
+    LeftStickY,
+    RightStickX,
+    RightStickY,
+    LeftStickButton,
+    RightStickButton,
+    Select,
+    Start,
+    Mode,
+    GripLeft,
+    GripRight,
+    Extra1,
+    Extra2,
+    Extra3,
+    Extra4,
+    Extra5,
+    Extra6,
+    Extra7,
+    Extra8,
+    Extra9,
+    Extra10,
+    Extra11,
+    Extra12,
+    Extra13,
+    Extra14,
+    Extra15,
+    Extra16,
+    Extra17,
+    Extra18,
+    Extra19,
+    Extra20,
+    Extra21,
+    Extra22,
+    Extra23,
+    Extra24,
+    Extra25,
+    Extra26,
+    Extra27,
+    Extra28,
+    Extra29,
+    Extra30,
+    Extra31,
+    Extra32,
 }
 
-impl ControllerButton {
-    pub const fn number(self) -> u8 {
-        self as u8
+impl ControllerControl {
+    pub const fn name(self) -> &'static str {
+        const NAMES: [&str; 55] = [
+            "south",
+            "east",
+            "west",
+            "north",
+            "dpad_up",
+            "dpad_down",
+            "dpad_left",
+            "dpad_right",
+            "left_shoulder",
+            "right_shoulder",
+            "left_trigger",
+            "right_trigger",
+            "left_stick_x",
+            "left_stick_y",
+            "right_stick_x",
+            "right_stick_y",
+            "left_stick_button",
+            "right_stick_button",
+            "select",
+            "start",
+            "mode",
+            "grip_left",
+            "grip_right",
+            "extra_1",
+            "extra_2",
+            "extra_3",
+            "extra_4",
+            "extra_5",
+            "extra_6",
+            "extra_7",
+            "extra_8",
+            "extra_9",
+            "extra_10",
+            "extra_11",
+            "extra_12",
+            "extra_13",
+            "extra_14",
+            "extra_15",
+            "extra_16",
+            "extra_17",
+            "extra_18",
+            "extra_19",
+            "extra_20",
+            "extra_21",
+            "extra_22",
+            "extra_23",
+            "extra_24",
+            "extra_25",
+            "extra_26",
+            "extra_27",
+            "extra_28",
+            "extra_29",
+            "extra_30",
+            "extra_31",
+            "extra_32",
+        ];
+        NAMES[self as usize]
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ControllerFamily {
+    None = 0,
+    GenericHid = 1,
+    Ds4 = 2,
+    DualSense = 3,
+    DualSenseEdge = 4,
+    XboxGip = 5,
+    Xbox360 = 6,
+}
+
+impl ControllerFamily {
+    pub const DS5: Self = Self::DualSense;
+    pub const X_INPUT: Self = Self::Xbox360;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ControllerProtocol {
+    None = 0,
+    Hid = 1,
+    Gip = 2,
+    XInput = 3,
+}
+
+impl ControllerProtocol {
+    pub const X_INPUT: Self = Self::XInput;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ControllerMaskMode {
+    Disabled = 0,
+    Complete = 1,
+    Negative = 2,
+    Positive = 3,
+    Both = 4,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ControllerState {
-    pub buttons: u32,
-    pub hat: u8,
-    pub lt: u16,
-    pub rt: u16,
-    pub x: i16,
-    pub y: i16,
-    pub rx: i16,
-    pub ry: i16,
-    pub z: i16,
-    pub rz: i16,
+    pub digital_low: u32,
+    pub digital_high: u32,
+    pub left_trigger: u16,
+    pub right_trigger: u16,
+    pub left_stick_x: i16,
+    pub left_stick_y: i16,
+    pub right_stick_x: i16,
+    pub right_stick_y: i16,
 }

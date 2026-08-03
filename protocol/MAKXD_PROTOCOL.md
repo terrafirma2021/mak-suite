@@ -5,19 +5,22 @@ and event-stream contracts.
 
 ## Connection
 
-Choose one connection and one command API before connecting.
+Choose one connection before connecting. Every typed public SDK method uses
+`MAK_API`. KM remains available only as the explicit legacy/raw ASCII surface.
 
 | Setting | Public values |
 | --- | --- |
 | Connection | COM, UDP, BLE |
-| Command API | KM, `MAK_API` |
+| Typed command API | `MAK_API` |
+| Legacy/raw command API | KM |
 | AES-128 key | Optional on COM and UDP; not used by BLE |
 
 The connection that sends a command owns its reply and any stream it starts.
 Commands and reports are never broadcast to the other connections.
 
-KM and `MAK_API` expose the same public SDK functions. KM sends the exact ASCII
-shown below. `MAK_API` sends the matching typed opcode.
+Typed methods never fall back to KM. A caller using the explicit legacy/raw
+surface sends the exact KM ASCII shown below. `MAK_API` is required for typed
+controller family, protocol, layout, capability bits, and route generation.
 
 ### COM
 
@@ -165,150 +168,59 @@ affect raw physical input only. Injected keys remain usable.
 
 ### Controller KM API
 
-The full state call is the controller streaming/snapshot form:
+KM remains the legacy text transport. It uses the same semantic controller
+owner and control IDs as MAK_API:
 
-| Exact KM ASCII |
-| --- |
-| `km.controller(buttons,hat,lt,rt,x,y,rx,ry,z,rz[,dt])` |
+| Exact KM ASCII | Meaning |
+| --- | --- |
+| `km.controller(control)` | Read one injected semantic control |
+| `km.controller(control,value[,dt])` | Set one injected semantic control |
+| `km.controller_mask(control,mode)` | Set one physical-input mask |
+| `km.controller_state()` | Read the complete injected semantic state |
+| `km.controller_state(low,high,lt,rt,lx,ly,rx,ry,dt)` | Set the complete injected semantic state |
 
-Only this complete snapshot carries the `buttons:u32` bitfield and encoded
-`hat:u8` value. Its field ranges are:
+`control` is one of the stable names below. The names describe position, not
+the product artwork printed on a controller.
 
-| Field | Range |
-| --- | ---: |
-| buttons | `0..4294967295` |
-| hat | `0..8` |
-| lt, rt | `0..65535` |
-| x, y, rx, ry, z, rz | `-32768..32767` |
+| ID | Control | Value |
+| ---: | --- | --- |
+| 0 | `south` | 0 or 1 |
+| 1 | `east` | 0 or 1 |
+| 2 | `west` | 0 or 1 |
+| 3 | `north` | 0 or 1 |
+| 4 | `dpad_up` | 0 or 1 |
+| 5 | `dpad_down` | 0 or 1 |
+| 6 | `dpad_left` | 0 or 1 |
+| 7 | `dpad_right` | 0 or 1 |
+| 8 | `left_shoulder` | 0 or 1 |
+| 9 | `right_shoulder` | 0 or 1 |
+| 10 | `left_trigger` | 0..65535 |
+| 11 | `right_trigger` | 0..65535 |
+| 12 | `left_stick_x` | -32768..32767 |
+| 13 | `left_stick_y` | -32768..32767 |
+| 14 | `right_stick_x` | -32768..32767 |
+| 15 | `right_stick_y` | -32768..32767 |
+| 16 | `left_stick_button` | 0 or 1 |
+| 17 | `right_stick_button` | 0 or 1 |
+| 18 | `select` | 0 or 1 |
+| 19 | `start` | 0 or 1 |
+| 20 | `mode` | 0 or 1 |
+| 21 | `grip_left` | 0 or 1 |
+| 22 | `grip_right` | 0 or 1 |
+| 23..54 | `extra_1`..`extra_32` | 0 or 1 |
 
-Each injected button has a named command. With no argument it returns injected
-state. `1` presses it and `0` releases it:
+The complete state is `digital_low:u32, digital_high:u32, left_trigger:u16,
+right_trigger:u16, left_stick_x:i16, left_stick_y:i16, right_stick_x:i16,
+right_stick_y:i16`. Digital bit N is semantic control ID N. Trigger and axis
+controls are stored in their dedicated fields.
 
-| Exact KM ASCII |
-| --- |
-| `km.controller_button1()` |
-| `km.controller_button1(value[,dt])` |
-| `km.controller_button2()` |
-| `km.controller_button2(value[,dt])` |
-| `km.controller_button3()` |
-| `km.controller_button3(value[,dt])` |
-| `km.controller_button4()` |
-| `km.controller_button4(value[,dt])` |
-| `km.controller_button5()` |
-| `km.controller_button5(value[,dt])` |
-| `km.controller_button6()` |
-| `km.controller_button6(value[,dt])` |
-| `km.controller_button7()` |
-| `km.controller_button7(value[,dt])` |
-| `km.controller_button8()` |
-| `km.controller_button8(value[,dt])` |
-| `km.controller_button9()` |
-| `km.controller_button9(value[,dt])` |
-| `km.controller_button10()` |
-| `km.controller_button10(value[,dt])` |
-| `km.controller_button11()` |
-| `km.controller_button11(value[,dt])` |
-| `km.controller_button12()` |
-| `km.controller_button12(value[,dt])` |
-| `km.controller_button13()` |
-| `km.controller_button13(value[,dt])` |
-| `km.controller_button14()` |
-| `km.controller_button14(value[,dt])` |
-| `km.controller_button15()` |
-| `km.controller_button15(value[,dt])` |
-| `km.controller_button16()` |
-| `km.controller_button16(value[,dt])` |
-| `km.controller_button17()` |
-| `km.controller_button17(value[,dt])` |
-| `km.controller_button18()` |
-| `km.controller_button18(value[,dt])` |
-| `km.controller_button19()` |
-| `km.controller_button19(value[,dt])` |
-| `km.controller_button20()` |
-| `km.controller_button20(value[,dt])` |
-| `km.controller_button21()` |
-| `km.controller_button21(value[,dt])` |
-| `km.controller_button22()` |
-| `km.controller_button22(value[,dt])` |
-| `km.controller_button23()` |
-| `km.controller_button23(value[,dt])` |
-| `km.controller_button24()` |
-| `km.controller_button24(value[,dt])` |
-| `km.controller_button25()` |
-| `km.controller_button25(value[,dt])` |
-| `km.controller_button26()` |
-| `km.controller_button26(value[,dt])` |
-| `km.controller_button27()` |
-| `km.controller_button27(value[,dt])` |
-| `km.controller_button28()` |
-| `km.controller_button28(value[,dt])` |
-| `km.controller_button29()` |
-| `km.controller_button29(value[,dt])` |
-| `km.controller_button30()` |
-| `km.controller_button30(value[,dt])` |
-| `km.controller_button31()` |
-| `km.controller_button31(value[,dt])` |
-| `km.controller_button32()` |
-| `km.controller_button32(value[,dt])` |
+Mask modes are `disabled=0`, `complete=1`, `negative=2`, `positive=3`,
+and `both=4`. Digital and trigger controls accept disabled or complete.
+Axis controls accept disabled, negative, positive, or both. Masks affect
+physical input only; injected values remain usable.
 
-The stable mapping is direct: `button1` is HID Button usage 1 and snapshot bit
-0; `button2` is usage 2 and bit 1; this continues through `button32`, usage 32
-and bit 31. Product-specific A/B/X/Y labels are intentionally not assumed.
-
-Hat injection uses independent horizontal and vertical components. There is no
-public centre command. `1` presses a direction, `0` releases that component,
-and `()` returns its injected state:
-
-| Exact KM ASCII |
-| --- |
-| `km.controller_hat_left()` |
-| `km.controller_hat_left(value[,dt])` |
-| `km.controller_hat_right()` |
-| `km.controller_hat_right(value[,dt])` |
-| `km.controller_hat_down()` |
-| `km.controller_hat_down(value[,dt])` |
-| `km.controller_hat_up()` |
-| `km.controller_hat_up(value[,dt])` |
-
-Pressing left releases right; pressing right releases left. Pressing down
-releases up; pressing up releases down. A diagonal is one horizontal plus one
-vertical component.
-
-The remaining injection commands are:
-
-| Exact KM ASCII |
-| --- |
-| `km.controller_lt(value[,dt])` |
-| `km.controller_rt(value[,dt])` |
-| `km.controller_left_stick(x,y[,dt])` |
-| `km.controller_right_stick(rx,ry[,dt])` |
-| `km.controller_aux(z,rz[,dt])` |
-
-Controller masks are raw-input locks. Setting a lock bit to `1` forces only
-that physical component to zero before injection. Setting it to `0` unlocks
-that physical component. Locks never block or alter injected controller
-values. Lock changes publish immediately, have no `dt` argument, do not enter
-the injection queue or mailbox, and do not submit a USB report by themselves.
-For a paired peer output, the complete latest lock policy is coalesced in one
-dedicated pending slot and retried until the peer link accepts it.
-
-| Exact KM ASCII |
-| --- |
-| `km.controller_button1_mask(enabled)` through `km.controller_button32_mask(enabled)` |
-| `km.controller_hat_left_mask(enabled)` |
-| `km.controller_hat_right_mask(enabled)` |
-| `km.controller_hat_down_mask(enabled)` |
-| `km.controller_hat_up_mask(enabled)` |
-| `km.controller_lt_mask(enabled)` |
-| `km.controller_rt_mask(enabled)` |
-| `km.controller_left_stick_mask(left,right,down,up)` |
-| `km.controller_right_stick_mask(left,right,down,up)` |
-| `km.controller_aux_mask(z_negative,z_positive,rz_negative,rz_positive)` |
-
-Hat locks remove only the selected raw component. For example, locking raw up
-from a physical up-right value leaves raw right. Stick direction locks zero
-the axis only while its selected raw sign is active.
-
+`dt` is optional on individual control writes and required in the complete
+state write. It is `0..16383` in USB microframes; one unit is 125 us.
 ## COM event streams
 
 Button and key events are COM-only, disabled after reset, and mutually
@@ -351,17 +263,40 @@ before mask/remap. Repeated states emit nothing.
 
 ## MAK_API
 
-`MAK_API_ID` is `0x00`. Verbs are `GET=0x00`, `SET=0x01`, and `EXEC=0x02`.
-Successful SET calls send no response. GET and EXEC responses use status
-`0x01`; rejected calls, including rejected SET calls, respond with `0xFF`.
-Event streams are unaffected.
+`MAK_API_ID` is `0x00`. Verbs are `GET=0x00`, `SET=0x01`, and
+`EXEC=0x02`. Successful SET calls send no response. GET and EXEC responses
+use status `0x01`; rejected calls, including rejected SET calls, respond with
+`0xFF`. Event streams are unaffected. All multibyte integers are
+little-endian.
+
+There is no binary API version opcode. The contract below is the sole
+pre-production MAK_API contract.
 
 ### Common
 
 | Opcode | Value |
 | --- | ---: |
-| `API_VERSION` | `0x01` |
 | `API_DEVICE` | `0x02` |
+
+`API_DEVICE GET` has no request payload. Its 22-byte result is:
+
+```text
+route_mask:u8
+mouse_uframes:u16
+keyboard_uframes:u16
+controller_uframes:u16
+route_generation:u32
+controller_family:u8
+controller_protocol:u8
+controller_layout:u8
+controller_supported_low:u32
+controller_supported_high:u32
+```
+
+Controller families are none 0, generic HID 1, DS4 2, DualSense 3,
+DualSense Edge 4, Xbox GIP 5, and Xbox 360/XInput 6. Protocols are none 0,
+HID 1, GIP 2, and XInput 3. Support bit N corresponds to semantic control ID
+N. A controller SET must carry the current route generation.
 
 ### Mouse
 
@@ -405,117 +340,74 @@ Event streams are unaffected.
 | Opcode | Value |
 | --- | ---: |
 | `API_CONTROLLER_STATE` | `0x40` |
-| `API_CONTROLLER_LT` | `0x43` |
-| `API_CONTROLLER_RT` | `0x44` |
-| `API_CONTROLLER_LEFT_STICK` | `0x45` |
-| `API_CONTROLLER_RIGHT_STICK` | `0x46` |
-| `API_CONTROLLER_AUX` | `0x47` |
-| `API_CONTROLLER_HAT_LEFT` | `0x48` |
-| `API_CONTROLLER_HAT_RIGHT` | `0x49` |
-| `API_CONTROLLER_HAT_DOWN` | `0x4A` |
-| `API_CONTROLLER_HAT_UP` | `0x4B` |
-| `API_CONTROLLER_LT_MASK` | `0x52` |
-| `API_CONTROLLER_RT_MASK` | `0x53` |
-| `API_CONTROLLER_LEFT_STICK_MASK` | `0x54` |
-| `API_CONTROLLER_RIGHT_STICK_MASK` | `0x55` |
-| `API_CONTROLLER_AUX_MASK` | `0x56` |
-| `API_CONTROLLER_HAT_LEFT_MASK` | `0x58` |
-| `API_CONTROLLER_HAT_RIGHT_MASK` | `0x59` |
-| `API_CONTROLLER_HAT_DOWN_MASK` | `0x5A` |
-| `API_CONTROLLER_HAT_UP_MASK` | `0x5B` |
+| `API_CONTROLLER_CONTROL` | `0x41` |
+| `API_CONTROLLER_MASK` | `0x51` |
 
-### Controller buttons
+The semantic control IDs and values are identical to the Controller KM API
+table above.
 
-| Opcode | Value |
-| --- | ---: |
-| `API_CONTROLLER_BUTTON1` | `0x60` |
-| `API_CONTROLLER_BUTTON2` | `0x61` |
-| `API_CONTROLLER_BUTTON3` | `0x62` |
-| `API_CONTROLLER_BUTTON4` | `0x63` |
-| `API_CONTROLLER_BUTTON5` | `0x64` |
-| `API_CONTROLLER_BUTTON6` | `0x65` |
-| `API_CONTROLLER_BUTTON7` | `0x66` |
-| `API_CONTROLLER_BUTTON8` | `0x67` |
-| `API_CONTROLLER_BUTTON9` | `0x68` |
-| `API_CONTROLLER_BUTTON10` | `0x69` |
-| `API_CONTROLLER_BUTTON11` | `0x6A` |
-| `API_CONTROLLER_BUTTON12` | `0x6B` |
-| `API_CONTROLLER_BUTTON13` | `0x6C` |
-| `API_CONTROLLER_BUTTON14` | `0x6D` |
-| `API_CONTROLLER_BUTTON15` | `0x6E` |
-| `API_CONTROLLER_BUTTON16` | `0x6F` |
-| `API_CONTROLLER_BUTTON17` | `0x70` |
-| `API_CONTROLLER_BUTTON18` | `0x71` |
-| `API_CONTROLLER_BUTTON19` | `0x72` |
-| `API_CONTROLLER_BUTTON20` | `0x73` |
-| `API_CONTROLLER_BUTTON21` | `0x74` |
-| `API_CONTROLLER_BUTTON22` | `0x75` |
-| `API_CONTROLLER_BUTTON23` | `0x76` |
-| `API_CONTROLLER_BUTTON24` | `0x77` |
-| `API_CONTROLLER_BUTTON25` | `0x78` |
-| `API_CONTROLLER_BUTTON26` | `0x79` |
-| `API_CONTROLLER_BUTTON27` | `0x7A` |
-| `API_CONTROLLER_BUTTON28` | `0x7B` |
-| `API_CONTROLLER_BUTTON29` | `0x7C` |
-| `API_CONTROLLER_BUTTON30` | `0x7D` |
-| `API_CONTROLLER_BUTTON31` | `0x7E` |
-| `API_CONTROLLER_BUTTON32` | `0x7F` |
+`API_CONTROLLER_CONTROL GET` request:
 
-### Controller button raw locks
+```text
+control:u8
+```
 
-| Opcode | Value |
-| --- | ---: |
-| `API_CONTROLLER_BUTTON1_MASK` | `0x80` |
-| `API_CONTROLLER_BUTTON2_MASK` | `0x81` |
-| `API_CONTROLLER_BUTTON3_MASK` | `0x82` |
-| `API_CONTROLLER_BUTTON4_MASK` | `0x83` |
-| `API_CONTROLLER_BUTTON5_MASK` | `0x84` |
-| `API_CONTROLLER_BUTTON6_MASK` | `0x85` |
-| `API_CONTROLLER_BUTTON7_MASK` | `0x86` |
-| `API_CONTROLLER_BUTTON8_MASK` | `0x87` |
-| `API_CONTROLLER_BUTTON9_MASK` | `0x88` |
-| `API_CONTROLLER_BUTTON10_MASK` | `0x89` |
-| `API_CONTROLLER_BUTTON11_MASK` | `0x8A` |
-| `API_CONTROLLER_BUTTON12_MASK` | `0x8B` |
-| `API_CONTROLLER_BUTTON13_MASK` | `0x8C` |
-| `API_CONTROLLER_BUTTON14_MASK` | `0x8D` |
-| `API_CONTROLLER_BUTTON15_MASK` | `0x8E` |
-| `API_CONTROLLER_BUTTON16_MASK` | `0x8F` |
-| `API_CONTROLLER_BUTTON17_MASK` | `0x90` |
-| `API_CONTROLLER_BUTTON18_MASK` | `0x91` |
-| `API_CONTROLLER_BUTTON19_MASK` | `0x92` |
-| `API_CONTROLLER_BUTTON20_MASK` | `0x93` |
-| `API_CONTROLLER_BUTTON21_MASK` | `0x94` |
-| `API_CONTROLLER_BUTTON22_MASK` | `0x95` |
-| `API_CONTROLLER_BUTTON23_MASK` | `0x96` |
-| `API_CONTROLLER_BUTTON24_MASK` | `0x97` |
-| `API_CONTROLLER_BUTTON25_MASK` | `0x98` |
-| `API_CONTROLLER_BUTTON26_MASK` | `0x99` |
-| `API_CONTROLLER_BUTTON27_MASK` | `0x9A` |
-| `API_CONTROLLER_BUTTON28_MASK` | `0x9B` |
-| `API_CONTROLLER_BUTTON29_MASK` | `0x9C` |
-| `API_CONTROLLER_BUTTON30_MASK` | `0x9D` |
-| `API_CONTROLLER_BUTTON31_MASK` | `0x9E` |
-| `API_CONTROLLER_BUTTON32_MASK` | `0x9F` |
+Successful result:
 
-Payloads use little-endian integers:
+```text
+control:u8 value:i32 route_generation:u32
+```
 
-- Each named mouse-button raw lock SET uses exactly `enabled:u8`.
-- `API_MOVE_MASK SET` uses `left:u8, right:u8, down:u8, up:u8`.
-- `API_WHEEL_MASK SET` uses `down:u8, up:u8`.
-- `API_CONTROLLER_STATE SET`: `buttons:u32, hat:u8, lt:u16, rt:u16,
-  x:i16, y:i16, rx:i16, ry:i16, z:i16, rz:i16 [,dt:u16]`.
-- Each named controller button uses no GET payload; SET uses `state:u8
-  [,dt:u16]`.
-- Each hat direction uses no GET payload; SET uses `state:u8 [,dt:u16]`.
-- Trigger SET uses `value:u16 [,dt:u16]`.
-- Stick/aux SET uses `first:i16, second:i16 [,dt:u16]`.
-- Each named controller button raw lock SET uses exactly `enabled:u8`.
-- Hat/trigger lock SET uses exactly `enabled:u8`.
-- Stick/aux lock SET uses four directional `u8` flags in the same order as
-  its KM command.
+`API_CONTROLLER_CONTROL SET` request:
 
-Unlisted opcodes are not part of the public API.
+```text
+control:u8 value:i32 dt:u16 route_generation:u32
+```
+
+`API_CONTROLLER_MASK SET` request:
+
+```text
+control:u8 mode:u8 route_generation:u32
+```
+
+`API_CONTROLLER_STATE GET` has no request payload. Its 24-byte result is:
+
+```text
+digital_low:u32 digital_high:u32
+left_trigger:u16 right_trigger:u16
+left_stick_x:i16 left_stick_y:i16
+right_stick_x:i16 right_stick_y:i16
+route_generation:u32
+```
+
+`API_CONTROLLER_STATE SET` uses the same first 20 bytes, followed by:
+
+```text
+dt:u16 route_generation:u32
+```
+
+The firmware rejects unsupported controls, invalid values, invalid mask modes,
+`dt > 16383`, and stale route generations. Unlisted opcodes are not part of
+the public API.
+
+## Public SDK Controller Surface
+
+Every language uses the same `ControllerControl`, `ControllerMaskMode`,
+controller-family, controller-protocol, complete-state, and device-route
+values defined above. Artwork names such as Cross, Circle, A, B, X, and Y are
+not separate public controls.
+
+| SDK | Read/write control | Mask | Complete state | Route identity |
+| --- | --- | --- | --- | --- |
+| Python | `device.gamepad.control(...)` | `device.gamepad.mask(...)` | `device.gamepad.state(...)` | `device.device()` |
+| Rust | `controller_control_state`, `controller_control[_dt]` | `controller_mask` | `controller_state`, `set_controller_state[_dt]` | `device()` |
+| C++ | `controllerControl(...)` | `controllerMask(...)` | `controllerState`, `setControllerState(...)` | `device()` |
+| C | `makxd_controller_control_get`, `makxd_controller_control[_dt]` | `makxd_controller_mask` | `makxd_controller_state_get`, `makxd_controller_state_set[_dt]` | `makxd_get_output_device` |
+| C# | `device.controller_control(...)` | `device.controller_mask(...)` | `device.controller_state(...)` | `device.device_route()` |
+
+The non-DT overloads use `dt_uframes=0`. A route capability bit must be set
+before that control can be accepted. KM remains callable through the explicit
+legacy/raw surface, but is never a backend or fallback for these typed methods.
 
 ## Constructing MAK_API frames
 
@@ -531,22 +423,16 @@ The first `00` is the generic frame type. The second `00` is `MAK_API_ID`.
 `payload_length` counts from `MAK_API_ID` through the final payload byte; it
 does not count `DE AD`, the length field, or the generic frame type.
 
-`API_VERSION GET` has no command payload:
+`API_DEVICE GET` has no command payload:
 
 ```text
-DE AD 03 00 00 00 01 00
+DE AD 03 00 00 00 02 00
 ```
 
-Press controller button 1 without `dt`:
+Set controller `south=1`, `dt=250`, and route generation 7:
 
 ```text
-DE AD 04 00 00 00 60 01 01
-```
-
-Press controller button 1 with `dt=250` (`FA 00`):
-
-```text
-DE AD 06 00 00 00 60 01 01 FA 00
+DE AD 0E 00 00 00 41 01 00 01 00 00 00 FA 00 07 00 00 00
 ```
 
 ### COM receive
@@ -557,24 +443,24 @@ A plaintext COM response is:
 DE AD | payload_length:u16le | 00 | 00 opcode status result...
 ```
 
-Successful `API_VERSION GET`:
+Successful controller SET sends no response frame.
+
+Rejected controller SET:
 
 ```text
-DE AD 08 00 00 00 01 01 4D 41 4B 58 44
+DE AD 03 00 00 00 41 FF
 ```
 
-Successful controller button 1 SET sends no response frame.
-
-Rejected controller button 1 SET:
+Read controller `south`:
 
 ```text
-DE AD 03 00 00 00 60 FF
+DE AD 04 00 00 00 41 00 00
 ```
 
-Successful controller button 1 GET while pressed:
+Successful result `south=1`, route generation 7:
 
 ```text
-DE AD 04 00 00 00 60 01 01
+DE AD 0C 00 00 00 41 01 00 01 00 00 00 07 00 00 00
 ```
 
 Encrypted COM uses the SDK encryption option; callers still supply the same

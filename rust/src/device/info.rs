@@ -20,21 +20,13 @@ impl Device {
     pub fn version(&self) -> Result<String> {
         timed!(
             "version",
-            self.query_api(
-                constants::CMD_VERSION,
-                ApiOpcode::Version,
-                ApiVerb::Get,
-                &[]
-            )
-            .and_then(|value| String::from_utf8(value)
-                .map_err(|_| crate::error::MakxdError::Protocol("version is not ASCII".into())))
-            .map(strip_km_prefix)
+            self.query(constants::CMD_VERSION).map(strip_km_prefix)
         )
     }
 
     pub fn device(&self) -> Result<DeviceRoute> {
         let value = self.query_api(b"km.device()\r\n", ApiOpcode::Device, ApiVerb::Get, &[])?;
-        parse_device_route(&value, self.config().api_protocol)
+        parse_device_route(&value)
     }
 
     /// Returns combined device info (port name + firmware version).
@@ -83,17 +75,9 @@ impl AsyncDevice {
     /// Query the firmware version string (with "km." prefix stripped).
     pub async fn version(&self) -> Result<String> {
         timed!("version", {
-            let value = self
-                .query_api(
-                    constants::CMD_VERSION,
-                    ApiOpcode::Version,
-                    ApiVerb::Get,
-                    &[],
-                )
-                .await?;
-            let value = String::from_utf8(value)
-                .map_err(|_| crate::error::MakxdError::Protocol("version is not ASCII".into()))?;
-            Ok(strip_km_prefix(value))
+            self.query(constants::CMD_VERSION)
+                .await
+                .map(strip_km_prefix)
         })
     }
 
@@ -101,7 +85,7 @@ impl AsyncDevice {
         let value = self
             .query_api(b"km.device()\r\n", ApiOpcode::Device, ApiVerb::Get, &[])
             .await?;
-        parse_device_route(&value, self.config().api_protocol)
+        parse_device_route(&value)
     }
 
     /// Returns combined device info (port name + firmware version).
@@ -142,65 +126,22 @@ impl AsyncDevice {
     }
 }
 
-fn parse_device_route(
-    value: &[u8],
-    protocol: crate::protocol::api::ApiProtocol,
-) -> Result<DeviceRoute> {
-    if protocol == crate::protocol::api::ApiProtocol::MakApi {
-        if value.len() != 11 {
-            return Err(crate::error::MakxdError::Protocol(
-                "MAK_API device response length is invalid".into(),
-            ));
-        }
-        return Ok(DeviceRoute {
-            route_mask: value[0],
-            mouse_uframes: u16::from_le_bytes([value[1], value[2]]),
-            keyboard_uframes: u16::from_le_bytes([value[3], value[4]]),
-            controller_uframes: u16::from_le_bytes([value[5], value[6]]),
-            generation: u32::from_le_bytes([value[7], value[8], value[9], value[10]]),
-        });
-    }
-    let text = std::str::from_utf8(value).map_err(|_| {
-        crate::error::MakxdError::Protocol("km.device() response is not ASCII".into())
-    })?;
-    let mut fields = text.trim().split(';');
-    let route = fields.next().and_then(|field| field.strip_prefix("R:"));
-    let mouse = fields
-        .next()
-        .and_then(|field| field.strip_prefix("M:"))
-        .and_then(|field| field.strip_suffix("uf"));
-    let keyboard = fields
-        .next()
-        .and_then(|field| field.strip_prefix("K:"))
-        .and_then(|field| field.strip_suffix("uf"));
-    let controller = fields
-        .next()
-        .and_then(|field| field.strip_prefix("C:"))
-        .and_then(|field| field.strip_suffix("uf"));
-    if fields.next().is_some()
-        || route.is_none()
-        || mouse.is_none()
-        || keyboard.is_none()
-        || controller.is_none()
-    {
+fn parse_device_route(value: &[u8]) -> Result<DeviceRoute> {
+    if value.len() != 22 {
         return Err(crate::error::MakxdError::Protocol(
-            "km.device() response is invalid".into(),
+            "MAK_API device response length is invalid".into(),
         ));
     }
-    let route = route.unwrap();
     Ok(DeviceRoute {
-        route_mask: (if route.contains('M') { 1 } else { 0 })
-            | (if route.contains('K') { 2 } else { 0 })
-            | (if route.contains('C') { 4 } else { 0 }),
-        mouse_uframes: mouse.unwrap().parse().map_err(|_| {
-            crate::error::MakxdError::Protocol("km.device() mouse cadence is invalid".into())
-        })?,
-        keyboard_uframes: keyboard.unwrap().parse().map_err(|_| {
-            crate::error::MakxdError::Protocol("km.device() keyboard cadence is invalid".into())
-        })?,
-        controller_uframes: controller.unwrap().parse().map_err(|_| {
-            crate::error::MakxdError::Protocol("km.device() controller cadence is invalid".into())
-        })?,
-        generation: 0,
+        route_mask: value[0],
+        mouse_uframes: u16::from_le_bytes([value[1], value[2]]),
+        keyboard_uframes: u16::from_le_bytes([value[3], value[4]]),
+        controller_uframes: u16::from_le_bytes([value[5], value[6]]),
+        generation: u32::from_le_bytes([value[7], value[8], value[9], value[10]]),
+        controller_family: value[11],
+        controller_protocol: value[12],
+        controller_layout: value[13],
+        controller_supported_low: u32::from_le_bytes([value[14], value[15], value[16], value[17]]),
+        controller_supported_high: u32::from_le_bytes([value[18], value[19], value[20], value[21]]),
     })
 }

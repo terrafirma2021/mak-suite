@@ -6,7 +6,14 @@ from .controller import (
 )
 from .enums import MouseButton
 from .keyboard import Keyboard, KeyboardKey
-from .gamepad import ControllerButton, ControllerState, Gamepad
+from .gamepad import (
+    ControllerControl,
+    ControllerFamily,
+    ControllerMaskMode,
+    ControllerProtocol,
+    ControllerState,
+    Gamepad,
+)
 from .errors import MakxdConnectionError
 from .protocol import ApiOpcode, ApiProtocol, ApiVerb, DeviceRoute
 from .connection_config import ConnectionConfig, ConnectionMethod, UdpWireMode
@@ -42,7 +49,10 @@ __all__ = [
     'MouseButton',
     'Keyboard',
     'KeyboardKey',
-    'ControllerButton',
+    'ControllerControl',
+    'ControllerFamily',
+    'ControllerMaskMode',
+    'ControllerProtocol',
     'ControllerState',
     'Gamepad',
     'MakxdConnectionError',

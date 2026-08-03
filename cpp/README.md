@@ -2,6 +2,32 @@
 
 High-performance C++ library for MAKXD mouse controllers. Sub-millisecond response times, cross-platform support with C ABI for multi-language integration.
 
+Typed methods require `makxd::ApiProtocol::MAK_API` and never fall back to KM.
+Use `makxd::ApiProtocol::KM` only for explicit legacy/raw ASCII calls.
+
+## Semantic controller API
+
+```cpp
+makxd::Device device;
+device.connect();
+device.controllerControl(makxd::ControllerControl::SOUTH, 1);
+device.controllerControl(makxd::ControllerControl::LEFT_STICK_X, -12000, 250);
+device.controllerMask(
+    makxd::ControllerControl::DPAD_UP,
+    makxd::ControllerMaskMode::COMPLETE);
+makxd::ControllerState state{};
+state.digitalLow = 1;
+state.leftTrigger = 32768;
+state.leftStickX = -12000;
+device.setControllerState(state, 250);
+```
+
+The C ABI exposes the same contract through
+`makxd_controller_control[_dt]`, `makxd_controller_mask`, and
+`makxd_controller_state_get/set[_dt]`. `device()` and `makxd_get_output_device()`
+return the routed family, protocol, layout, capability words, generation, and
+cadence under `MAK_API`.
+
 ## Prerequisites
 
 - C++23 compiler (for C++ API)

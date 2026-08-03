@@ -1,447 +1,304 @@
-"""Controller state injection and physical-input masking."""
+"""Unified semantic controller API."""
 
 from dataclasses import dataclass
 from enum import IntEnum
 
 from .connection import SerialTransport
-from .errors import MakxdCommandError
-from .protocol import ApiOpcode, ApiVerb
+from .errors import MakxdCommandError, MakxdResponseError
+from .protocol import (
+    ApiOpcode,
+    ApiVerb,
+    DeviceRoute,
+    parse_device_route_mak_api,
+)
+
+
+class ControllerControl(IntEnum):
+    SOUTH = 0
+    EAST = 1
+    WEST = 2
+    NORTH = 3
+    DPAD_UP = 4
+    DPAD_DOWN = 5
+    DPAD_LEFT = 6
+    DPAD_RIGHT = 7
+    LEFT_SHOULDER = 8
+    RIGHT_SHOULDER = 9
+    LEFT_TRIGGER = 10
+    RIGHT_TRIGGER = 11
+    LEFT_STICK_X = 12
+    LEFT_STICK_Y = 13
+    RIGHT_STICK_X = 14
+    RIGHT_STICK_Y = 15
+    LEFT_STICK_BUTTON = 16
+    RIGHT_STICK_BUTTON = 17
+    SELECT = 18
+    START = 19
+    MODE = 20
+    GRIP_LEFT = 21
+    GRIP_RIGHT = 22
+    EXTRA_1 = 23
+    EXTRA_2 = 24
+    EXTRA_3 = 25
+    EXTRA_4 = 26
+    EXTRA_5 = 27
+    EXTRA_6 = 28
+    EXTRA_7 = 29
+    EXTRA_8 = 30
+    EXTRA_9 = 31
+    EXTRA_10 = 32
+    EXTRA_11 = 33
+    EXTRA_12 = 34
+    EXTRA_13 = 35
+    EXTRA_14 = 36
+    EXTRA_15 = 37
+    EXTRA_16 = 38
+    EXTRA_17 = 39
+    EXTRA_18 = 40
+    EXTRA_19 = 41
+    EXTRA_20 = 42
+    EXTRA_21 = 43
+    EXTRA_22 = 44
+    EXTRA_23 = 45
+    EXTRA_24 = 46
+    EXTRA_25 = 47
+    EXTRA_26 = 48
+    EXTRA_27 = 49
+    EXTRA_28 = 50
+    EXTRA_29 = 51
+    EXTRA_30 = 52
+    EXTRA_31 = 53
+    EXTRA_32 = 54
+
+
+class ControllerFamily(IntEnum):
+    NONE = 0
+    GENERIC_HID = 1
+    DS4 = 2
+    DUALSENSE = 3
+    DS5 = 3
+    DUALSENSE_EDGE = 4
+    XBOX_GIP = 5
+    XBOX_360 = 6
+    X_INPUT = 6
+
+
+class ControllerProtocol(IntEnum):
+    NONE = 0
+    HID = 1
+    GIP = 2
+    XINPUT = 3
+    X_INPUT = 3
+
+
+class ControllerMaskMode(IntEnum):
+    DISABLED = 0
+    COMPLETE = 1
+    NEGATIVE = 2
+    POSITIVE = 3
+    BOTH = 4
+
+
+@dataclass(frozen=True)
+class ControllerState:
+    digital_low: int = 0
+    digital_high: int = 0
+    left_trigger: int = 0
+    right_trigger: int = 0
+    left_stick_x: int = 0
+    left_stick_y: int = 0
+    right_stick_x: int = 0
+    right_stick_y: int = 0
 
 
 def _integer(name: str, value: int, minimum: int, maximum: int) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise MakxdCommandError(f"{name} must be an integer")
     if value < minimum or value > maximum:
-        raise MakxdCommandError(
-            f"{name} must be in the range {minimum}..{maximum}"
-        )
+        raise MakxdCommandError(f"{name} must be in {minimum}..{maximum}")
     return value
 
 
-def _enabled(name: str, value: bool | int) -> int:
-    if isinstance(value, bool):
-        return int(value)
-    return _integer(name, value, 0, 1)
+def _control(value: ControllerControl | int) -> ControllerControl:
+    try:
+        return ControllerControl(int(value))
+    except (TypeError, ValueError) as error:
+        raise MakxdCommandError("invalid controller control") from error
 
 
-def _dt_argument(dt_uframes: int | None) -> str:
-    if dt_uframes is None:
-        return ""
-    return f",{_integer('DT', dt_uframes, 0, 0x3FFF)}"
+def _control_value(control: ControllerControl, value: int) -> int:
+    if control in (ControllerControl.LEFT_TRIGGER, ControllerControl.RIGHT_TRIGGER):
+        return _integer("value", value, 0, 0xFFFF)
+    if ControllerControl.LEFT_STICK_X <= control <= ControllerControl.RIGHT_STICK_Y:
+        return _integer("value", value, -0x8000, 0x7FFF)
+    return _integer("value", value, 0, 1)
 
 
-def _dt_bytes(dt_uframes: int | None) -> bytes:
-    if dt_uframes is None:
-        return b""
-    return _integer("DT", dt_uframes, 0, 0x3FFF).to_bytes(2, "little")
-
-
-def _u16(value: int) -> bytes:
-    return value.to_bytes(2, "little")
-
-
-def _i16(value: int) -> bytes:
-    return value.to_bytes(2, "little", signed=True)
-
-
-def _u32(value: int) -> bytes:
-    return value.to_bytes(4, "little")
-
-
-@dataclass(frozen=True)
-class ControllerState:
-    buttons: int
-    hat: int
-    lt: int
-    rt: int
-    x: int
-    y: int
-    rx: int
-    ry: int
-    z: int
-    rz: int
-
-
-class ControllerButton(IntEnum):
-    BUTTON1 = 1
-    BUTTON2 = 2
-    BUTTON3 = 3
-    BUTTON4 = 4
-    BUTTON5 = 5
-    BUTTON6 = 6
-    BUTTON7 = 7
-    BUTTON8 = 8
-    BUTTON9 = 9
-    BUTTON10 = 10
-    BUTTON11 = 11
-    BUTTON12 = 12
-    BUTTON13 = 13
-    BUTTON14 = 14
-    BUTTON15 = 15
-    BUTTON16 = 16
-    BUTTON17 = 17
-    BUTTON18 = 18
-    BUTTON19 = 19
-    BUTTON20 = 20
-    BUTTON21 = 21
-    BUTTON22 = 22
-    BUTTON23 = 23
-    BUTTON24 = 24
-    BUTTON25 = 25
-    BUTTON26 = 26
-    BUTTON27 = 27
-    BUTTON28 = 28
-    BUTTON29 = 29
-    BUTTON30 = 30
-    BUTTON31 = 31
-    BUTTON32 = 32
+def _state_validate(state: ControllerState) -> ControllerState:
+    return ControllerState(
+        _integer("digital_low", state.digital_low, 0, 0xFFFFFFFF),
+        _integer("digital_high", state.digital_high, 0, 0xFFFFFFFF),
+        _integer("left_trigger", state.left_trigger, 0, 0xFFFF),
+        _integer("right_trigger", state.right_trigger, 0, 0xFFFF),
+        _integer("left_stick_x", state.left_stick_x, -0x8000, 0x7FFF),
+        _integer("left_stick_y", state.left_stick_y, -0x8000, 0x7FFF),
+        _integer("right_stick_x", state.right_stick_x, -0x8000, 0x7FFF),
+        _integer("right_stick_y", state.right_stick_y, -0x8000, 0x7FFF),
+    )
 
 
 class Gamepad:
     def __init__(self, transport: SerialTransport) -> None:
         self.transport = transport
 
-    def state(
+    def _route(self) -> DeviceRoute:
+        response = self.transport.send_api(
+            "km.device()", ApiOpcode.DEVICE, ApiVerb.GET, expect_response=True
+        )
+        if not isinstance(response, bytes):
+            raise MakxdResponseError("MAK_API device response is invalid")
+        return parse_device_route_mak_api(response)
+
+    def device(self) -> DeviceRoute:
+        return self._route()
+
+    def family(self) -> ControllerFamily:
+        return ControllerFamily(self._route().controller_family)
+
+    def protocol(self) -> ControllerProtocol:
+        return ControllerProtocol(self._route().controller_protocol)
+
+    def supports(self, control: ControllerControl | int) -> bool:
+        control_value = int(_control(control))
+        route = self._route()
+        mask = (
+            route.controller_supported_low
+            if control_value < 32
+            else route.controller_supported_high
+        )
+        return bool(mask & (1 << (control_value if control_value < 32 else control_value - 32)))
+
+    def control(
         self,
-        buttons: int,
-        hat: int,
-        lt: int,
-        rt: int,
-        x: int,
-        y: int,
-        rx: int,
-        ry: int,
-        z: int,
-        rz: int,
-        dt_uframes: int | None = None,
-    ) -> None:
-        values = ControllerState(
-            _integer("buttons", buttons, 0, 0xFFFFFFFF),
-            _integer("hat", hat, 0, 8),
-            _integer("lt", lt, 0, 0xFFFF),
-            _integer("rt", rt, 0, 0xFFFF),
-            _integer("x", x, -0x8000, 0x7FFF),
-            _integer("y", y, -0x8000, 0x7FFF),
-            _integer("rx", rx, -0x8000, 0x7FFF),
-            _integer("ry", ry, -0x8000, 0x7FFF),
-            _integer("z", z, -0x8000, 0x7FFF),
-            _integer("rz", rz, -0x8000, 0x7FFF),
-        )
-        command_values = (
-            values.buttons, values.hat, values.lt, values.rt, values.x,
-            values.y, values.rx, values.ry, values.z, values.rz,
-        )
+        control: ControllerControl | int,
+        value: int | None = None,
+        dt_uframes: int = 0,
+    ) -> int | None:
+        semantic = _control(control)
+        name = semantic.name.lower()
+        if value is None:
+            if dt_uframes != 0:
+                raise MakxdCommandError("DT is valid only for SET")
+            response = self.transport.send_api(
+                f"km.controller({name})",
+                ApiOpcode.CONTROLLER_CONTROL,
+                ApiVerb.GET,
+                bytes((semantic,)),
+            )
+            if isinstance(response, bytes):
+                if len(response) != 9 or response[0] != semantic:
+                    raise MakxdResponseError("invalid controller control response")
+                return int.from_bytes(response[1:5], "little", signed=True)
+            return int((response or "").strip())
+
+        checked = _control_value(semantic, value)
+        dt = _integer("dt_uframes", dt_uframes, 0, 0x3FFF)
+        generation = self._route().generation
         payload = (
-            _u32(values.buttons)
-            + bytes((values.hat,))
-            + _u16(values.lt)
-            + _u16(values.rt)
-            + _i16(values.x)
-            + _i16(values.y)
-            + _i16(values.rx)
-            + _i16(values.ry)
-            + _i16(values.z)
-            + _i16(values.rz)
-            + _dt_bytes(dt_uframes)
+            bytes((semantic,))
+            + checked.to_bytes(4, "little", signed=True)
+            + dt.to_bytes(2, "little")
+            + generation.to_bytes(4, "little")
         )
+        km = f"km.controller({name},{checked}" + (f",{dt}" if dt else "") + ")"
+        self.transport.send_api(km, ApiOpcode.CONTROLLER_CONTROL, ApiVerb.SET, payload)
+        return None
+
+    def mask(
+        self,
+        control: ControllerControl | int,
+        mode: ControllerMaskMode | int,
+    ) -> None:
+        semantic = _control(control)
+        try:
+            mask_mode = ControllerMaskMode(int(mode))
+        except (TypeError, ValueError) as error:
+            raise MakxdCommandError("invalid controller mask mode") from error
+        generation = self._route().generation
+        payload = bytes((semantic, mask_mode)) + generation.to_bytes(4, "little")
         self.transport.send_api(
-            "km.controller(" + ",".join(map(str, command_values))
-            + _dt_argument(dt_uframes) + ")",
-            ApiOpcode.CONTROLLER_STATE,
+            f"km.controller_mask({semantic.name.lower()},{int(mask_mode)})",
+            ApiOpcode.CONTROLLER_MASK,
             ApiVerb.SET,
             payload,
         )
 
-    def button(
+    def state(
         self,
-        button: ControllerButton | int,
-        pressed: bool | int | None = None,
-        dt_uframes: int | None = None,
-    ) -> bool | None:
-        button_value = _integer("button", int(button), 1, 32)
-        command = f"controller_button{button_value}"
-        opcode = ApiOpcode(0x5F + button_value)
-        if pressed is None:
-            if dt_uframes is not None:
-                raise MakxdCommandError("DT is valid only when setting a button")
+        value: ControllerState | None = None,
+        dt_uframes: int = 0,
+    ) -> ControllerState | None:
+        if value is None:
+            if dt_uframes != 0:
+                raise MakxdCommandError("DT is valid only for SET")
             response = self.transport.send_api(
-                f"km.{command}()",
-                opcode,
+                "km.controller_state()",
+                ApiOpcode.CONTROLLER_STATE,
                 ApiVerb.GET,
-                b"",
             )
             if isinstance(response, bytes):
-                return response == b"\x01"
-            return bool(response and response.strip() == "1")
-        pressed_value = _enabled("pressed", pressed)
-        self.transport.send_api(
-            f"km.{command}({pressed_value}{_dt_argument(dt_uframes)})",
-            opcode,
-            ApiVerb.SET,
-            bytes((pressed_value,)) + _dt_bytes(dt_uframes),
+                if len(response) != 24:
+                    raise MakxdResponseError("invalid controller state response")
+                return ControllerState(
+                    int.from_bytes(response[0:4], "little"),
+                    int.from_bytes(response[4:8], "little"),
+                    int.from_bytes(response[8:10], "little"),
+                    int.from_bytes(response[10:12], "little"),
+                    int.from_bytes(response[12:14], "little", signed=True),
+                    int.from_bytes(response[14:16], "little", signed=True),
+                    int.from_bytes(response[16:18], "little", signed=True),
+                    int.from_bytes(response[18:20], "little", signed=True),
+                )
+            parts = [int(part) for part in (response or "").split(",")]
+            if len(parts) != 8:
+                raise MakxdResponseError("invalid km.controller_state() response")
+            return ControllerState(*parts)
+
+        state = _state_validate(value)
+        dt = _integer("dt_uframes", dt_uframes, 0, 0x3FFF)
+        generation = self._route().generation
+        fields = (
+            state.digital_low,
+            state.digital_high,
+            state.left_trigger,
+            state.right_trigger,
+            state.left_stick_x,
+            state.left_stick_y,
+            state.right_stick_x,
+            state.right_stick_y,
         )
+        payload = (
+            state.digital_low.to_bytes(4, "little")
+            + state.digital_high.to_bytes(4, "little")
+            + state.left_trigger.to_bytes(2, "little")
+            + state.right_trigger.to_bytes(2, "little")
+            + state.left_stick_x.to_bytes(2, "little", signed=True)
+            + state.left_stick_y.to_bytes(2, "little", signed=True)
+            + state.right_stick_x.to_bytes(2, "little", signed=True)
+            + state.right_stick_y.to_bytes(2, "little", signed=True)
+            + dt.to_bytes(2, "little")
+            + generation.to_bytes(4, "little")
+        )
+        km = "km.controller_state(" + ",".join(str(field) for field in fields + (dt,)) + ")"
+        self.transport.send_api(km, ApiOpcode.CONTROLLER_STATE, ApiVerb.SET, payload)
         return None
 
-    def hat_left(
-        self, pressed: bool | int | None = None,
-        dt_uframes: int | None = None,
-    ) -> bool | None:
-        return self._hat_direction(
-            "left", ApiOpcode.CONTROLLER_HAT_LEFT, pressed, dt_uframes
-        )
 
-    def hat_right(
-        self, pressed: bool | int | None = None,
-        dt_uframes: int | None = None,
-    ) -> bool | None:
-        return self._hat_direction(
-            "right", ApiOpcode.CONTROLLER_HAT_RIGHT, pressed, dt_uframes
-        )
-
-    def hat_down(
-        self, pressed: bool | int | None = None,
-        dt_uframes: int | None = None,
-    ) -> bool | None:
-        return self._hat_direction(
-            "down", ApiOpcode.CONTROLLER_HAT_DOWN, pressed, dt_uframes
-        )
-
-    def hat_up(
-        self, pressed: bool | int | None = None,
-        dt_uframes: int | None = None,
-    ) -> bool | None:
-        return self._hat_direction(
-            "up", ApiOpcode.CONTROLLER_HAT_UP, pressed, dt_uframes
-        )
-
-    def left_trigger(self, value: int, dt_uframes: int | None = None) -> None:
-        self._single(
-            "controller_lt", ApiOpcode.CONTROLLER_LT,
-            "lt", value, 0, 0xFFFF, 2, dt_uframes
-        )
-
-    def right_trigger(self, value: int, dt_uframes: int | None = None) -> None:
-        self._single(
-            "controller_rt", ApiOpcode.CONTROLLER_RT,
-            "rt", value, 0, 0xFFFF, 2, dt_uframes
-        )
-
-    def left_stick(
-        self, x: int, y: int, dt_uframes: int | None = None
-    ) -> None:
-        self._axis_pair(
-            "controller_left_stick", ApiOpcode.CONTROLLER_LEFT_STICK,
-            "x", x, "y", y, dt_uframes
-        )
-
-    def right_stick(
-        self, rx: int, ry: int, dt_uframes: int | None = None
-    ) -> None:
-        self._axis_pair(
-            "controller_right_stick", ApiOpcode.CONTROLLER_RIGHT_STICK,
-            "rx", rx, "ry", ry, dt_uframes
-        )
-
-    def aux(self, z: int, rz: int, dt_uframes: int | None = None) -> None:
-        self._axis_pair(
-            "controller_aux", ApiOpcode.CONTROLLER_AUX,
-            "z", z, "rz", rz, dt_uframes
-        )
-
-    def button_mask(
-        self,
-        button: ControllerButton | int,
-        enabled: bool | int,
-    ) -> None:
-        button_value = _integer("button", int(button), 1, 32)
-        enabled_value = _enabled("enabled", enabled)
-        opcode = ApiOpcode(0x7F + button_value)
-        self.transport.send_api(
-            f"km.controller_button{button_value}_mask({enabled_value})",
-            opcode,
-            ApiVerb.SET,
-            bytes((enabled_value,)),
-        )
-
-    def hat_left_mask(self, enabled: bool | int) -> None:
-        self._mask_single(
-            "controller_hat_left_mask", ApiOpcode.CONTROLLER_HAT_LEFT_MASK,
-            "hat left", enabled
-        )
-
-    def hat_right_mask(self, enabled: bool | int) -> None:
-        self._mask_single(
-            "controller_hat_right_mask", ApiOpcode.CONTROLLER_HAT_RIGHT_MASK,
-            "hat right", enabled
-        )
-
-    def hat_down_mask(self, enabled: bool | int) -> None:
-        self._mask_single(
-            "controller_hat_down_mask", ApiOpcode.CONTROLLER_HAT_DOWN_MASK,
-            "hat down", enabled
-        )
-
-    def hat_up_mask(self, enabled: bool | int) -> None:
-        self._mask_single(
-            "controller_hat_up_mask", ApiOpcode.CONTROLLER_HAT_UP_MASK,
-            "hat up", enabled
-        )
-
-    def left_trigger_mask(self, enabled: bool | int) -> None:
-        self._mask_single(
-            "controller_lt_mask", ApiOpcode.CONTROLLER_LT_MASK,
-            "lt", enabled
-        )
-
-    def right_trigger_mask(self, enabled: bool | int) -> None:
-        self._mask_single(
-            "controller_rt_mask", ApiOpcode.CONTROLLER_RT_MASK,
-            "rt", enabled
-        )
-
-    def left_stick_mask(
-        self,
-        left: bool | int,
-        right: bool | int,
-        down: bool | int,
-        up: bool | int,
-    ) -> None:
-        self._mask_directions(
-            "controller_left_stick_mask",
-            ApiOpcode.CONTROLLER_LEFT_STICK_MASK,
-            ("left", left, "right", right, "down", down, "up", up),
-        )
-
-    def right_stick_mask(
-        self,
-        left: bool | int,
-        right: bool | int,
-        down: bool | int,
-        up: bool | int,
-    ) -> None:
-        self._mask_directions(
-            "controller_right_stick_mask",
-            ApiOpcode.CONTROLLER_RIGHT_STICK_MASK,
-            ("left", left, "right", right, "down", down, "up", up),
-        )
-
-    def aux_mask(
-        self,
-        z_negative: bool | int,
-        z_positive: bool | int,
-        rz_negative: bool | int,
-        rz_positive: bool | int,
-    ) -> None:
-        self._mask_directions(
-            "controller_aux_mask",
-            ApiOpcode.CONTROLLER_AUX_MASK,
-            (
-                "z negative", z_negative, "z positive", z_positive,
-                "rz negative", rz_negative, "rz positive", rz_positive,
-            ),
-        )
-
-    def _hat_direction(
-        self,
-        name: str,
-        opcode: ApiOpcode,
-        pressed: bool | int | None,
-        dt_uframes: int | None,
-    ) -> bool | None:
-        command = f"controller_hat_{name}"
-        if pressed is None:
-            if dt_uframes is not None:
-                raise MakxdCommandError("DT is valid only when setting the hat")
-            response = self.transport.send_api(
-                f"km.{command}()", opcode, ApiVerb.GET
-            )
-            if isinstance(response, bytes):
-                return response == b"\x01"
-            return bool(response and response.strip() == "1")
-        pressed_value = _enabled(name, pressed)
-        self.transport.send_api(
-            f"km.{command}({pressed_value}{_dt_argument(dt_uframes)})",
-            opcode,
-            ApiVerb.SET,
-            bytes((pressed_value,)) + _dt_bytes(dt_uframes),
-        )
-        return None
-
-    def _single(
-        self,
-        command: str,
-        opcode: ApiOpcode,
-        name: str,
-        value: int,
-        minimum: int,
-        maximum: int,
-        width: int,
-        dt_uframes: int | None,
-    ) -> None:
-        value = _integer(name, value, minimum, maximum)
-        self.transport.send_api(
-            f"km.{command}({value}{_dt_argument(dt_uframes)})",
-            opcode,
-            ApiVerb.SET,
-            value.to_bytes(width, "little") + _dt_bytes(dt_uframes),
-        )
-
-    def _axis_pair(
-        self,
-        command: str,
-        opcode: ApiOpcode,
-        first_name: str,
-        first: int,
-        second_name: str,
-        second: int,
-        dt_uframes: int | None,
-    ) -> None:
-        first = _integer(first_name, first, -0x8000, 0x7FFF)
-        second = _integer(second_name, second, -0x8000, 0x7FFF)
-        self.transport.send_api(
-            f"km.{command}({first},{second}{_dt_argument(dt_uframes)})",
-            opcode,
-            ApiVerb.SET,
-            _i16(first) + _i16(second) + _dt_bytes(dt_uframes),
-        )
-
-    def _mask_single(
-        self,
-        command: str,
-        opcode: ApiOpcode,
-        name: str,
-        enabled: bool | int,
-    ) -> None:
-        enabled_value = _enabled(name, enabled)
-        self.transport.send_api(
-            f"km.{command}({enabled_value})",
-            opcode,
-            ApiVerb.SET,
-            bytes((enabled_value,)),
-        )
-
-    def _mask_directions(
-        self,
-        command: str,
-        opcode: ApiOpcode,
-        values: tuple[
-            str, bool | int, str, bool | int,
-            str, bool | int, str, bool | int,
-        ],
-    ) -> None:
-        enabled_values = (
-            _enabled(values[0], values[1]),
-            _enabled(values[2], values[3]),
-            _enabled(values[4], values[5]),
-            _enabled(values[6], values[7]),
-        )
-        self.transport.send_api(
-            f"km.{command}(" + ",".join(map(str, enabled_values))
-            + ")",
-            opcode,
-            ApiVerb.SET,
-            bytes(enabled_values),
-        )
-
-
-__all__ = ["ControllerButton", "ControllerState", "Gamepad"]
+__all__ = [
+    "ControllerControl",
+    "ControllerFamily",
+    "ControllerMaskMode",
+    "ControllerProtocol",
+    "ControllerState",
+    "Gamepad",
+]

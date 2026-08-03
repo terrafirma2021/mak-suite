@@ -3,7 +3,12 @@ import pytest
 from makxd.enums import MouseButton
 from makxd.errors import MakxdCommandError
 from makxd.keyboard import Keyboard
-from makxd.gamepad import ControllerButton, Gamepad
+from makxd.gamepad import (
+    ControllerControl,
+    ControllerMaskMode,
+    ControllerState,
+    Gamepad,
+)
 from makxd.mouse import Mouse
 from makxd.protocol import ApiOpcode, ApiProtocol, ApiVerb
 from makxd.stream import (
@@ -20,7 +25,7 @@ class CommandTransport:
     def __init__(self) -> None:
         self.commands: list[str] = []
         self.api_calls: list[tuple[ApiOpcode, ApiVerb, bytes]] = []
-        self.api_protocol = ApiProtocol.KM
+        self.api_protocol = ApiProtocol.MAK_API
 
     def send_command(self, command: str, **_kwargs):
         self.commands.append(command)
@@ -29,8 +34,13 @@ class CommandTransport:
     def send_api(
         self, km_command: str, _opcode, _verb, _payload=b"", **kwargs
     ):
+        if _opcode == ApiOpcode.DEVICE:
+            return (
+                b"\x04\x00\x00\x00\x00\x08\x00\x11\x00\x00\x00"
+                b"\x05\x02\x00\xFF\xFF\xFF\xFF\xFF\xFF\x7F\x00"
+            )
         self.api_calls.append((_opcode, _verb, _payload))
-        return self.send_command(km_command, **kwargs)
+        return b""
 
 
 def test_mouse_single_and_explicit_dt_commands() -> None:
@@ -42,11 +52,11 @@ def test_mouse_single_and_explicit_dt_commands() -> None:
     mouse.move(12, -7, 16383)
     mouse.scroll(-2, 9)
 
-    assert transport.commands == [
-        "km.left(1)",
-        "km.left(0,0)",
-        "km.move(12,-7,16383)",
-        "km.wheel(-2,9)",
+    assert transport.api_calls == [
+        (ApiOpcode.LEFT, ApiVerb.SET, b"\x01"),
+        (ApiOpcode.LEFT, ApiVerb.SET, b"\x00\x00\x00"),
+        (ApiOpcode.MOVE, ApiVerb.EXEC, b"\x0c\x00\xf9\xff\xff\x3f"),
+        (ApiOpcode.WHEEL, ApiVerb.EXEC, b"\xfe\xff\x09\x00"),
     ]
 
 
@@ -59,11 +69,11 @@ def test_keyboard_single_and_explicit_dt_commands() -> None:
     keyboard.init()
     keyboard.init(16383)
 
-    assert transport.commands == [
-        "km.down(4)",
-        "km.up(4,0)",
-        "km.init()",
-        "km.init(16383)",
+    assert transport.api_calls == [
+        (ApiOpcode.KEY_DOWN, ApiVerb.EXEC, b"\x04"),
+        (ApiOpcode.KEY_UP, ApiVerb.EXEC, b"\x04\x00\x00"),
+        (ApiOpcode.KEY_INIT, ApiVerb.EXEC, b""),
+        (ApiOpcode.KEY_INIT, ApiVerb.EXEC, b"\xff\x3f"),
     ]
 
 
@@ -79,15 +89,6 @@ def test_mouse_immediate_mask_commands_and_binary_payloads() -> None:
     mouse.move_mask(True, False, True, False)
     mouse.wheel_mask(True, False)
 
-    assert transport.commands == [
-        "km.left_mask(1)",
-        "km.right_mask(0)",
-        "km.middle_mask(1)",
-        "km.side1_mask(0)",
-        "km.side2_mask(1)",
-        "km.move_mask(1,0,1,0)",
-        "km.wheel_mask(1,0)",
-    ]
     assert transport.api_calls == [
         (ApiOpcode.LEFT_MASK, ApiVerb.SET, b"\x01"),
         (ApiOpcode.RIGHT_MASK, ApiVerb.SET, b"\x00"),
@@ -103,21 +104,22 @@ def test_controller_full_single_and_immediate_mask_commands() -> None:
     transport = CommandTransport()
     gamepad = Gamepad(transport)
 
-    gamepad.state(3, 8, 10, 20, -1, 2, -3, 4, -5, 6)
-    gamepad.button(ControllerButton.BUTTON7, True, 0)
-    gamepad.left_stick(-8, 9, 16383)
-    gamepad.button_mask(ControllerButton.BUTTON32, True)
-    gamepad.hat_up_mask(True)
-    gamepad.right_stick_mask(True, False, True, False)
+    gamepad.state(ControllerState(3, 0, 10, 20, -1, 2, -3, 4))
+    gamepad.control(ControllerControl.SOUTH, 1)
+    gamepad.control(ControllerControl.LEFT_STICK_X, -8, 16383)
+    gamepad.mask(ControllerControl.EXTRA_32, ControllerMaskMode.COMPLETE)
+    gamepad.mask(ControllerControl.DPAD_UP, ControllerMaskMode.COMPLETE)
+    gamepad.mask(ControllerControl.RIGHT_STICK_X, ControllerMaskMode.BOTH)
 
-    assert transport.commands == [
-        "km.controller(3,8,10,20,-1,2,-3,4,-5,6)",
-        "km.controller_button7(1,0)",
-        "km.controller_left_stick(-8,9,16383)",
-        "km.controller_button32_mask(1)",
-        "km.controller_hat_up_mask(1)",
-        "km.controller_right_stick_mask(1,0,1,0)",
+    assert [call[:2] for call in transport.api_calls] == [
+        (ApiOpcode.CONTROLLER_STATE, ApiVerb.SET),
+        (ApiOpcode.CONTROLLER_CONTROL, ApiVerb.SET),
+        (ApiOpcode.CONTROLLER_CONTROL, ApiVerb.SET),
+        (ApiOpcode.CONTROLLER_MASK, ApiVerb.SET),
+        (ApiOpcode.CONTROLLER_MASK, ApiVerb.SET),
+        (ApiOpcode.CONTROLLER_MASK, ApiVerb.SET),
     ]
+    assert all(call[2][-4:] == b"\x11\x00\x00\x00" for call in transport.api_calls)
 
 
 def test_controller_stream_decode_canonical_tuple() -> None:
@@ -141,6 +143,6 @@ def test_dt_range_is_rejected(dt_uframes) -> None:
 
     gamepad = Gamepad(transport)
     with pytest.raises(MakxdCommandError):
-        gamepad.hat_up(True, dt_uframes)
+        gamepad.control(ControllerControl.DPAD_UP, 1, dt_uframes)
 
     assert transport.commands == []

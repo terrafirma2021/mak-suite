@@ -122,6 +122,31 @@ device.move(100, 50)
 device.move(100, 50, dt_uframes=250)
 ```
 
+Typed methods require `MAK_API` and never fall back to KM. Select
+`ApiProtocol.KM` only for explicit legacy/raw ASCII calls.
+
+## Semantic controller API
+
+```python
+from makxd import ControllerControl, ControllerMaskMode, ControllerState
+
+route = device.device()
+if route.controller:
+    device.gamepad.control(ControllerControl.SOUTH, 1)
+    device.gamepad.control(ControllerControl.LEFT_STICK_X, -12000, 250)
+    device.gamepad.mask(ControllerControl.DPAD_UP, ControllerMaskMode.COMPLETE)
+    device.gamepad.state(ControllerState(
+        digital_low=1,
+        left_trigger=32768,
+        left_stick_x=-12000,
+    ), 250)
+```
+
+The stable controls are South/East/West/North, D-pad directions, shoulders,
+triggers, stick axes and buttons, Select, Start, Mode, grips, and Extra 1..32.
+Under `MAK_API`, the route also contains controller family, protocol, layout,
+capability words, and generation. KM is not a backend for typed methods.
+
 Baud discovery still uses `km.version()`. When encryption is enabled, that
 probe is encrypted and requires the matching authenticated `km.MAKXD`
 response; it never falls back to plaintext.

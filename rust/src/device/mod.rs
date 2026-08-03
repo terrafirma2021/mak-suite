@@ -100,7 +100,7 @@ impl Default for DeviceConfig {
             fire_and_forget: false,
             encryption_enabled: false,
             encryption_key: None,
-            api_protocol: ApiProtocol::Km,
+            api_protocol: ApiProtocol::MakApi,
         }
     }
 }
@@ -350,53 +350,48 @@ impl Device {
 
     pub(crate) fn exec_api(
         &self,
-        km_command: &[u8],
+        _km_command: &[u8],
         opcode: ApiOpcode,
         verb: ApiVerb,
         payload: &[u8],
     ) -> Result<()> {
-        match self.config.api_protocol {
-            ApiProtocol::Km => self.exec(km_command),
-            ApiProtocol::MakApi => {
-                if verb == ApiVerb::Set {
-                    self.transport.send_mak_api_no_response(
-                        opcode,
-                        verb,
-                        payload,
-                        self.config.command_timeout,
-                    )?;
-                } else {
-                    self.transport.send_mak_api(
-                        opcode,
-                        verb,
-                        payload,
-                        self.config.command_timeout,
-                    )?;
-                }
-                Ok(())
-            }
+        if self.config.api_protocol != ApiProtocol::MakApi {
+            return Err(MakxdError::Protocol(
+                "typed SDK commands require MAK_API mode".into(),
+            ));
         }
+        if verb == ApiVerb::Set {
+            self.transport.send_mak_api_no_response(
+                opcode,
+                verb,
+                payload,
+                self.config.command_timeout,
+            )?;
+        } else {
+            self.transport.send_mak_api(
+                opcode,
+                verb,
+                payload,
+                self.config.command_timeout,
+            )?;
+        }
+        Ok(())
     }
 
     pub(crate) fn query_api(
         &self,
-        km_command: &[u8],
+        _km_command: &[u8],
         opcode: ApiOpcode,
         verb: ApiVerb,
         payload: &[u8],
     ) -> Result<Vec<u8>> {
-        match self.config.api_protocol {
-            ApiProtocol::Km => Ok(self.query(km_command)?.into_bytes()),
-            ApiProtocol::MakApi => {
-                self.transport
-                    .send_mak_api(
-                        opcode,
-                        verb,
-                        payload,
-                        self.config.command_timeout,
-                    )
-            }
+        if self.config.api_protocol != ApiProtocol::MakApi {
+            return Err(MakxdError::Protocol(
+                "typed SDK commands require MAK_API mode".into(),
+            ));
         }
+        self.transport
+            .send_mak_api(opcode, verb, payload, self.config.command_timeout)
     }
 
     fn require_km(&self) -> Result<()> {
@@ -662,58 +657,53 @@ impl AsyncDevice {
 
     pub(crate) async fn exec_api(
         &self,
-        km_command: &[u8],
+        _km_command: &[u8],
         opcode: ApiOpcode,
         verb: ApiVerb,
         payload: &[u8],
     ) -> Result<()> {
-        match self.config.api_protocol {
-            ApiProtocol::Km => self.exec(km_command).await,
-            ApiProtocol::MakApi => {
-                if verb == ApiVerb::Set {
-                    self.transport
-                        .send_mak_api_no_response_async(
-                            opcode,
-                            verb,
-                            payload,
-                            self.config.command_timeout,
-                        )
-                        .await?;
-                } else {
-                    self.transport
-                        .send_mak_api_async(
-                            opcode,
-                            verb,
-                            payload,
-                            self.config.command_timeout,
-                        )
-                        .await?;
-                }
-                Ok(())
-            }
+        if self.config.api_protocol != ApiProtocol::MakApi {
+            return Err(MakxdError::Protocol(
+                "typed SDK commands require MAK_API mode".into(),
+            ));
         }
+        if verb == ApiVerb::Set {
+            self.transport
+                .send_mak_api_no_response_async(
+                    opcode,
+                    verb,
+                    payload,
+                    self.config.command_timeout,
+                )
+                .await?;
+        } else {
+            self.transport
+                .send_mak_api_async(
+                    opcode,
+                    verb,
+                    payload,
+                    self.config.command_timeout,
+                )
+                .await?;
+        }
+        Ok(())
     }
 
     pub(crate) async fn query_api(
         &self,
-        km_command: &[u8],
+        _km_command: &[u8],
         opcode: ApiOpcode,
         verb: ApiVerb,
         payload: &[u8],
     ) -> Result<Vec<u8>> {
-        match self.config.api_protocol {
-            ApiProtocol::Km => Ok(self.query(km_command).await?.into_bytes()),
-            ApiProtocol::MakApi => {
-                self.transport
-                    .send_mak_api_async(
-                        opcode,
-                        verb,
-                        payload,
-                        self.config.command_timeout,
-                    )
-                    .await
-            }
+        if self.config.api_protocol != ApiProtocol::MakApi {
+            return Err(MakxdError::Protocol(
+                "typed SDK commands require MAK_API mode".into(),
+            ));
         }
+        self.transport
+            .send_mak_api_async(opcode, verb, payload, self.config.command_timeout)
+            .await
     }
 
     fn require_km(&self) -> Result<()> {
