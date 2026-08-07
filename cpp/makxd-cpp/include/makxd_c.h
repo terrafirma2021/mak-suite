@@ -248,6 +248,8 @@ MAKXD_C_API makxd_connection_status_t makxd_get_status(makxd_device_t* device);
 MAKXD_C_API makxd_error_t makxd_get_device_info(makxd_device_t* device, makxd_device_info_t* info);
 MAKXD_C_API makxd_error_t makxd_get_device_kinds(
     makxd_device_t* device, makxd_device_kinds_t* kinds);
+MAKXD_C_API makxd_error_t makxd_firmware_version(
+    makxd_device_t* device, uint32_t* version);
 
 // Mouse button control
 MAKXD_C_API makxd_error_t makxd_mouse_down(makxd_device_t* device, makxd_mouse_button_t button);

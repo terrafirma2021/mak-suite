@@ -17,6 +17,7 @@ namespace makxd {
 
     enum class ApiOpcode : uint8_t {
         DEVICE = 0x02,
+        FIRMWARE_VERSION = 0x04,
         BUTTONS = 0x10,
         LEFT = 0x11,
         RIGHT = 0x12,

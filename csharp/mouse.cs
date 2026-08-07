@@ -624,6 +624,21 @@ namespace Mouse
             return connectedKinds.Value;
         }
 
+        public static uint firmware_version()
+        {
+            if (!connected)
+                throw new InvalidOperationException("Device is not connected");
+            byte[] response = WriteMakApiInternal(
+                0x04, true, Array.Empty<byte>());
+            if (response.Length != 4)
+                throw new InvalidDataException(
+                    "MAK_API firmware version response length is invalid");
+            return (uint)(response[0] |
+                (response[1] << 8) |
+                (response[2] << 16) |
+                (response[3] << 24));
+        }
+
         private static DeviceKinds ReadDeviceKinds()
         {
             DeviceKind kinds;

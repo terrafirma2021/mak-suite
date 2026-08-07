@@ -15,6 +15,7 @@ device.keyboardPress(std::string{"A"});
 device.controllerControl(makxd::ControllerControl::SOUTH, 1);
 device.controllerControl(makxd::ControllerControl::SOUTH, 0, 250);
 auto kinds = device.device();
+auto firmwareVersion = device.firmwareVersion();
 if (kinds && kinds->has(makxd::DeviceKind::XBOX_GIP)) {
     // Xbox GIP route
 }
@@ -31,6 +32,8 @@ makxd_keyboard_up(device, 0x04);
 makxd_controller_control(device, MAKXD_CONTROLLER_SOUTH, 1);
 makxd_device_kinds_t kinds;
 makxd_get_device_kinds(device, &kinds);
+uint32_t firmware_version;
+makxd_firmware_version(device, &firmware_version);
 bool xbox_gip = (kinds.kinds & MAKXD_DEVICE_XBOX_GIP) != 0;
 makxd_device_destroy(device);
 ```

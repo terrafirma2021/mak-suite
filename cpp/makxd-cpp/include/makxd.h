@@ -229,6 +229,7 @@ namespace makxd {
         // Device info
         [[nodiscard]] DeviceInfo getDeviceInfo() const;
         [[nodiscard]] std::expected<DeviceKinds, ConnectionStatus> device() const;
+        [[nodiscard]] std::expected<uint32_t, ConnectionStatus> firmwareVersion() const;
 
         // Mouse button control; success requires Makxd's echoed command.
         [[nodiscard]] bool mouseDown(MouseButton button);

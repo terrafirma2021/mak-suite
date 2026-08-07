@@ -14,6 +14,7 @@ Supported connection methods are:
 
 On connection, the SDK reads `DEVICE` once and caches the exact active
 mouse, keyboard, and controller kinds. Typed calls use that cached result.
+`FIRMWARE_VERSION` reads the installed application firmware version.
 
 Controller calls use the same semantic controls in every language: `SOUTH`,
 `EAST`, `WEST`, `NORTH`, D-pad, shoulder, trigger, stick, system, grip, and
@@ -22,6 +23,9 @@ Controller calls use the same semantic controls in every language: `SOUTH`,
 The complete wire contract, opcode table, payload layouts, values, examples,
 and events are defined in
 [`protocol/MAK_API.md`](protocol/MAK_API.md).
+
+The complete legacy ASCII `km.*` command contract is defined in
+[`protocol/KM_API.md`](protocol/KM_API.md).
 
 | SDK | Directory |
 | --- | --- |

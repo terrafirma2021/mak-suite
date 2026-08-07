@@ -46,6 +46,9 @@ before each call.
 | Operation | Command | Value | Payload | Returned data |
 | --- | --- | ---: | --- | --- |
 | GET | `DEVICE` | `0x02` | empty | `kinds:u8` |
+| GET | `FIRMWARE_VERSION` | `0x04` | empty | `version:u32` |
+
+`FIRMWARE_VERSION` returns the installed application firmware version.
 
 `kinds` is a bitmask. Multiple device kinds are ORed together.
 It reports the active routed kinds, including saved mouse/keyboard injection
@@ -162,7 +165,8 @@ right_stick_y:i16
 
 Digital bit N is control ID N. Mask modes are `DISABLED=0`, `COMPLETE=1`,
 `NEGATIVE=2`, `POSITIVE=3`, and `BOTH=4`. Digital and trigger controls accept
-disabled or complete. Axes accept all five modes.
+disabled or complete. Axes accept disabled, negative, positive, or both;
+complete is not valid for an axis.
 
 | Operation | Command | Value | Payload | Returned data |
 | --- | --- | ---: | --- | --- |
@@ -172,19 +176,19 @@ disabled or complete. Axes accept all five modes.
 | SET | `CONTROLLER_CONTROL` | `0x41` | `control:u8 value:i32 dt:u16` | none |
 | SET | `CONTROLLER_MASK` | `0x51` | `control:u8 mode:u8` | none |
 
-The firmware rejects unsupported controls, invalid values or modes, and
+MAKXD rejects unsupported controls, invalid values or modes, and
 `dt > 16383`. Controller injection requires a routed controller with a
 successfully parsed current report.
 
 ## SDK surface
 
-| SDK | Device kinds | Controller |
-| --- | --- | --- |
-| Python | `device.device()` | `device.gamepad.control/mask/state` |
-| Rust | `device()` | `controller_control[_dt]`, `controller_mask`, state methods |
-| C++ | `device()` | `controllerControl`, `controllerMask`, state methods |
-| C | `makxd_get_device_kinds` | `makxd_controller_*` |
-| C# | `device.device_kinds()` | `device.controller_*` |
+| SDK | Device kinds | Firmware version | Controller |
+| --- | --- | --- | --- |
+| Python | `device.device()` | `device.firmware_version()` | `device.gamepad.control/mask/state` |
+| Rust | `device()` | `firmware_version()` | `controller_control[_dt]`, `controller_mask`, state methods |
+| C++ | `device()` | `firmwareVersion()` | `controllerControl`, `controllerMask`, state methods |
+| C | `makxd_get_device_kinds` | `makxd_firmware_version` | `makxd_controller_*` |
+| C# | `device.device_kinds()` | `device.firmware_version()` | `device.controller_*` |
 
 ## Examples
 
@@ -196,6 +200,13 @@ response: DE AD 01 00 02 43
 ```
 
 `0x43` is mouse + keyboard + Xbox GIP.
+
+Read firmware version:
+
+```text
+request:  DE AD 00 00 04
+response: DE AD 04 00 04 01 00 00 00
+```
 
 Set `SOUTH=1` with `dt=250`:
 
@@ -216,10 +227,10 @@ response: DE AD 05 00 41 00 01 00 00 00
 changes emit `6B 6D 2E mask:u8`. Key changes emit
 `6B 6D 2E key:u8 state:u8`.
 
-## HPM KM compatibility
+## KM_API compatibility
 
-HPM also accepts lowercase ASCII KM commands. This compatibility parser is
-independent of the SDK command path.
+MAKXD also accepts lowercase ASCII KM commands. See [KM_API](KM_API.md) for
+the complete command, argument, response, event-stream, and failure contract.
 
 ```text
 km.version()
@@ -257,6 +268,6 @@ km.controller_mask(control,mode)
 km.controller_state([low,high,lt,rt,lx,ly,rx,ry,dt])
 ```
 
-Controller names are lowercase forms of the semantic names above. HPM KM
+Controller names are lowercase forms of the semantic names above. KM_API
 queries return through the `>>> ` prompt; successful mutations are silent
 unless KM echo is enabled.

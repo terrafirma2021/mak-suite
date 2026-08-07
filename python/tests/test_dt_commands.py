@@ -11,6 +11,7 @@ from makxd.gamepad import (
 )
 from makxd.mouse import Mouse
 from makxd.protocol import ApiOpcode, DeviceInfo, DeviceKind
+from makxd.controller import MakxdController
 from makxd.stream import (
     ControllerStreamState,
     StreamInputRecord,
@@ -36,6 +37,22 @@ class CommandTransport:
             (_opcode, _payload, kwargs.get("wait_response", True))
         )
         return b""
+
+
+def test_firmware_version_uses_mak_api_get() -> None:
+    transport = CommandTransport()
+
+    def firmware_version_response(opcode, payload=b"", *_args, **_kwargs):
+        transport.api_calls.append((opcode, payload, True))
+        return b"\x01\x00\x00\x00"
+
+    transport.send_mak_api = firmware_version_response
+    controller = MakxdController.__new__(MakxdController)
+    controller.transport = transport
+    controller._connected = True
+
+    assert controller.firmware_version() == 1
+    assert transport.api_calls == [(ApiOpcode.FIRMWARE_VERSION, b"", True)]
 
 
 def test_mouse_single_and_explicit_dt_commands() -> None:

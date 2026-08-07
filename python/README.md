@@ -14,6 +14,7 @@ device.keyboard_press("A")
 device.gamepad.control(ControllerControl.SOUTH, 1)
 device.gamepad.control(ControllerControl.SOUTH, 0, dt_uframes=250)
 info = device.device()
+print(device.firmware_version())
 if info.has(DeviceKind.XBOX_GIP):
     print("Xbox GIP")
 device.disconnect()

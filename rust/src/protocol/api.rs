@@ -5,6 +5,7 @@ use crate::types::{Button, KeyboardKey};
 #[repr(u8)]
 pub enum ApiOpcode {
     Device = 0x02,
+    FirmwareVersion = 0x04,
     Buttons = 0x10,
     Left = 0x11,
     Right = 0x12,
@@ -173,6 +174,14 @@ mod tests {
 
         let with_dt = mak_api_command(ApiOpcode::Move, &[1, 0, 2, 0, 0, 0]).unwrap();
         assert_eq!(with_dt, [0xde, 0xad, 6, 0, 0x18, 1, 0, 2, 0, 0, 0]);
+    }
+
+    #[test]
+    fn mak_api_firmware_version_get_has_exact_frame() {
+        assert_eq!(
+            mak_api_command(ApiOpcode::FirmwareVersion, &[]).unwrap(),
+            [0xde, 0xad, 0, 0, 0x04]
+        );
     }
 
     #[test]

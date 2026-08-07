@@ -7,9 +7,9 @@ from .keyboard import Keyboard, KeyboardKey
 from .gamepad import Gamepad
 from .connection import SerialTransport
 from .connection_config import ConnectionConfig
-from .errors import MakxdConnectionError
+from .errors import MakxdConnectionError, MakxdResponseError
 from .enums import MouseButton
-from .protocol import DeviceInfo
+from .protocol import ApiOpcode, DeviceInfo
 from functools import wraps
 
 def maybe_async(func):
@@ -225,6 +225,16 @@ class MakxdController:
     def device(self) -> DeviceInfo:
         self._check_connection()
         return self.transport.device_info()
+
+    @maybe_async
+    def firmware_version(self) -> int:
+        self._check_connection()
+        response = self.transport.send_mak_api(ApiOpcode.FIRMWARE_VERSION)
+        if len(response) != 4:
+            raise MakxdResponseError(
+                "Invalid MAK_API firmware version response length"
+            )
+        return int.from_bytes(response, "little")
 
     @maybe_async
     def get_button_mask(self) -> int:

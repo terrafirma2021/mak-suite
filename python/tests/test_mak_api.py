@@ -96,10 +96,15 @@ class UdpSocketCapture:
 
 def test_mak_api_serial_frame_is_command_and_payload() -> None:
     transport = SerialTransport()
+    firmware_frame, firmware_nonce = transport._wire_mak_api(
+        ApiOpcode.FIRMWARE_VERSION,
+    )
     frame, nonce = transport._wire_mak_api(
         ApiOpcode.MOVE,
         b"\x01\x00\xFF\xFF",
     )
+    assert firmware_nonce == b""
+    assert firmware_frame == b"\xDE\xAD\x00\x00\x04"
     assert nonce == b""
     assert frame == (
         b"\xDE\xAD\x04\x00\x18\x01\x00\xFF\xFF"

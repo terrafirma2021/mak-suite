@@ -17,6 +17,7 @@ fn main() -> Result<()> {
     device.controller_control(ControllerControl::South, 1)?;
     device.controller_control_dt(ControllerControl::South, 0, 250)?;
     let kinds = device.device()?;
+    println!("Firmware: {}", device.firmware_version()?);
     println!("Xbox GIP: {}", kinds.has(DeviceKind::XboxGip));
     Ok(())
 }

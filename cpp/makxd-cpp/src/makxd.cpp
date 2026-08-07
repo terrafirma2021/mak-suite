@@ -884,6 +884,21 @@ namespace makxd {
         return *m_impl->deviceKinds;
     }
 
+    std::expected<uint32_t, ConnectionStatus> Device::firmwareVersion() const {
+        const auto response = m_impl->executeApiQuery(ApiOpcode::FIRMWARE_VERSION);
+        if (!response || response->size() != 4u) {
+            return std::unexpected(
+                m_impl->connected.load(std::memory_order_acquire)
+                    ? ConnectionStatus::CONNECTION_ERROR
+                    : ConnectionStatus::DISCONNECTED);
+        }
+        const auto* bytes = reinterpret_cast<const uint8_t*>(response->data());
+        return static_cast<uint32_t>(bytes[0]) |
+            (static_cast<uint32_t>(bytes[1]) << 8u) |
+            (static_cast<uint32_t>(bytes[2]) << 16u) |
+            (static_cast<uint32_t>(bytes[3]) << 24u);
+    }
+
 
     // High-performance mouse control methods
     bool Device::mouseDown(MouseButton button) {

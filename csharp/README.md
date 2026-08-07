@@ -11,6 +11,7 @@ device.keyboard_press(new KeyboardKey("A"));
 device.controller_control(ControllerControl.South, 1);
 device.controller_control(ControllerControl.South, 0, 250);
 DeviceKinds kinds = device.device_kinds();
+uint firmwareVersion = device.firmware_version();
 bool xboxGip = kinds.Has(DeviceKind.XboxGip);
 device.disconnect();
 ```

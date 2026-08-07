@@ -349,6 +349,25 @@ makxd_error_t makxd_get_device_kinds(
     }
 }
 
+makxd_error_t makxd_firmware_version(
+    makxd_device_t* device, uint32_t* version) {
+    if (!device || !version) {
+        return MAKXD_ERROR_INVALID_PARAMETER;
+    }
+    try {
+        const auto result = device->cpp_device->firmwareVersion();
+        if (!result) {
+            return device->cpp_device->isConnected()
+                ? MAKXD_ERROR_COMMAND_FAILED
+                : MAKXD_ERROR_CONNECTION_FAILED;
+        }
+        *version = *result;
+        return MAKXD_SUCCESS;
+    } catch (...) {
+        return handle_exception();
+    }
+}
+
 // Mouse button control
 makxd_error_t makxd_mouse_down(makxd_device_t* device, makxd_mouse_button_t button) {
     if (!device) {
