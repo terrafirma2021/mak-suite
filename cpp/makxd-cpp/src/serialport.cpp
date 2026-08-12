@@ -15,6 +15,8 @@
 #include <utility>
 #include <limits>
 #include <random>
+#include <condition_variable>
+#include <map>
 
 #ifdef _WIN32
 #include <setupapi.h>
@@ -42,9 +44,31 @@
 
 namespace makxd {
 
+namespace {
+constexpr std::array<uint8_t, 4> kBleBatchRequestMagic{'M', 'B', 'A', 'T'};
+constexpr std::array<uint8_t, 4> kBleBatchResponseMagic{'M', 'B', 'A', 'R'};
+constexpr uint8_t kBleBatchVersion = 1u;
+constexpr size_t kBleBatchCommandMax = 64u;
+constexpr size_t kBleBatchWriteMax = 514u;
+constexpr size_t kBleBatchWriteMin = 77u;
+constexpr uint8_t kBleBatchPipelineMax = 5u;
+
+struct BleQueuedWrite {
+	std::vector<uint8_t> record;
+};
+}
+
 struct ConnectionIoState {
 	ConnectionConfig config{};
 	std::deque<std::array<uint8_t, 8>> rawTransactions;
+	std::mutex bleMutex;
+	std::condition_variable bleReady;
+	std::condition_variable bleCreditsReady;
+	std::deque<std::shared_ptr<BleQueuedWrite>> bleWrites;
+	std::map<uint16_t, std::vector<uint8_t>> bleBatchCommands;
+	uint16_t bleNextBatchId{1u};
+	uint8_t bleCredits{kBleBatchPipelineMax};
+	bool bleStopping{false};
 #ifdef _WIN32
 	SOCKET udpSocket{INVALID_SOCKET};
 	bool winsockStarted{false};
@@ -128,6 +152,18 @@ void SerialPort::close() {
 		// If on the listener thread, skip join — the jthread destructor
 		// will join after the listener loop exits via the stop token.
 	}
+	if (m_bleWriterThread.joinable()) {
+		{
+			std::lock_guard<std::mutex> bleLock(m_connectionIo->bleMutex);
+			m_connectionIo->bleStopping = true;
+		}
+		m_connectionIo->bleReady.notify_all();
+		m_connectionIo->bleCreditsReady.notify_all();
+		m_bleWriterThread.request_stop();
+		if (std::this_thread::get_id() != m_bleWriterThread.get_id()) {
+			m_bleWriterThread.join();
+		}
+	}
 
 	std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -195,8 +231,7 @@ bool SerialPort::open(const ConnectionConfig& connection) {
 		}
 #endif
 	} else if (connection.method == ConnectionMethod::BLE) {
-		if (connection.bleAddress.empty() ||
-			!connection.bleConnect ||
+		if (!connection.bleConnect ||
 			!connection.bleWrite || !connection.bleRead ||
 			!connection.aes128Key.empty()) {
 			return false;
@@ -292,6 +327,18 @@ bool SerialPort::open(const ConnectionConfig& connection) {
 		return false;
 	}
 
+	if (connection.method == ConnectionMethod::BLE) {
+		{
+			std::lock_guard<std::mutex> bleLock(m_connectionIo->bleMutex);
+			m_connectionIo->bleStopping = false;
+			m_connectionIo->bleCredits = kBleBatchPipelineMax;
+			m_connectionIo->bleWrites.clear();
+			m_connectionIo->bleBatchCommands.clear();
+		}
+		m_bleWriterThread = std::jthread([this](std::stop_token stopToken) {
+			bleWriterLoop(stopToken);
+		});
+	}
 	m_isOpen.store(true, std::memory_order_release);
 	m_listenerThread = std::jthread([this](std::stop_token stopToken) {
 		listenerLoop(stopToken);
@@ -469,6 +516,182 @@ bool SerialPort::sendMakApi(
 		encodedCommand.bytes.data(), encodedCommand.bytes.size(), false);
 	return bytesWritten == static_cast<ssize_t>(encodedCommand.bytes.size()) &&
 		platformFlush();
+}
+
+void SerialPort::bleWriterLoop(std::stop_token stopToken) {
+	for (;;) {
+		std::vector<std::shared_ptr<BleQueuedWrite>> queued;
+		{
+			std::unique_lock<std::mutex> lock(m_connectionIo->bleMutex);
+			m_connectionIo->bleReady.wait(lock, [&] {
+				return stopToken.stop_requested() ||
+					m_connectionIo->bleStopping ||
+					!m_connectionIo->bleWrites.empty();
+			});
+			if ((stopToken.stop_requested() || m_connectionIo->bleStopping) &&
+				m_connectionIo->bleWrites.empty()) {
+				return;
+			}
+			lock.unlock();
+			for (uint32_t pass = 0u; pass < 16u; pass++) {
+				std::this_thread::yield();
+			}
+			lock.lock();
+			while (!m_connectionIo->bleWrites.empty() &&
+				queued.size() < kBleBatchCommandMax) {
+				queued.push_back(m_connectionIo->bleWrites.front());
+				m_connectionIo->bleWrites.pop_front();
+			}
+		}
+
+		const size_t maximumWrite = (std::min)(
+			kBleBatchWriteMax,
+			m_connectionIo->config.bleMaximumWriteWithoutResponse);
+		size_t first = 0u;
+		while (first < queued.size()) {
+			size_t count = 0u;
+			size_t requestBytes = 9u;
+			while (first + count < queued.size() &&
+				count < kBleBatchCommandMax) {
+				const size_t bytes = queued[first + count]->record.size();
+				if (bytes == 0u || bytes > 64u ||
+					requestBytes + 1u + bytes > maximumWrite) {
+					break;
+				}
+				requestBytes += 1u + bytes;
+				count++;
+			}
+			if (count == 0u) {
+				first++;
+				continue;
+			}
+
+			bool success = false;
+			if (count == 1u || maximumWrite < kBleBatchWriteMin) {
+				success = m_connectionIo->config.bleWrite(
+					queued[first]->record);
+			} else {
+				uint16_t batchId = 0u;
+				{
+					std::unique_lock<std::mutex> lock(m_connectionIo->bleMutex);
+					m_connectionIo->bleCreditsReady.wait(lock, [&] {
+						return stopToken.stop_requested() ||
+							m_connectionIo->bleStopping ||
+							m_connectionIo->bleCredits != 0u;
+					});
+					if (stopToken.stop_requested() || m_connectionIo->bleStopping) {
+						return;
+					}
+					m_connectionIo->bleCredits--;
+					batchId = m_connectionIo->bleNextBatchId++;
+				}
+				std::vector<uint8_t> request;
+				request.reserve(requestBytes);
+				request.insert(request.end(),
+					kBleBatchRequestMagic.begin(), kBleBatchRequestMagic.end());
+				request.push_back(kBleBatchVersion);
+				request.push_back(0u);
+				request.push_back(static_cast<uint8_t>(batchId));
+				request.push_back(static_cast<uint8_t>(batchId >> 8u));
+				request.push_back(static_cast<uint8_t>(count));
+				std::vector<uint8_t> opcodes;
+				opcodes.reserve(count);
+				for (size_t index = 0u; index < count; index++) {
+					const auto& record = queued[first + index]->record;
+					request.push_back(static_cast<uint8_t>(record.size()));
+					request.insert(request.end(), record.begin(), record.end());
+					opcodes.push_back(record[0]);
+				}
+				{
+					std::lock_guard<std::mutex> lock(m_connectionIo->bleMutex);
+					m_connectionIo->bleBatchCommands.emplace(
+						batchId, std::move(opcodes));
+				}
+				success = m_connectionIo->config.bleWrite(request);
+				if (!success) {
+					{
+						std::lock_guard<std::mutex> lock(m_connectionIo->bleMutex);
+						m_connectionIo->bleBatchCommands.erase(batchId);
+						m_connectionIo->bleCredits++;
+						m_connectionIo->bleCreditsReady.notify_all();
+					}
+					success = true;
+					for (size_t index = 0u; index < count; index++) {
+						if (!m_connectionIo->config.bleWrite(
+								queued[first + index]->record)) {
+							success = false;
+							break;
+						}
+					}
+				}
+			}
+			if (!success) {
+				for (size_t index = 0u; index < count; index++) {
+					const std::array<uint8_t, 2> rejected{
+						queued[first + index]->record[0], 0xFFu};
+					processMakApiResponse(rejected);
+				}
+			}
+			first += count;
+		}
+	}
+}
+
+bool SerialPort::bleBatchResponseConsume(std::span<const uint8_t> packet) {
+	if (packet.size() < 4u || !std::equal(
+		kBleBatchResponseMagic.begin(), kBleBatchResponseMagic.end(),
+		packet.begin())) {
+		return false;
+	}
+	if (packet.size() < 11u || packet[4] != kBleBatchVersion) {
+		return true;
+	}
+	const uint16_t batchId = static_cast<uint16_t>(packet[6]) |
+		(static_cast<uint16_t>(packet[7]) << 8u);
+	std::vector<uint8_t> opcodes;
+	{
+		std::lock_guard<std::mutex> lock(m_connectionIo->bleMutex);
+		const auto found = m_connectionIo->bleBatchCommands.find(batchId);
+		if (found == m_connectionIo->bleBatchCommands.end()) {
+			return true;
+		}
+		opcodes = found->second;
+	}
+	const size_t first = packet[8];
+	const size_t count = packet[9];
+	if (packet[10] != opcodes.size() || first + count > opcodes.size()) {
+		return true;
+	}
+	size_t offset = 11u;
+	for (size_t index = 0u; index < count; index++) {
+		if (offset + 2u > packet.size()) {
+			return true;
+		}
+		const uint8_t status = packet[offset++];
+		const size_t responseBytes = packet[offset++];
+		if (offset + responseBytes > packet.size()) {
+			return true;
+		}
+		if (status == 0u && responseBytes != 0u) {
+			processMakApiResponse(packet.subspan(offset, responseBytes));
+		} else if (status == 2u) {
+			const std::array<uint8_t, 2> rejected{
+				opcodes[first + index], 0xFFu};
+			processMakApiResponse(rejected);
+		}
+		offset += responseBytes;
+	}
+	if ((packet[5] & 0x01u) != 0u) {
+		const uint8_t credits = static_cast<uint8_t>((packet[5] >> 1u) & 0x07u);
+		std::lock_guard<std::mutex> lock(m_connectionIo->bleMutex);
+		m_connectionIo->bleBatchCommands.erase(batchId);
+		if (credits != 0u) {
+			m_connectionIo->bleCredits = (std::min)(
+				credits, kBleBatchPipelineMax);
+			m_connectionIo->bleCreditsReady.notify_all();
+		}
+	}
+	return true;
 }
 
 void SerialPort::listenerLoop(std::stop_token stopToken) {
@@ -1182,6 +1405,27 @@ void SerialPort::platformUpdateTimeoutsUnlocked() {
 
 ssize_t SerialPort::platformWrite(
 	const void* data, size_t length, bool responseExpected) {
+	if (m_connectionIo->config.method == ConnectionMethod::BLE) {
+		if (data == nullptr || length == 0u) {
+			return -1;
+		}
+		const auto* input = static_cast<const uint8_t*>(data);
+		auto queued = std::make_shared<BleQueuedWrite>();
+		if (length >= 5u && input[0] == 0xDEu && input[1] == 0xADu) {
+			queued->record.assign(input + 4u, input + length);
+		} else {
+			queued->record.assign(input, input + length);
+		}
+		{
+			std::lock_guard<std::mutex> lock(m_connectionIo->bleMutex);
+			if (m_connectionIo->bleStopping) {
+				return -1;
+			}
+			m_connectionIo->bleWrites.push_back(queued);
+		}
+		m_connectionIo->bleReady.notify_one();
+		return static_cast<ssize_t>(length);
+	}
 	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 	if (m_connectionIo->config.method != ConnectionMethod::COM) {
 		if (data == nullptr || length == 0u) {
@@ -1221,9 +1465,6 @@ ssize_t SerialPort::platformWrite(
 				reinterpret_cast<const char*>(wire.data()),
 				static_cast<int>(wire.size()), 0) ==
 				static_cast<int>(wire.size());
-		} else {
-			success = wire.size() <= 64u &&
-				m_connectionIo->config.bleWrite(wire);
 		}
 		return success ? static_cast<ssize_t>(length) : -1;
 	}
@@ -1299,7 +1540,7 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 		if (buffer == nullptr || maxBytes == 0u) {
 			return -1;
 		}
-		std::array<uint8_t, 512> incoming{};
+		std::array<uint8_t, kBleBatchWriteMax> incoming{};
 		size_t incomingBytes = 0u;
 		if (m_connectionIo->config.method == ConnectionMethod::UDP) {
 			const int received = ::recv(
@@ -1312,7 +1553,11 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 			incomingBytes = static_cast<size_t>(received);
 		} else {
 			incomingBytes = m_connectionIo->config.bleRead(incoming);
-			if (incomingBytes == 0u || incomingBytes > 64u) {
+			if (incomingBytes == 0u || incomingBytes > kBleBatchWriteMax) {
+				return 0;
+			}
+			if (bleBatchResponseConsume(std::span<const uint8_t>(
+					incoming.data(), incomingBytes))) {
 				return 0;
 			}
 		}
@@ -1371,7 +1616,7 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 size_t SerialPort::platformBytesAvailable() const {
 	std::lock_guard<std::mutex> nativeLock(m_nativeHandleMutex);
 	if (m_connectionIo->config.method == ConnectionMethod::BLE) {
-		return 1u;
+		return kBleBatchWriteMax + 4u;
 	}
 	if (m_connectionIo->config.method == ConnectionMethod::UDP) {
 #ifdef _WIN32

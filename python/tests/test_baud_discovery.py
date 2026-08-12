@@ -102,9 +102,9 @@ def test_port_discovery_probes_each_candidate_until_makxd(monkeypatch):
 
 def test_baud_discovery_uses_device_learn_and_keeps_detected_port(monkeypatch):
     responses = {
-        115_200: b"\xDE\xAD\x01\x00\x02\xFF",
-        1_000_000: b"\xDE\xAD\x02\x00\x02\x01\x07",
-        4_000_000: b"\xDE\xAD\x02\x00\x02\x01\x07",
+        115_200: b"\xDE\xAD\x01\x00\x03\xFF",
+        1_000_000: b"\xDE\xAD\x01\x00\x02\x07",
+        4_000_000: b"\xDE\xAD\x01\x00\x02\x07",
     }
     opened = []
 
@@ -133,7 +133,7 @@ def test_baud_discovery_rejects_every_non_makxd_response(monkeypatch):
         candidate = ProbeSerial(
             port,
             baudrate,
-            b"\xDE\xAD\x01\x00\x02\xFF",
+            b"\xDE\xAD\x01\x00\x03\xFF",
             **kwargs,
         )
         opened.append(candidate)

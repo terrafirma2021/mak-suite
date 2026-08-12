@@ -40,3 +40,8 @@ makxd_device_destroy(device);
 
 Typed functions use `MAK_API`. The full command contract is in
 [`../protocol/MAK_API.md`](../protocol/MAK_API.md).
+
+Queued BLE calls are batched automatically. Existing C++ and C calls are
+unchanged; no batch size or batching option is exposed to applications.
+For callback-based BLE integrations, an empty address requests service-based
+discovery and the optional maximum-write value may report the negotiated size.

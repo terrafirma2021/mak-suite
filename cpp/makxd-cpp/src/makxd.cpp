@@ -53,7 +53,8 @@ namespace makxd {
         std::function<bool(std::string_view)> connect,
         std::function<bool(std::span<const uint8_t>)> write,
         std::function<size_t(std::span<uint8_t>)> read,
-        std::function<void()> close) {
+        std::function<void()> close,
+        size_t maximumWriteWithoutResponse) {
         ConnectionConfig config;
         config.method = ConnectionMethod::BLE;
         config.bleAddress = std::move(address);
@@ -61,6 +62,7 @@ namespace makxd {
         config.bleWrite = std::move(write);
         config.bleRead = std::move(read);
         config.bleClose = std::move(close);
+        config.bleMaximumWriteWithoutResponse = maximumWriteWithoutResponse;
         return config;
     }
 

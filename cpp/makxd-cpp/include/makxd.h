@@ -105,6 +105,7 @@ namespace makxd {
         std::function<bool(std::span<const uint8_t>)> bleWrite;
         std::function<size_t(std::span<uint8_t>)> bleRead;
         std::function<void()> bleClose;
+        size_t bleMaximumWriteWithoutResponse{514};
 
         [[nodiscard]] static ConnectionConfig com(
             std::string port = {},
@@ -122,7 +123,8 @@ namespace makxd {
             std::function<bool(std::string_view)> connect,
             std::function<bool(std::span<const uint8_t>)> write,
             std::function<size_t(std::span<uint8_t>)> read,
-            std::function<void()> close);
+            std::function<void()> close,
+            size_t maximumWriteWithoutResponse = 514);
     };
 
     // Simple structs

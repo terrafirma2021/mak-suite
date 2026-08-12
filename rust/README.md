@@ -25,3 +25,8 @@ fn main() -> Result<()> {
 
 Typed methods use `MAK_API`. The full command contract is in
 [`../protocol/MAK_API.md`](../protocol/MAK_API.md).
+
+Queued BLE calls are batched automatically. Existing sync and async methods
+are unchanged, and a lone call is sent without a batching delay.
+`ConnectionConfig::ble` may use an empty address to request service-based
+discovery from the supplied BLE adapter.

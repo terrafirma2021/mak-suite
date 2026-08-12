@@ -154,9 +154,11 @@ class SerialTransport:
         print(entry, flush=True)
 
     def _generate_command_id(self) -> int:
-        old_counter = self._command_counter
-        self._command_counter = (self._command_counter + 1) & 0x2710
-        return self._command_counter
+        for _ in range(10000):
+            self._command_counter = (self._command_counter % 10000) + 1
+            if self._command_counter not in self._pending_commands:
+                return self._command_counter
+        raise MakxdCommandError("No command IDs are available")
 
     def find_com_ports(self) -> list[str]:
         self._log("Starting COM port discovery")
@@ -403,6 +405,10 @@ class SerialTransport:
                     break
             except Exception as e:
                 self._log(f"Unexpected exception in listener: {e}", "ERROR")
+                if self.auto_reconnect:
+                    self._attempt_reconnect()
+                else:
+                    break
 
         self._log("Listener thread ending")
 
@@ -469,22 +475,20 @@ class SerialTransport:
                 for plaintext, transaction_nonce in frames:
                     if (
                         transaction_nonce == expected_nonce
-                        and len(plaintext) == 3
+                        and len(plaintext) == 2
                         and plaintext[0] == int(ApiOpcode.DEVICE)
-                        and plaintext[1] == 0x01
                     ):
-                        return plaintext[2]
+                        return plaintext[1]
                 continue
 
             response.extend(data)
             marker = response.find(b"\xDE\xAD")
-            if marker >= 0 and len(response) >= marker + 7:
+            if marker >= 0 and len(response) >= marker + 6:
                 if (
-                    response[marker + 2:marker + 4] == b"\x02\x00"
+                    response[marker + 2:marker + 4] == b"\x01\x00"
                     and response[marker + 4] == int(ApiOpcode.DEVICE)
-                    and response[marker + 5] == 0x01
                 ):
-                    return response[marker + 6]
+                    return response[marker + 5]
 
         return None
 
@@ -676,9 +680,9 @@ class SerialTransport:
             write_no_response(command_bytes)
             self.serial.flush()
             return b""
-        command_id = self._generate_command_id()
         future = Future()
         with self._command_lock:
+            command_id = self._generate_command_id()
             self._pending_commands[command_id] = PendingCommand(
                 command_id=command_id,
                 command=f"mak_api:0x{opcode_value:02X}",

@@ -18,3 +18,8 @@ device.disconnect();
 
 Typed methods use `MAK_API`. The full command contract is in
 [`../protocol/MAK_API.md`](../protocol/MAK_API.md).
+
+Queued BLE calls are batched automatically. Existing methods are unchanged;
+applications do not configure batching or choose a batch size.
+An empty BLE address asks the supplied connection callback to discover a
+nearby MAKXD by service.

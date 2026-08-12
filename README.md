@@ -12,6 +12,14 @@ Supported connection methods are:
 - Wi-Fi station/client over UDP
 - BLE
 
+BLE batching is automatic. Existing typed and low-level API calls do not need
+a batching option: commands that are already queued together are combined to
+use the negotiated link payload, and each result is returned to its original
+caller. A single command is sent immediately, without a batching delay.
+Python can discover a nearby MAKXD by service when no BLE address is supplied.
+Callback-based SDK adapters receive an empty address as the same request to
+discover by service.
+
 On connection, the SDK reads `DEVICE` once and caches the exact active
 mouse, keyboard, and controller kinds. Typed calls use that cached result.
 `FIRMWARE_VERSION` reads the installed application firmware version.

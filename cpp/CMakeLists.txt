@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(makxd-cpp VERSION 1.4.0 LANGUAGES CXX)
 
+include(CTest)
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -150,6 +152,16 @@ foreach(target ${LIBRARY_TARGETS})
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
 endforeach()
+
+if(BUILD_TESTING AND TARGET ${PROJECT_NAME}_static)
+    add_executable(makxd-cpp-ble-batch-tests
+        tests/ble_batch_tests.cpp)
+    target_link_libraries(makxd-cpp-ble-batch-tests
+        PRIVATE ${PROJECT_NAME}_static)
+    target_compile_features(makxd-cpp-ble-batch-tests PRIVATE cxx_std_23)
+    add_test(NAME makxd-cpp-ble-batch-tests
+        COMMAND makxd-cpp-ble-batch-tests)
+endif()
 
 # Install targets
 install(TARGETS ${LIBRARY_TARGETS}

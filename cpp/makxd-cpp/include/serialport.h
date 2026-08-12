@@ -148,6 +148,7 @@ namespace makxd {
 
         // High-performance listener thread
         std::jthread m_listenerThread;
+        std::jthread m_bleWriterThread;
 
         // Button data processing
         ButtonCallback m_buttonCallback;
@@ -161,6 +162,8 @@ namespace makxd {
         bool configurePort() { return platformConfigurePort(); }
         void updateTimeouts() { platformUpdateTimeouts(); }
         void listenerLoop(std::stop_token stopToken);
+        void bleWriterLoop(std::stop_token stopToken);
+        bool bleBatchResponseConsume(std::span<const uint8_t> packet);
         void processIncomingData();
         void handleButtonData(uint8_t data);
         void processMakApiResponse(

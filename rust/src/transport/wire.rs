@@ -1,7 +1,8 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use super::encryption::{EncryptedFrameDecoder, TransportEncryption};
@@ -13,6 +14,18 @@ pub(crate) trait WirePort: Send {
     fn write_coalescing_supported(&self) -> bool;
     fn read_wire(&mut self, bytes: &mut [u8]) -> std::io::Result<usize>;
     fn write_all_wire(&mut self, bytes: &[u8], response_expected: bool) -> std::io::Result<()>;
+    fn write_queued_wire(
+        &mut self,
+        records: &[Vec<u8>],
+        response_expected: bool,
+    ) -> std::io::Result<()> {
+        let bytes = records.iter().map(Vec::len).sum();
+        let mut coalesced = Vec::with_capacity(bytes);
+        for record in records {
+            coalesced.extend_from_slice(record);
+        }
+        self.write_all_wire(&coalesced, response_expected)
+    }
     fn flush_wire(&mut self) -> std::io::Result<()>;
 }
 
@@ -195,42 +208,201 @@ impl WirePort for UdpWirePort {
     }
 }
 
-pub(crate) struct BleWirePort {
+const BLE_BATCH_REQUEST_MAGIC: &[u8; 4] = b"MBAT";
+const BLE_BATCH_RESPONSE_MAGIC: &[u8; 4] = b"MBAR";
+const BLE_BATCH_VERSION: u8 = 1;
+const BLE_BATCH_COMMANDS_MAX: usize = 64;
+const BLE_BATCH_PIPELINE_MAX: u8 = 5;
+const BLE_BATCH_WRITE_BYTES_MAX: usize = 514;
+const BLE_BATCH_WRITE_BYTES_MIN: usize = 77;
+
+struct BleShared {
     io: Arc<dyn BleConnectionIo>,
+    next_batch_id: AtomicU16,
+    credits: (Mutex<u8>, Condvar),
+    commands: Mutex<HashMap<u16, Vec<u8>>>,
+}
+
+pub(crate) struct BleWirePort {
+    shared: Arc<BleShared>,
     pending: VecDeque<u8>,
 }
 
 impl BleWirePort {
     pub fn new(io: Arc<dyn BleConnectionIo>) -> Self {
         Self {
-            io,
+            shared: Arc::new(BleShared {
+                io,
+                next_batch_id: AtomicU16::new(1),
+                credits: (Mutex::new(BLE_BATCH_PIPELINE_MAX), Condvar::new()),
+                commands: Mutex::new(HashMap::new()),
+            }),
             pending: VecDeque::new(),
         }
+    }
+
+    fn maximum_write(&self) -> usize {
+        self.shared
+            .io
+            .maximum_write_without_response()
+            .min(BLE_BATCH_WRITE_BYTES_MAX)
+    }
+
+    fn batch_credit_take(&self) {
+        let (lock, ready) = &self.shared.credits;
+        let mut credits = lock.lock().unwrap();
+        while *credits == 0 {
+            credits = ready.wait(credits).unwrap();
+        }
+        *credits -= 1;
+    }
+
+    fn batch_credit_restore(&self, reported: u8) {
+        if reported == 0 {
+            return;
+        }
+        let (lock, ready) = &self.shared.credits;
+        *lock.lock().unwrap() = reported.min(BLE_BATCH_PIPELINE_MAX);
+        ready.notify_all();
+    }
+
+    fn batch_response_consume(&mut self, packet: &[u8]) -> std::io::Result<()> {
+        if packet.len() < 11 || &packet[..4] != BLE_BATCH_RESPONSE_MAGIC {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "BLE batch response is invalid",
+            ));
+        }
+        if packet[4] != BLE_BATCH_VERSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "BLE batch response version is unsupported",
+            ));
+        }
+        let batch_id = u16::from_le_bytes([packet[6], packet[7]]);
+        let commands = self
+            .shared
+            .commands
+            .lock()
+            .unwrap()
+            .get(&batch_id)
+            .cloned()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "BLE batch response does not match a request",
+                )
+            })?;
+        let first = packet[8] as usize;
+        let count = packet[9] as usize;
+        if packet[10] as usize != commands.len() || first + count > commands.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "BLE batch response range is invalid",
+            ));
+        }
+        let mut offset = 11;
+        for index in 0..count {
+            if offset + 2 > packet.len() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "BLE batch response ended early",
+                ));
+            }
+            let status = packet[offset];
+            let response_bytes = packet[offset + 1] as usize;
+            offset += 2;
+            if offset + response_bytes > packet.len() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "BLE batch record ended early",
+                ));
+            }
+            let response = &packet[offset..offset + response_bytes];
+            offset += response_bytes;
+            if status == 0 && !response.is_empty() {
+                direct_response_normalize(response, &mut self.pending);
+            } else if status == 2 {
+                direct_response_normalize(&[commands[first + index], 0xff], &mut self.pending);
+            }
+        }
+        if offset != packet.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "BLE batch response has trailing bytes",
+            ));
+        }
+        if packet[5] & 0x01 != 0 {
+            self.shared.commands.lock().unwrap().remove(&batch_id);
+            self.batch_credit_restore((packet[5] >> 1) & 0x07);
+        }
+        Ok(())
+    }
+
+    fn batch_write(&mut self, records: &[Vec<u8>]) -> std::io::Result<()> {
+        self.batch_credit_take();
+        let batch_id = self.shared.next_batch_id.fetch_add(1, Ordering::Relaxed);
+        let mut request =
+            Vec::with_capacity(9 + records.iter().map(|record| 1 + record.len()).sum::<usize>());
+        request.extend_from_slice(BLE_BATCH_REQUEST_MAGIC);
+        request.extend([BLE_BATCH_VERSION, 0]);
+        request.extend(batch_id.to_le_bytes());
+        request.push(records.len() as u8);
+        let mut opcodes = Vec::with_capacity(records.len());
+        for record in records {
+            request.push(record.len() as u8);
+            request.extend(record);
+            opcodes.push(record[0]);
+        }
+        self.shared
+            .commands
+            .lock()
+            .unwrap()
+            .insert(batch_id, opcodes);
+        if let Err(error) = self.shared.io.write(&request) {
+            self.shared.commands.lock().unwrap().remove(&batch_id);
+            self.batch_credit_restore(1);
+            for record in records {
+                self.shared
+                    .io
+                    .write(record)
+                    .map_err(|_| std::io::Error::other(error.to_string()))?;
+            }
+        }
+        Ok(())
     }
 }
 
 impl WirePort for BleWirePort {
     fn try_clone_wire(&self) -> Result<Box<dyn WirePort>> {
-        Ok(Box::new(Self::new(Arc::clone(&self.io))))
+        Ok(Box::new(Self {
+            shared: Arc::clone(&self.shared),
+            pending: VecDeque::new(),
+        }))
     }
 
     fn write_coalescing_supported(&self) -> bool {
-        false
+        self.maximum_write() >= BLE_BATCH_WRITE_BYTES_MIN
     }
 
     fn read_wire(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
         if self.pending.is_empty() {
             let packet = self
+                .shared
                 .io
                 .read_notification()
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
-            if packet.is_empty() || packet.len() > 64 {
+            if packet.is_empty() || packet.len() > BLE_BATCH_WRITE_BYTES_MAX {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "BLE notification length is invalid",
                 ));
             }
-            direct_response_normalize(&packet, &mut self.pending);
+            if packet.starts_with(BLE_BATCH_RESPONSE_MAGIC) {
+                self.batch_response_consume(&packet)?;
+            } else {
+                direct_response_normalize(&packet, &mut self.pending);
+            }
         }
         let count = bytes.len().min(self.pending.len());
         for byte in &mut bytes[..count] {
@@ -241,15 +413,63 @@ impl WirePort for BleWirePort {
 
     fn write_all_wire(&mut self, bytes: &[u8], _response_expected: bool) -> std::io::Result<()> {
         let wire = direct_request(bytes)?;
-        if wire.len() > 64 {
+        if wire.len() > 64 || wire.len() > self.maximum_write() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "MAKXD BLE writes are limited to 64 bytes",
+                "MAKXD BLE command length exceeds the negotiated limit",
             ));
         }
-        self.io
+        self.shared
+            .io
             .write(&wire)
             .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn write_queued_wire(
+        &mut self,
+        queued: &[Vec<u8>],
+        _response_expected: bool,
+    ) -> std::io::Result<()> {
+        let maximum_write = self.maximum_write();
+        let mut records = Vec::with_capacity(queued.len());
+        for bytes in queued {
+            records.push(direct_request(bytes)?);
+        }
+        let mut first = 0;
+        while first < records.len() {
+            let mut count = 0;
+            let mut request_bytes = 9;
+            while first + count < records.len() && count < BLE_BATCH_COMMANDS_MAX {
+                let candidate = &records[first + count];
+                if candidate.is_empty() || candidate.len() > 64 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "MAKXD BLE command length is invalid",
+                    ));
+                }
+                if request_bytes + 1 + candidate.len() > maximum_write {
+                    break;
+                }
+                request_bytes += 1 + candidate.len();
+                count += 1;
+            }
+            if count == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "MAKXD BLE command exceeds the negotiated write size",
+                ));
+            }
+            if count == 1 {
+                self.shared
+                    .io
+                    .write(&records[first])
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+            } else {
+                self.batch_write(&records[first..first + count])?;
+            }
+            first += count;
+        }
+        Ok(())
     }
 
     fn flush_wire(&mut self) -> std::io::Result<()> {
@@ -299,6 +519,86 @@ fn udp_response_normalize(bytes: &[u8], output: &mut VecDeque<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct BleCaptureIo {
+        writes: Mutex<Vec<Vec<u8>>>,
+        notifications: Mutex<VecDeque<Vec<u8>>>,
+    }
+
+    impl BleConnectionIo for BleCaptureIo {
+        fn connect(&self, _address: &str) -> Result<()> {
+            Ok(())
+        }
+
+        fn write(&self, bytes: &[u8]) -> Result<()> {
+            self.writes.lock().unwrap().push(bytes.to_vec());
+            Ok(())
+        }
+
+        fn read_notification(&self) -> Result<Vec<u8>> {
+            self.notifications
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or_else(|| MakxdError::Protocol("notification queue is empty".into()))
+        }
+
+        fn close(&self) {}
+
+        fn maximum_write_without_response(&self) -> usize {
+            514
+        }
+    }
+
+    #[test]
+    fn queued_ble_commands_use_one_batch_and_restore_individual_replies() {
+        let io = Arc::new(BleCaptureIo {
+            writes: Mutex::new(Vec::new()),
+            notifications: Mutex::new(VecDeque::new()),
+        });
+        let mut port = BleWirePort::new(io.clone());
+        port.write_queued_wire(
+            &[
+                vec![0xde, 0xad, 1, 0, 0x10, 2],
+                vec![0xde, 0xad, 1, 0, 0x11, 2],
+            ],
+            true,
+        )
+        .unwrap();
+        let writes = io.writes.lock().unwrap();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(&writes[0][..4], b"MBAT");
+        assert_eq!(writes[0][8], 2);
+        drop(writes);
+
+        io.notifications.lock().unwrap().push_back(vec![
+            b'M',
+            b'B',
+            b'A',
+            b'R',
+            1,
+            1 | (5 << 1),
+            1,
+            0,
+            0,
+            2,
+            2,
+            0,
+            2,
+            0x10,
+            1,
+            0,
+            2,
+            0x11,
+            1,
+        ]);
+        let mut response = [0u8; 12];
+        let bytes = port.read_wire(&mut response).unwrap();
+        assert_eq!(
+            &response[..bytes],
+            &[0xde, 0xad, 1, 0, 0x10, 1, 0xde, 0xad, 1, 0, 0x11, 1]
+        );
+    }
 
     #[test]
     fn raw_udp_silent_set_does_not_own_next_get_transaction() {

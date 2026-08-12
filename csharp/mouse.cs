@@ -88,6 +88,7 @@ namespace Mouse
         public Func<byte[], bool> BleWrite { get; private set; }
         public Func<byte[]> BleRead { get; private set; }
         public Action BleClose { get; private set; }
+        public int BleMaximumWriteWithoutResponse { get; private set; }
 
         private ConnectionConfig() { }
 
@@ -126,18 +127,22 @@ namespace Mouse
         public static ConnectionConfig Ble(
             string address, Func<string, bool> connect,
             Func<byte[], bool> write,
-            Func<byte[]> read, Action close = null)
+            Func<byte[]> read, Action close = null,
+            int maximumWriteWithoutResponse = 514)
         {
-            if (string.IsNullOrWhiteSpace(address))
-                throw new ArgumentException("BLE address is required", nameof(address));
             if (connect == null || write == null || read == null)
                 throw new ArgumentException(
                     "BLE connect, write, and notification read are required");
+            if (maximumWriteWithoutResponse < 1 ||
+                maximumWriteWithoutResponse > 514)
+                throw new ArgumentOutOfRangeException(
+                    nameof(maximumWriteWithoutResponse));
             return new ConnectionConfig {
                 Method = ConnectionMethod.Ble,
                 Aes128Key = "", BleAddress = address,
                 BleConnect = connect,
-                BleWrite = write, BleRead = read, BleClose = close
+                BleWrite = write, BleRead = read, BleClose = close,
+                BleMaximumWriteWithoutResponse = maximumWriteWithoutResponse
             };
         }
     }
@@ -342,6 +347,21 @@ namespace Mouse
         private static readonly Queue<byte> transportReadBytes =
             new Queue<byte>();
         private static DeviceKinds? connectedKinds = null;
+        private const int bleBatchCommandMaximum = 64;
+        private static readonly byte[] bleBatchRequestMagic =
+            { 0x4D, 0x42, 0x41, 0x54 };
+        private static readonly byte[] bleBatchResponseMagic =
+            { 0x4D, 0x42, 0x41, 0x52 };
+        private static BlockingCollection<BleCommand> bleCommands = null;
+        private static Thread bleWriterThread = null;
+        private static ushort bleBatchId = 1;
+
+        private sealed class BleCommand
+        {
+            internal byte[] Record;
+            internal bool ResponseExpected;
+            internal TaskCompletionSource<byte[]> Completion;
+        }
 
         private static string DtValue(ushort? dtUframes)
         {
@@ -412,8 +432,12 @@ namespace Mouse
                     OpenDetectedPort(connection.ComPort);
                 else if (connection.Method == ConnectionMethod.Udp)
                     OpenUdp(connection);
-                else if (!connection.BleConnect(connection.BleAddress))
-                    throw new IOException("BLE connection failed");
+                else
+                {
+                    if (!connection.BleConnect(connection.BleAddress))
+                        throw new IOException("BLE connection failed");
+                    StartBleWriter();
+                }
                 Thread.Sleep(150);
                 if (connection.Method != ConnectionMethod.Com)
                 {
@@ -442,7 +466,10 @@ namespace Mouse
                 udp?.Close();
                 udp = null;
                 if (connection.Method == ConnectionMethod.Ble)
+                {
+                    StopBleWriter();
                     connection.BleClose?.Invoke();
+                }
                 Console.WriteLine($"[-] Device failed to connect. {ex.ToString()}");
             }
         }
@@ -592,6 +619,7 @@ namespace Mouse
             }
             else
             {
+                StopBleWriter();
                 connectionConfig.BleClose?.Invoke();
             }
             connected = false;
@@ -1052,6 +1080,10 @@ namespace Mouse
             record[0] = opcode;
             Buffer.BlockCopy(payload, 0, record, 1, payload.Length);
 
+            if (connectionConfig.Method == ConnectionMethod.Ble &&
+                !transportEncryptionEnabled)
+                return WriteBleCommand(record, waitResponse);
+
             lock (ioLock)
             {
                 byte[] response;
@@ -1094,6 +1126,206 @@ namespace Mouse
                 var result = new byte[response.Length - 1];
                 Buffer.BlockCopy(response, 1, result, 0, result.Length);
                 return result;
+            }
+        }
+
+        private static void StartBleWriter()
+        {
+            StopBleWriter();
+            bleCommands = new BlockingCollection<BleCommand>(
+                new ConcurrentQueue<BleCommand>());
+            bleWriterThread = new Thread(BleWriterLoop)
+            {
+                IsBackground = true,
+                Name = "MakxdBleWriter"
+            };
+            bleWriterThread.Start();
+        }
+
+        private static void StopBleWriter()
+        {
+            BlockingCollection<BleCommand> queue = bleCommands;
+            if (queue == null)
+                return;
+            queue.CompleteAdding();
+            if (bleWriterThread != null &&
+                bleWriterThread != Thread.CurrentThread)
+                bleWriterThread.Join(1000);
+            while (queue.TryTake(out BleCommand pending))
+                pending.Completion.TrySetException(
+                    new IOException("BLE connection closed"));
+            queue.Dispose();
+            bleCommands = null;
+            bleWriterThread = null;
+        }
+
+        private static byte[] WriteBleCommand(
+            byte[] record, bool responseExpected)
+        {
+            if (bleCommands == null || bleCommands.IsAddingCompleted)
+                throw new IOException("BLE transport is not ready");
+            var command = new BleCommand
+            {
+                Record = record,
+                ResponseExpected = responseExpected,
+                Completion = new TaskCompletionSource<byte[]>(
+                    TaskCreationOptions.RunContinuationsAsynchronously)
+            };
+            bleCommands.Add(command);
+            byte[] response = command.Completion.Task.GetAwaiter().GetResult();
+            if (!responseExpected)
+                return Array.Empty<byte>();
+            if (response == null || response.Length < 2 ||
+                response[0] != record[0])
+                throw new InvalidDataException(
+                    "MAK_API response does not match the request");
+            if (response.Length == 2 && response[1] == 0xFF)
+                throw new InvalidDataException(
+                    $"MAK_API opcode 0x{record[0]:X2} failed");
+            var result = new byte[response.Length - 1];
+            Buffer.BlockCopy(response, 1, result, 0, result.Length);
+            return result;
+        }
+
+        private static void BleWriterLoop()
+        {
+            try
+            {
+                while (!bleCommands.IsCompleted)
+                {
+                    BleCommand first;
+                    try { first = bleCommands.Take(); }
+                    catch (InvalidOperationException) { return; }
+                    var commands = new List<BleCommand> { first };
+                    int maximumWrite = Math.Min(
+                        514,
+                        Math.Max(1,
+                            connectionConfig.BleMaximumWriteWithoutResponse));
+                    int requestBytes = 10 + first.Record.Length;
+
+                    Thread.Yield();
+                    while (commands.Count < bleBatchCommandMaximum &&
+                        bleCommands.TryTake(out BleCommand candidate))
+                    {
+                        if (requestBytes + 1 + candidate.Record.Length >
+                            maximumWrite)
+                        {
+                            // Preserve order without waiting for another item.
+                            ProcessBleCommands(commands, maximumWrite);
+                            commands.Clear();
+                            requestBytes = 9;
+                        }
+                        commands.Add(candidate);
+                        requestBytes += 1 + candidate.Record.Length;
+                    }
+                    if (commands.Count != 0)
+                        ProcessBleCommands(commands, maximumWrite);
+                }
+            }
+            catch (Exception error)
+            {
+                while (bleCommands != null &&
+                    bleCommands.TryTake(out BleCommand pending))
+                    pending.Completion.TrySetException(error);
+            }
+        }
+
+        private static void ProcessBleCommands(
+            List<BleCommand> commands, int maximumWrite)
+        {
+            try
+            {
+                if (commands.Count == 1 || maximumWrite < 77)
+                {
+                    BleCommand command = commands[0];
+                    if (!connectionConfig.BleWrite(command.Record))
+                        throw new IOException("BLE command write failed");
+                    byte[] response = command.ResponseExpected
+                        ? connectionConfig.BleRead()
+                        : Array.Empty<byte>();
+                    command.Completion.TrySetResult(response);
+                    return;
+                }
+
+                ushort batchId = bleBatchId++;
+                var request = new List<byte>(maximumWrite);
+                request.AddRange(bleBatchRequestMagic);
+                request.Add(1);
+                request.Add(0);
+                request.Add((byte)batchId);
+                request.Add((byte)(batchId >> 8));
+                request.Add((byte)commands.Count);
+                foreach (BleCommand command in commands)
+                {
+                    request.Add((byte)command.Record.Length);
+                    request.AddRange(command.Record);
+                }
+                if (!connectionConfig.BleWrite(request.ToArray()))
+                {
+                    foreach (BleCommand command in commands)
+                        ProcessBleCommands(
+                            new List<BleCommand> { command }, 64);
+                    return;
+                }
+
+                var completed = new bool[commands.Count];
+                int completedCount = 0;
+                while (completedCount < commands.Count)
+                {
+                    byte[] packet = connectionConfig.BleRead();
+                    if (packet == null || packet.Length < 11 ||
+                        !packet.Take(4).SequenceEqual(bleBatchResponseMagic) ||
+                        packet[4] != 1 || ReadUInt16(packet, 6) != batchId)
+                        throw new InvalidDataException(
+                            "BLE batch response is invalid");
+                    int responseFirst = packet[8];
+                    int responseCount = packet[9];
+                    if (packet[10] != commands.Count ||
+                        responseFirst + responseCount > commands.Count)
+                        throw new InvalidDataException(
+                            "BLE batch response range is invalid");
+                    int offset = 11;
+                    for (int index = 0; index < responseCount; index++)
+                    {
+                        if (offset + 2 > packet.Length)
+                            throw new InvalidDataException(
+                                "BLE batch response ended early");
+                        byte status = packet[offset++];
+                        int responseBytes = packet[offset++];
+                        if (offset + responseBytes > packet.Length)
+                            throw new InvalidDataException(
+                                "BLE batch record ended early");
+                        int commandIndex = responseFirst + index;
+                        byte[] response;
+                        if (status == 0)
+                        {
+                            response = new byte[responseBytes];
+                            Buffer.BlockCopy(
+                                packet, offset, response, 0, responseBytes);
+                        }
+                        else if (status == 2)
+                            response = new byte[] {
+                                commands[commandIndex].Record[0], 0xFF };
+                        else
+                            response = Array.Empty<byte>();
+                        if (!completed[commandIndex])
+                        {
+                            completed[commandIndex] = true;
+                            completedCount++;
+                            commands[commandIndex].Completion.TrySetResult(
+                                response);
+                        }
+                        offset += responseBytes;
+                    }
+                    if (offset != packet.Length)
+                        throw new InvalidDataException(
+                            "BLE batch response has trailing bytes");
+                }
+            }
+            catch (Exception error)
+            {
+                foreach (BleCommand command in commands)
+                    command.Completion.TrySetException(error);
             }
         }
 

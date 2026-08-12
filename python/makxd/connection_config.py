@@ -69,7 +69,7 @@ class ConnectionConfig:
     @classmethod
     def ble(
         cls,
-        address: str,
+        address: str = "",
     ) -> "ConnectionConfig":
         return cls(
             method=ConnectionMethod.BLE,
@@ -90,8 +90,6 @@ class ConnectionConfig:
                         "vlan_id requires udp_interface or udp_bind_address"
                     )
         elif self.method is ConnectionMethod.BLE:
-            if not self.ble_address:
-                raise ValueError("ble_address is required")
             if self.aes128_key:
                 raise ValueError("BLE does not use MAKXD AES transport encryption")
         return self

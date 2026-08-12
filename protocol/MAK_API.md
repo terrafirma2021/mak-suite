@@ -30,8 +30,11 @@ COM and plaintext UDP carry the complete frame. Raw UDP prepends its
 transaction header before the frame. Ethernet and Wi-Fi use the same UDP
 payload, including when the selected interface is VLAN tagged.
 
-BLE carries `CMD + PAYLOAD`; ATT supplies the length. The receiver passes the
-known ATT length and command to the same MAK_API executor used by COM and UDP.
+BLE carries `CMD + PAYLOAD`; ATT supplies the length. SDKs automatically
+combine commands that are already queued, use the negotiated write size, and
+restore individual replies in request order. A lone command is sent
+immediately. Applications use the normal MAK_API calls and do not select a
+batch size or enable a batching mode.
 
 AES-128 transport encryption is available on COM and UDP. Encryption wraps
 the command record and authenticates replies with the request nonce. BLE uses

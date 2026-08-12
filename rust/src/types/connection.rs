@@ -13,6 +13,12 @@ pub trait BleConnectionIo: Send + Sync {
     fn write(&self, bytes: &[u8]) -> Result<()>;
     fn read_notification(&self) -> Result<Vec<u8>>;
     fn close(&self);
+
+    /// Maximum payload accepted by one write without response.
+    /// Implementations should return the value negotiated by their BLE stack.
+    fn maximum_write_without_response(&self) -> usize {
+        514
+    }
 }
 
 #[derive(Clone)]
@@ -102,11 +108,6 @@ impl ConnectionConfig {
 
     pub fn ble(address: impl Into<String>, io: Arc<dyn BleConnectionIo>) -> Result<Self> {
         let address = address.into();
-        if address.is_empty() {
-            return Err(crate::error::MakxdError::Protocol(
-                "BLE address is required".into(),
-            ));
-        }
         Ok(Self::Ble { address, io })
     }
 }

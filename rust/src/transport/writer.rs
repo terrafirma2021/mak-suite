@@ -18,7 +18,7 @@ pub(crate) fn writer_thread(
     rx: channel::Receiver<WritePayload>,
     pending_responses: Arc<Mutex<VecDeque<PendingResponse>>>,
 ) {
-    let mut coalesced = Vec::with_capacity(512);
+    let mut queued = Vec::with_capacity(64);
     let mut responses: Vec<PendingResponse> = Vec::new();
 
     loop {
@@ -28,11 +28,11 @@ pub(crate) fn writer_thread(
             Err(_) => return,
         };
 
-        coalesced.clear();
+        queued.clear();
         responses.clear();
         let mut response_expected = payload.response_tx.is_some();
 
-        coalesced.extend_from_slice(&payload.data);
+        queued.push(payload.data);
         if let Some(tx) = payload.response_tx {
             responses.push(PendingResponse {
                 response_tx: tx,
@@ -43,7 +43,7 @@ pub(crate) fn writer_thread(
 
         if port.write_coalescing_supported() {
             while let Ok(payload) = rx.try_recv() {
-                coalesced.extend_from_slice(&payload.data);
+                queued.push(payload.data);
                 response_expected |= payload.response_tx.is_some();
                 if let Some(tx) = payload.response_tx {
                     responses.push(PendingResponse {
@@ -65,8 +65,7 @@ pub(crate) fn writer_thread(
             }
         }
 
-        // Single write_all for all coalesced data.
-        if port.write_all_wire(&coalesced, response_expected).is_err() {
+        if port.write_queued_wire(&queued, response_expected).is_err() {
             return;
         }
         let _ = port.flush_wire();
@@ -103,6 +102,17 @@ mod tests {
             _response_expected: bool,
         ) -> std::io::Result<()> {
             self.writes.lock().unwrap().push(bytes.to_vec());
+            Ok(())
+        }
+
+        fn write_queued_wire(
+            &mut self,
+            records: &[Vec<u8>],
+            response_expected: bool,
+        ) -> std::io::Result<()> {
+            for record in records {
+                self.write_all_wire(record, response_expected)?;
+            }
             Ok(())
         }
 
