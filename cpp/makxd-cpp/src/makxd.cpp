@@ -1366,7 +1366,7 @@ namespace makxd {
             if (id >= 55u) return false;
             if (control == ControllerControl::LEFT_TRIGGER ||
                 control == ControllerControl::RIGHT_TRIGGER) {
-                return value >= 0 && value <= 65535;
+                return value >= 0 && value <= CONTROLLER_TRIGGER_MAX;
             }
             if (id >= std::to_underlying(ControllerControl::LEFT_STICK_X) &&
                 id <= std::to_underlying(ControllerControl::RIGHT_STICK_Y)) {
@@ -1426,6 +1426,9 @@ namespace makxd {
         state.digitalHigh = readU32(*response, 4u);
         state.leftTrigger = readU16(*response, 8u);
         state.rightTrigger = readU16(*response, 10u);
+        if (state.leftTrigger > CONTROLLER_TRIGGER_MAX ||
+            state.rightTrigger > CONTROLLER_TRIGGER_MAX)
+            return std::nullopt;
         state.leftStickX = static_cast<int16_t>(readU16(*response, 12u));
         state.leftStickY = static_cast<int16_t>(readU16(*response, 14u));
         state.rightStickX = static_cast<int16_t>(readU16(*response, 16u));
@@ -1439,7 +1442,9 @@ namespace makxd {
 
     bool Device::setControllerState(
         const ControllerState& state, uint16_t dt_uframes) {
-        if (dt_uframes > 0x3FFFu) return false;
+        if (state.leftTrigger > CONTROLLER_TRIGGER_MAX ||
+            state.rightTrigger > CONTROLLER_TRIGGER_MAX ||
+            dt_uframes > 0x3FFFu) return false;
         std::vector<uint8_t> payload;
         payload.reserve(22u);
         appendU32(payload, state.digitalLow);

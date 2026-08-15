@@ -229,10 +229,15 @@ namespace Makxd
             if (record == null || record.Kind != StreamKind.Controller ||
                 record.Values.Length != 21)
                 return false;
+            ushort leftTrigger = (ushort)ReadU16(record.Values, 5);
+            ushort rightTrigger = (ushort)ReadU16(record.Values, 7);
+            if (leftTrigger > Mouse.device.ControllerTriggerMax ||
+                rightTrigger > Mouse.device.ControllerTriggerMax)
+                return false;
             state = new ControllerStreamState(
                 ReadU32(record.Values, 0), record.Values[4],
-                (ushort)ReadU16(record.Values, 5),
-                (ushort)ReadU16(record.Values, 7),
+                leftTrigger,
+                rightTrigger,
                 (short)ReadU16(record.Values, 9),
                 (short)ReadU16(record.Values, 11),
                 (short)ReadU16(record.Values, 13),

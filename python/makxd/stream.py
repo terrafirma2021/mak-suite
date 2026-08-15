@@ -5,6 +5,8 @@ from enum import IntEnum
 from typing import Optional
 import struct
 
+from .protocol import CONTROLLER_TRIGGER_MAX
+
 
 class StreamKind(IntEnum):
     MOUSE = 1
@@ -169,7 +171,10 @@ def decode_controller_stream(
 ) -> Optional[ControllerStreamState]:
     if record.kind != StreamKind.CONTROLLER or len(record.values) != 21:
         return None
-    return ControllerStreamState(*struct.unpack("<IBHHhhhhhh", record.values))
+    state = ControllerStreamState(*struct.unpack("<IBHHhhhhhh", record.values))
+    if state.lt > CONTROLLER_TRIGGER_MAX or state.rt > CONTROLLER_TRIGGER_MAX:
+        return None
+    return state
 
 
 def _encode_frame(command: int, payload: bytes) -> bytes:
@@ -188,4 +193,5 @@ __all__ = [
     "STREAM_MASK_MOUSE", "STREAM_MASK_KEYBOARD",
     "STREAM_MASK_CONTROLLER", "STREAM_MASK_ALL", "STREAM_COMMAND_INPUT",
     "STREAM_MAX_BODY_BYTES", "STREAM_MAX_PAYLOAD_BYTES",
+    "CONTROLLER_TRIGGER_MAX",
 ]

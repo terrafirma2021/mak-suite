@@ -7,6 +7,7 @@ from .connection import SerialTransport
 from .errors import MakxdCommandError, MakxdResponseError
 from .protocol import (
     ApiOpcode,
+    CONTROLLER_TRIGGER_MAX,
     DeviceInfo,
 )
 
@@ -106,7 +107,7 @@ def _control(value: ControllerControl | int) -> ControllerControl:
 
 def _control_value(control: ControllerControl, value: int) -> int:
     if control in (ControllerControl.LEFT_TRIGGER, ControllerControl.RIGHT_TRIGGER):
-        return _integer("value", value, 0, 0xFFFF)
+        return _integer("value", value, 0, CONTROLLER_TRIGGER_MAX)
     if ControllerControl.LEFT_STICK_X <= control <= ControllerControl.RIGHT_STICK_Y:
         return _integer("value", value, -0x8000, 0x7FFF)
     return _integer("value", value, 0, 1)
@@ -116,8 +117,8 @@ def _state_validate(state: ControllerState) -> ControllerState:
     return ControllerState(
         _integer("digital_low", state.digital_low, 0, 0xFFFFFFFF),
         _integer("digital_high", state.digital_high, 0, 0xFFFFFFFF),
-        _integer("left_trigger", state.left_trigger, 0, 0xFFFF),
-        _integer("right_trigger", state.right_trigger, 0, 0xFFFF),
+        _integer("left_trigger", state.left_trigger, 0, CONTROLLER_TRIGGER_MAX),
+        _integer("right_trigger", state.right_trigger, 0, CONTROLLER_TRIGGER_MAX),
         _integer("left_stick_x", state.left_stick_x, -0x8000, 0x7FFF),
         _integer("left_stick_y", state.left_stick_y, -0x8000, 0x7FFF),
         _integer("right_stick_x", state.right_stick_x, -0x8000, 0x7FFF),
@@ -195,7 +196,7 @@ class Gamepad:
             if isinstance(response, bytes):
                 if len(response) != 20:
                     raise MakxdResponseError("invalid controller state response")
-                return ControllerState(
+                state = ControllerState(
                     int.from_bytes(response[0:4], "little"),
                     int.from_bytes(response[4:8], "little"),
                     int.from_bytes(response[8:10], "little"),
@@ -205,6 +206,12 @@ class Gamepad:
                     int.from_bytes(response[16:18], "little", signed=True),
                     int.from_bytes(response[18:20], "little", signed=True),
                 )
+                if (state.left_trigger > CONTROLLER_TRIGGER_MAX or
+                        state.right_trigger > CONTROLLER_TRIGGER_MAX):
+                    raise MakxdResponseError(
+                        "controller trigger response is outside 0..1023"
+                    )
+                return state
             raise MakxdResponseError("invalid MAK_API controller state response")
 
         state = _state_validate(value)
@@ -227,6 +234,7 @@ class Gamepad:
 
 
 __all__ = [
+    "CONTROLLER_TRIGGER_MAX",
     "ControllerControl",
     "ControllerMaskMode",
     "ControllerState",

@@ -121,6 +121,8 @@ impl ControllerControl {
     }
 }
 
+pub const CONTROLLER_TRIGGER_MAX: u16 = 1023;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ControllerMaskMode {

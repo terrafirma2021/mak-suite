@@ -327,6 +327,7 @@ namespace Mouse
 
     public static class device
     {
+        public const ushort ControllerTriggerMax = 1023;
         private static readonly int[] baudCandidates = { 115200, 1000000, 4000000 };
         private const byte apiControllerState = 0x40;
         private const byte apiControllerControl = 0x41;
@@ -781,7 +782,7 @@ namespace Mouse
             }
             if (id == 10 || id == 11)
             {
-                if (value < 0 || value > ushort.MaxValue)
+                if (value < 0 || value > ControllerTriggerMax)
                     throw new ArgumentOutOfRangeException(nameof(value));
                 return;
             }
@@ -838,7 +839,7 @@ namespace Mouse
                     "MAK_API controller state response is invalid");
             ulong digital = ReadUInt32(response, 0) |
                 ((ulong)ReadUInt32(response, 4) << 32);
-            return new ControllerState(
+            ControllerState state = new ControllerState(
                 digital,
                 ReadUInt16(response, 8),
                 ReadUInt16(response, 10),
@@ -846,6 +847,11 @@ namespace Mouse
                 ReadInt16(response, 14),
                 ReadInt16(response, 16),
                 ReadInt16(response, 18));
+            if (state.LeftTrigger > ControllerTriggerMax ||
+                state.RightTrigger > ControllerTriggerMax)
+                throw new InvalidDataException(
+                    "MAK_API controller trigger response is outside 0..1023");
+            return state;
         }
 
         public static void controller_state(
@@ -853,6 +859,9 @@ namespace Mouse
         {
             ushort dt = dtUframes ?? 0;
             DtValue(dt);
+            if (state.LeftTrigger > ControllerTriggerMax ||
+                state.RightTrigger > ControllerTriggerMax)
+                throw new ArgumentOutOfRangeException(nameof(state));
             uint low = (uint)state.Digital;
             uint high = (uint)(state.Digital >> 32);
             var payload = new List<byte>();

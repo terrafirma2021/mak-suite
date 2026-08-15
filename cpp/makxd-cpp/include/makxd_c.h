@@ -8,6 +8,8 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 
+#define MAKXD_CONTROLLER_TRIGGER_MAX 1023u
+
 // Export macros for C API
 #ifdef _WIN32
     #ifdef MAKXD_EXPORTS

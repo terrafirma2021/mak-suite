@@ -1,5 +1,7 @@
 //! MAKXD lightweight multi-source input streaming protocol.
 
+use crate::types::CONTROLLER_TRIGGER_MAX;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum StreamKind {
@@ -207,7 +209,7 @@ pub fn decode_controller_stream(record: &StreamInputRecord) -> Option<Controller
     }
     let u16_at =
         |offset: usize| u16::from_le_bytes(record.values[offset..offset + 2].try_into().unwrap());
-    Some(ControllerStreamState {
+    let state = ControllerStreamState {
         buttons: u32::from_le_bytes(record.values[0..4].try_into().ok()?),
         hat: record.values[4],
         lt: u16_at(5),
@@ -218,7 +220,11 @@ pub fn decode_controller_stream(record: &StreamInputRecord) -> Option<Controller
         ry: u16_at(15) as i16,
         z: u16_at(17) as i16,
         rz: u16_at(19) as i16,
-    })
+    };
+    if state.lt > CONTROLLER_TRIGGER_MAX || state.rt > CONTROLLER_TRIGGER_MAX {
+        return None;
+    }
+    Some(state)
 }
 
 fn encode_frame(command: u8, payload: &[u8]) -> Vec<u8> {
@@ -283,5 +289,13 @@ mod tests {
                 rz: 6,
             })
         );
+
+        let invalid = StreamInputRecord {
+            values: vec![
+                5, 0, 0, 0, 2, 0, 4, 0, 0, 255, 255, 2, 0, 253, 255, 4, 0, 251, 255, 6, 0,
+            ],
+            ..record
+        };
+        assert_eq!(decode_controller_stream(&invalid), None);
     }
 }

@@ -13,7 +13,7 @@ from .gamepad import (
     Gamepad,
 )
 from .errors import MakxdConnectionError
-from .protocol import ApiOpcode, DeviceInfo, DeviceKind
+from .protocol import ApiOpcode, CONTROLLER_TRIGGER_MAX, DeviceInfo, DeviceKind
 from .connection_config import ConnectionConfig, ConnectionMethod, UdpWireMode
 from .stream import (
     StreamKind,
@@ -50,6 +50,7 @@ __all__ = [
     'ControllerControl',
     'ControllerMaskMode',
     'ControllerState',
+    'CONTROLLER_TRIGGER_MAX',
     'Gamepad',
     'MakxdConnectionError',
     'ApiOpcode',

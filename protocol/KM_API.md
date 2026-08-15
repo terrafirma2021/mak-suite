@@ -349,8 +349,8 @@ lowercase ASCII.
 | 7 | `dpad_right` | `0` or `1` |
 | 8 | `left_shoulder` | `0` or `1` |
 | 9 | `right_shoulder` | `0` or `1` |
-| 10 | `left_trigger` | `0..65535` |
-| 11 | `right_trigger` | `0..65535` |
+| 10 | `left_trigger` | `0..1023` |
+| 11 | `right_trigger` | `0..1023` |
 | 12 | `left_stick_x` | `-32768..32767` |
 | 13 | `left_stick_y` | `-32768..32767` |
 | 14 | `right_stick_x` | `-32768..32767` |
@@ -418,6 +418,10 @@ Digital bit N is control ID N. `digital_low` contains IDs 0..31 and
 The two digital words are unsigned decimal values. Trigger and stick ranges
 match the control table. `dt` is required for a complete-state mutation and
 must be `0..16383`; pass zero for immediate scheduling.
+
+The trigger contract is canonical 10-bit for both injection and input
+streaming. MAKXD maps `0..1023` to and from the selected controller's native
+trigger width. Stick axes remain signed 16-bit and `dt` remains unchanged.
 
 MAKXD rejects contradictory D-pad pairs (`up` with `down`, or `left`
 with `right`), set bits for unsupported digital controls, and nonzero analog

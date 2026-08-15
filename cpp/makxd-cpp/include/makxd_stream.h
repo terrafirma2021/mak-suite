@@ -22,6 +22,7 @@ inline constexpr std::uint8_t STREAM_COMMAND_INPUT = 0x01u;
 inline constexpr std::size_t STREAM_MAX_BODY_BYTES = 252u;
 inline constexpr std::size_t STREAM_MAX_PAYLOAD_BYTES =
     STREAM_MAX_BODY_BYTES - 1u;
+inline constexpr std::uint16_t CONTROLLER_TRIGGER_MAX = 1023u;
 
 enum class StreamOperation : std::uint8_t {
     Start = 1,
@@ -240,6 +241,9 @@ private:
     state.hat = record.values[4u];
     state.lt = u16(5u);
     state.rt = u16(7u);
+    if (state.lt > CONTROLLER_TRIGGER_MAX ||
+        state.rt > CONTROLLER_TRIGGER_MAX)
+        return false;
     state.x = static_cast<std::int16_t>(u16(9u));
     state.y = static_cast<std::int16_t>(u16(11u));
     state.rx = static_cast<std::int16_t>(u16(13u));

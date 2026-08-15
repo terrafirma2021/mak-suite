@@ -33,9 +33,9 @@ pub use device::{Device, DeviceConfig};
 pub use error::{MakxdError, Result};
 pub use protocol::api::ApiOpcode;
 pub use types::{
-    BleConnectionIo, Button, ButtonMask, ConnectionConfig, ConnectionState, ControllerControl,
-    ControllerMaskMode, ControllerState, DeviceInfo, DeviceKind, DeviceKinds, KeyboardKey,
-    UdpWireMode,
+    BleConnectionIo, Button, ButtonMask, CONTROLLER_TRIGGER_MAX, ConnectionConfig, ConnectionState,
+    ControllerControl, ControllerMaskMode, ControllerState, DeviceInfo, DeviceKind, DeviceKinds,
+    KeyboardKey, UdpWireMode,
 };
 
 #[cfg(feature = "async")]

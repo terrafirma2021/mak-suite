@@ -1,29 +1,42 @@
 use crate::error::{MakxdError, Result};
 use crate::protocol::api::ApiOpcode;
-use crate::types::{ControllerControl, ControllerMaskMode, ControllerState};
+use crate::types::{
+    CONTROLLER_TRIGGER_MAX, ControllerControl, ControllerMaskMode, ControllerState,
+};
 
 use super::Device;
 
 fn controller_value_check(control: ControllerControl, value: i32) -> Result<()> {
-    let valid = match control {
+    let (min, max) = match control {
         ControllerControl::LeftTrigger | ControllerControl::RightTrigger => {
-            (0..=65535).contains(&value)
+            (0, i32::from(CONTROLLER_TRIGGER_MAX))
         }
         ControllerControl::LeftStickX
         | ControllerControl::LeftStickY
         | ControllerControl::RightStickX
-        | ControllerControl::RightStickY => (-32768..=32767).contains(&value),
-        _ => (0..=1).contains(&value),
+        | ControllerControl::RightStickY => (-32768, 32767),
+        _ => (0, 1),
     };
-    if valid {
+    if (min..=max).contains(&value) {
         Ok(())
     } else {
         Err(MakxdError::OutOfRange {
             value: value as i64,
-            min: -32768,
-            max: 65535,
+            min: min as i64,
+            max: max as i64,
         })
     }
+}
+
+fn controller_state_check(state: ControllerState) -> Result<()> {
+    controller_value_check(
+        ControllerControl::LeftTrigger,
+        i32::from(state.left_trigger),
+    )?;
+    controller_value_check(
+        ControllerControl::RightTrigger,
+        i32::from(state.right_trigger),
+    )
 }
 
 fn controller_state_payload(state: ControllerState, dt_uframes: u16) -> Vec<u8> {
@@ -46,7 +59,7 @@ fn controller_state_parse(value: &[u8]) -> Result<ControllerState> {
             "controller state response length is invalid".into(),
         ));
     }
-    Ok(ControllerState {
+    let state = ControllerState {
         digital_low: u32::from_le_bytes(value[0..4].try_into().unwrap()),
         digital_high: u32::from_le_bytes(value[4..8].try_into().unwrap()),
         left_trigger: u16::from_le_bytes(value[8..10].try_into().unwrap()),
@@ -55,7 +68,11 @@ fn controller_state_parse(value: &[u8]) -> Result<ControllerState> {
         left_stick_y: i16::from_le_bytes(value[14..16].try_into().unwrap()),
         right_stick_x: i16::from_le_bytes(value[16..18].try_into().unwrap()),
         right_stick_y: i16::from_le_bytes(value[18..20].try_into().unwrap()),
-    })
+    };
+    controller_state_check(state).map_err(|_| {
+        MakxdError::Protocol("controller trigger response is outside 0..1023".into())
+    })?;
+    Ok(state)
 }
 
 impl Device {
@@ -112,6 +129,7 @@ impl Device {
     }
 
     pub fn set_controller_state_dt(&self, state: ControllerState, dt_uframes: u16) -> Result<()> {
+        controller_state_check(state)?;
         if dt_uframes > 0x3fff {
             return Err(MakxdError::OutOfRange {
                 value: dt_uframes as i64,
@@ -190,6 +208,7 @@ impl AsyncDevice {
         state: ControllerState,
         dt_uframes: u16,
     ) -> Result<()> {
+        controller_state_check(state)?;
         if dt_uframes > 0x3fff {
             return Err(MakxdError::OutOfRange {
                 value: dt_uframes as i64,
@@ -202,5 +221,35 @@ impl AsyncDevice {
             &controller_state_payload(state, dt_uframes),
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trigger_is_10_bit_and_stick_is_signed_16_bit() {
+        assert!(controller_value_check(
+            ControllerControl::LeftTrigger,
+            i32::from(CONTROLLER_TRIGGER_MAX),
+        )
+        .is_ok());
+        assert!(controller_value_check(
+            ControllerControl::LeftTrigger,
+            i32::from(CONTROLLER_TRIGGER_MAX) + 1,
+        )
+        .is_err());
+        assert!(controller_value_check(ControllerControl::RightStickX, -32768).is_ok());
+        assert!(controller_value_check(ControllerControl::RightStickX, 32767).is_ok());
+    }
+
+    #[test]
+    fn complete_state_rejects_out_of_range_trigger() {
+        let state = ControllerState {
+            left_trigger: CONTROLLER_TRIGGER_MAX + 1,
+            ..ControllerState::default()
+        };
+        assert!(controller_state_check(state).is_err());
     }
 }

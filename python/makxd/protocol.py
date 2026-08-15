@@ -3,6 +3,8 @@ from enum import IntEnum, IntFlag
 
 from .errors import MakxdResponseError
 
+CONTROLLER_TRIGGER_MAX = 0x03FF
+
 
 class ApiOpcode(IntEnum):
     DEVICE = 0x02

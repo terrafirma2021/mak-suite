@@ -138,8 +138,8 @@ Names describe physical position, not product artwork.
 | 7 | `DPAD_RIGHT` | 0 or 1 |
 | 8 | `LEFT_SHOULDER` | 0 or 1 |
 | 9 | `RIGHT_SHOULDER` | 0 or 1 |
-| 10 | `LEFT_TRIGGER` | 0..65535 |
-| 11 | `RIGHT_TRIGGER` | 0..65535 |
+| 10 | `LEFT_TRIGGER` | 0..1023 |
+| 11 | `RIGHT_TRIGGER` | 0..1023 |
 | 12 | `LEFT_STICK_X` | -32768..32767 |
 | 13 | `LEFT_STICK_Y` | -32768..32767 |
 | 14 | `RIGHT_STICK_X` | -32768..32767 |
@@ -170,6 +170,11 @@ Digital bit N is control ID N. Mask modes are `DISABLED=0`, `COMPLETE=1`,
 `NEGATIVE=2`, `POSITIVE=3`, and `BOTH=4`. Digital and trigger controls accept
 disabled or complete. Axes accept disabled, negative, positive, or both;
 complete is not valid for an axis.
+
+Trigger fields remain `u16` on the wire but their canonical value range is
+`0..1023` for both injection and input streaming. MAKXD maps that 10-bit value
+to and from the selected controller's native trigger width. Stick axes remain
+signed `-32768..32767`; `dt` is timing metadata and is not rescaled.
 
 | Operation | Command | Value | Payload | Returned data |
 | --- | --- | ---: | --- | --- |

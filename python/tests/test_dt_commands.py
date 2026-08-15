@@ -4,6 +4,7 @@ from makxd.enums import MouseButton
 from makxd.errors import MakxdCommandError
 from makxd.keyboard import Keyboard
 from makxd.gamepad import (
+    CONTROLLER_TRIGGER_MAX,
     ControllerControl,
     ControllerMaskMode,
     ControllerState,
@@ -138,6 +139,23 @@ def test_controller_full_single_and_immediate_mask_commands() -> None:
     assert transport.device_queries == 0
 
 
+def test_controller_trigger_contract_is_10_bit_and_sticks_remain_i16() -> None:
+    transport = CommandTransport()
+    gamepad = Gamepad(transport)
+
+    gamepad.control(ControllerControl.LEFT_TRIGGER, CONTROLLER_TRIGGER_MAX)
+    gamepad.control(ControllerControl.RIGHT_STICK_X, -32768)
+    gamepad.control(ControllerControl.RIGHT_STICK_X, 32767)
+    gamepad.state(ControllerState(left_trigger=CONTROLLER_TRIGGER_MAX,
+                                  right_trigger=CONTROLLER_TRIGGER_MAX))
+
+    with pytest.raises(MakxdCommandError):
+        gamepad.control(ControllerControl.LEFT_TRIGGER,
+                        CONTROLLER_TRIGGER_MAX + 1)
+    with pytest.raises(MakxdCommandError):
+        gamepad.state(ControllerState(left_trigger=CONTROLLER_TRIGGER_MAX + 1))
+
+
 def test_controller_stream_decode_canonical_tuple() -> None:
     values = struct.pack("<IBHHhhhhhh", 5, 2, 100, 200,
                          -1, 2, -3, 4, -5, 6)
@@ -147,6 +165,15 @@ def test_controller_stream_decode_canonical_tuple() -> None:
     assert decode_controller_stream(record) == ControllerStreamState(
         5, 2, 100, 200, -1, 2, -3, 4, -5, 6
     )
+
+    invalid = StreamInputRecord(
+        StreamKind.CONTROLLER,
+        10,
+        StreamTiming.from_raw(7),
+        struct.pack("<IBHHhhhhhh", 5, 2, 1024, 0,
+                    -1, 2, -3, 4, -5, 6),
+    )
+    assert decode_controller_stream(invalid) is None
 
 
 @pytest.mark.parametrize("dt_uframes", [-1, 16384, True, 1.5])
