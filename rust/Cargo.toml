@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/terrafirma2021/mak-suite"
 homepage = "https://github.com/terrafirma2021/mak-suite"
 documentation = "https://docs.rs/makxd"
-readme = "README.md"
+readme = "../README.md"
 keywords = ["makxd", "hid", "mouse", "serial", "usb"]
 categories = ["hardware-support", "api-bindings"]
 

@@ -1,53 +1,30 @@
-# Mak-suite: Unified MAKCU and MAKXD APIs
+# Mak-suite
 
-Official unified Python, Rust, C++, C, and C# clients for MAKCU and MAKXD.
+Official Python, Rust, C++, C, and C# clients for MAKCU and MAKXD. Use the typed
+SDKs to connect over COM, Ethernet/Wi-Fi UDP, or BLE and work with mouse,
+keyboard, and controller input, physical-input masks, and complete controller state.
+The device's routed kinds determine which operations are available.
 
-For a concise documentation and source index, typed API entry points, and
-versioned project integration, start with [`llms.txt`](llms.txt).
+## Documentation
 
-All SDKs use `MAK_API` for mouse, keyboard, and controller input, including
-masks and complete-state operations.
+- [MAK_API](protocol/MAK_API.md): every public binary command, opcode, payload,
+  reply, value range, transport rule, and event format used by the SDKs.
+- [KM_API](protocol/KM_API.md): every accepted legacy ASCII `km.*` command,
+  arguments, query/mutation behaviour, echo, errors, and COM events.
+- [Agent and integration guide](llm.md): SDK entry points, installation,
+  submodules, examples, builds, compatibility checks, and updating safely.
 
-Supported connection methods are:
+## Repository contents
 
-- COM
-- Ethernet host/client over UDP
-- Wi-Fi station/client over UDP
-- BLE
-
-BLE batching is automatic. Existing typed and low-level API calls do not need
-a batching option: commands that are already queued together are combined to
-use the negotiated link payload, and each result is returned to its original
-caller. A single command is sent immediately, without a batching delay.
-Python can discover a nearby MAKXD by service when no BLE address is supplied.
-Callback-based SDK adapters receive an empty address as the same request to
-discover by service.
-
-On connection, the SDK reads `DEVICE` once and caches the exact active
-mouse, keyboard, and controller kinds. Typed calls use that cached result.
-`FIRMWARE_VERSION` reads the installed application firmware version.
-
-Controller calls use the same semantic controls in every language: `SOUTH`,
-`EAST`, `WEST`, `NORTH`, D-pad, shoulder, trigger, stick, system, grip, and
-`EXTRA_1..EXTRA_32`.
-
-Mouse, keyboard, and controller commands no longer accept a `dt` argument.
-Remove that argument from existing calls and use the ordinary methods in place
-of C/Rust `_dt` methods. Controller SET payloads are now 3 bytes for one control
-and 20 bytes for a complete state. Keyboard press durations and input-stream
-timestamps retain their existing meaning.
-
-The complete wire contract, opcode table, payload layouts, values, examples,
-and events are defined in
-[`protocol/MAK_API.md`](protocol/MAK_API.md).
-
-The complete legacy ASCII `km.*` command contract is defined in
-[`protocol/KM_API.md`](protocol/KM_API.md).
-
-| SDK | Directory |
+| Directory | Contents |
 | --- | --- |
-| Python | `python/` |
-| Rust | `rust/` |
-| C++ | `cpp/` |
-| C | `cpp/` |
-| C# | `csharp/` |
+| `python/` | `makxd` Python package, synchronous/asynchronous device API and tests |
+| `rust/` | `makxd` Rust crate, synchronous/asynchronous clients and tests |
+| `cpp/` | C++ library, C interface, CMake packaging, examples and tests |
+| `csharp/` | C# API and stream decoder source, controller wire-format check |
+| `net/cpp/` | Windows KM NET compatibility client for the separate MAKXD Bridge |
+| `protocol/` | The two complete public API contracts |
+
+New typed integrations use MAK_API. KM_API is the legacy compatibility interface.
+Keep the SDK revision and installed firmware contract compatible; use the linked
+references for the current argument counts and wire layouts.

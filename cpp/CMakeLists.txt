@@ -242,7 +242,7 @@ set(CPACK_PACKAGE_VENDOR "terrafirma2021")
 set(CPACK_PACKAGE_CONTACT "https://github.com/terrafirma2021/mak-suite")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/terrafirma2021/mak-suite")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/../README.md")
 
 # Platform-specific package configuration
 if(WIN32)
