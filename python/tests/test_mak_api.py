@@ -45,7 +45,7 @@ class MakApiCaptureTransport:
             (int(opcode), payload, kwargs.get("wait_response", True))
         )
         if int(opcode) == int(ApiOpcode.CONTROLLER_CONTROL) and len(payload) == 1:
-            return payload[:1] + b"\x01\x00\x00\x00"
+            return payload[:1] + b"\x01\x00"
         return b""
 
 
@@ -127,7 +127,7 @@ def test_mak_api_mouse_keyboard_and_controller_payloads() -> None:
         (0x11, b"\x01", False),
         (0x18, b"\xFE\xFF\x03\x00", False),
         (0x20, b"\x28", False),
-        (0x41, b"\x0C\xFC\xFF\xFF\xFF", False),
+        (0x41, b"\x0C\xFC\xFF", False),
         (0x51, b"\x36\x01", False),
     ]
 
@@ -145,13 +145,42 @@ def test_mak_api_named_controller_button_hat_and_direction_locks() -> None:
 
     assert transport.calls == [
         (0x41, b"\x00", True),
-        (0x41, b"\x36\x00\x00\x00\x00", False),
+        (0x41, b"\x36\x00\x00", False),
         (0x41, b"\x06", True),
-        (0x41, b"\x06\x01\x00\x00\x00", False),
+        (0x41, b"\x06\x01\x00", False),
         (0x51, b"\x07\x01", False),
         (0x51, b"\x0C\x04", False),
     ]
     assert transport.device_queries == 0
+
+
+@pytest.mark.parametrize("control,value,encoded", [
+    (ControllerControl.LEFT_STICK_X, -32768, b"\x00\x80"),
+    (ControllerControl.RIGHT_STICK_Y, 32767, b"\xff\x7f"),
+    (ControllerControl.LEFT_TRIGGER, 1023, b"\xff\x03"),
+    (ControllerControl.SOUTH, 1, b"\x01\x00"),
+])
+def test_controller_control_two_byte_round_trip(control, value, encoded) -> None:
+    transport = MakApiCaptureTransport()
+    gamepad = Gamepad(transport)
+    gamepad.control(control, value)
+    assert transport.calls == [(0x41, bytes([control]) + encoded, False)]
+    transport.send_mak_api = lambda *args, **kwargs: bytes([control]) + encoded
+    assert gamepad.control(control) == value
+
+
+def test_controller_trigger_reply_is_unsigned() -> None:
+    transport = MakApiCaptureTransport()
+    transport.send_mak_api = lambda *args, **kwargs: b"\x0a\xff\xff"
+    assert Gamepad(transport).control(ControllerControl.LEFT_TRIGGER) == 65535
+
+
+@pytest.mark.parametrize("response", [b"", b"\x00\x01", b"\x00\x01\x00\x00\x00", b"\x01\x01\x00"])
+def test_controller_control_rejects_wrong_reply_shape(response) -> None:
+    transport = MakApiCaptureTransport()
+    transport.send_mak_api = lambda *args, **kwargs: response
+    with pytest.raises(MakxdResponseError):
+        Gamepad(transport).control(ControllerControl.SOUTH)
 
 
 def test_mak_api_set_writes_without_registering_a_pending_response() -> None:

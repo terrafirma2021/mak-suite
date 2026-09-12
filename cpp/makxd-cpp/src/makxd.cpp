@@ -1264,20 +1264,24 @@ namespace makxd {
         const auto response = m_impl->executeApiQuery(
             ApiOpcode::CONTROLLER_CONTROL, payload);
         if (!response) return std::nullopt;
-        if (response->size() != 5u ||
+        if (response->size() != 3u ||
             static_cast<uint8_t>((*response)[0]) != std::to_underlying(control)) {
             return std::nullopt;
         }
-        return static_cast<int32_t>(readU32(*response, 1u));
+        const uint16_t value = readU16(*response, 1u);
+        return (control >= ControllerControl::LEFT_STICK_X &&
+                control <= ControllerControl::RIGHT_STICK_Y) ?
+            static_cast<int32_t>(static_cast<int16_t>(value)) :
+            static_cast<int32_t>(value);
     }
 
     bool Device::controllerControl(
         ControllerControl control, int32_t value) {
         if (!controllerValueValid(control, value)) return false;
         std::vector<uint8_t> payload;
-        payload.reserve(5u);
+        payload.reserve(3u);
         payload.push_back(std::to_underlying(control));
-        appendU32(payload, static_cast<uint32_t>(value));
+        appendU16(payload, static_cast<uint16_t>(value));
         return m_impl->executeApiCommand(
             ApiOpcode::CONTROLLER_CONTROL, payload);
     }

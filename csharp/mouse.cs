@@ -376,9 +376,6 @@ namespace Mouse
         private static short ReadInt16(byte[] bytes, int offset)
             => unchecked((short)ReadUInt16(bytes, offset));
 
-        private static int ReadInt32(byte[] bytes, int offset)
-            => unchecked((int)ReadUInt32(bytes, offset));
-
         private static void AppendUInt16(List<byte> bytes, ushort value)
         {
             bytes.Add((byte)value);
@@ -392,9 +389,6 @@ namespace Mouse
             bytes.Add((byte)(value >> 16));
             bytes.Add((byte)(value >> 24));
         }
-
-        private static void AppendInt32(List<byte> bytes, int value)
-            => AppendUInt32(bytes, unchecked((uint)value));
 
         private static void AppendInt16(List<byte> bytes, short value)
             => AppendUInt16(bytes, unchecked((ushort)value));
@@ -781,10 +775,11 @@ namespace Mouse
                 throw new InvalidOperationException("Device is not connected");
             byte[] response = WriteMakApiInternal(
                 apiControllerControl, true, new byte[] { (byte)control });
-            if (response.Length != 5 || response[0] != (byte)control)
+            if (response.Length != 3 || response[0] != (byte)control)
                 throw new InvalidDataException(
                     "MAK_API controller control response is invalid");
-            return ReadInt32(response, 1);
+            return (byte)control >= 12 && (byte)control <= 15
+                ? (int)ReadInt16(response, 1) : (int)ReadUInt16(response, 1);
         }
 
         public static void controller_control(
@@ -793,7 +788,7 @@ namespace Mouse
             ValidateControllerControl(control);
             ValidateControllerValue(control, value);
             var payload = new List<byte> { (byte)control };
-            AppendInt32(payload, value);
+            AppendUInt16(payload, unchecked((ushort)value));
             SendApiCommand(
                 apiControllerControl, payload.ToArray());
         }

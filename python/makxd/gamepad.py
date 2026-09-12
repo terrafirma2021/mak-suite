@@ -142,20 +142,21 @@ class Gamepad:
         value: int | None = None,
     ) -> int | None:
         semantic = _control(control)
+        signed = ControllerControl.LEFT_STICK_X <= semantic <= ControllerControl.RIGHT_STICK_Y
         if value is None:
             response = self.transport.send_mak_api(
                 ApiOpcode.CONTROLLER_CONTROL, bytes((semantic,))
             )
             if isinstance(response, bytes):
-                if len(response) != 5 or response[0] != semantic:
+                if len(response) != 3 or response[0] != semantic:
                     raise MakxdResponseError("invalid controller control response")
-                return int.from_bytes(response[1:5], "little", signed=True)
+                return int.from_bytes(response[1:3], "little", signed=signed)
             return int((response or "").strip())
 
         checked = _control_value(semantic, value)
         payload = (
             bytes((semantic,))
-            + checked.to_bytes(4, "little", signed=True)
+            + checked.to_bytes(2, "little", signed=signed)
 
         )
         self.transport.send_mak_api(

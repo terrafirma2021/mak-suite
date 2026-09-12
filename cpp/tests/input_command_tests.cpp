@@ -33,6 +33,15 @@ int main() {
                 commands.emplace_back(packet.begin(), packet.end());
                 if (packet.size() == 1u && packet[0] == 0x02u)
                     replies.push_back({0x02u, 0x43u});
+                if (packet.size() == 2u && packet[0] == 0x41u) {
+                    switch (packet[1]) {
+                    case 12: replies.push_back({0x41, 12, 0, 128}); break;
+                    case 15: replies.push_back({0x41, 15, 255, 127}); break;
+                    case 10: replies.push_back({0x41, 10, 255, 255}); break;
+                    // Old five-byte result must fail, even for a valid button.
+                    case 0: replies.push_back({0x41, 0, 1, 0, 0, 0}); break;
+                    }
+                }
             }
             return true;
         },
@@ -55,12 +64,16 @@ int main() {
     ok &= device.keyboardUp(makxd::KeyboardKey{uint8_t{4}});
     ok &= device.keyboardInit();
     ok &= device.controllerControl(makxd::ControllerControl::LEFT_STICK_X, -8);
+    ok &= device.controllerControl(makxd::ControllerControl::LEFT_STICK_Y, -32768);
+    ok &= device.controllerControl(makxd::ControllerControl::RIGHT_STICK_X, 32767);
+    ok &= device.controllerControl(makxd::ControllerControl::LEFT_TRIGGER, 1023);
     ok &= device.setControllerState(makxd::ControllerState{});
     ok &= device.keyboardPress(makxd::KeyboardKey{uint8_t{4}}, 10, 5);
-    const std::vector<std::vector<uint8_t>> expected{
+    std::vector<std::vector<uint8_t>> expected{
         {0x02}, {0x11, 1}, {0x11, 0}, {0x18, 12, 0, 249, 255},
         {0x19, 254, 255}, {0x20, 4}, {0x21, 4}, {0x22},
-        {0x41, 12, 248, 255, 255, 255},
+        {0x41, 12, 248, 255},
+        {0x41, 13, 0, 128}, {0x41, 14, 255, 127}, {0x41, 10, 255, 3},
         {0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0x23, 4, 10, 0, 0, 0, 5, 0, 0, 0},
     };
@@ -70,6 +83,11 @@ int main() {
         { std::lock_guard lock(mutex); if (commands.size() >= expected.size()) break; }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    ok &= device.controllerControl(makxd::ControllerControl::LEFT_STICK_X) == -32768;
+    ok &= device.controllerControl(makxd::ControllerControl::RIGHT_STICK_Y) == 32767;
+    ok &= device.controllerControl(makxd::ControllerControl::LEFT_TRIGGER) == 65535;
+    ok &= !device.controllerControl(makxd::ControllerControl::SOUTH).has_value();
+    expected.insert(expected.end(), {{0x41, 12}, {0x41, 15}, {0x41, 10}, {0x41, 0}});
     device.disconnect();
     if (!ok || commands != expected) {
         std::cerr << "Input command records differ from the firmware contract; count="

@@ -132,7 +132,7 @@ def test_controller_full_single_and_immediate_mask_commands() -> None:
     ]
     assert all(call[2] is False for call in transport.api_calls)
     assert len(transport.api_calls[0][1]) == 20
-    assert len(transport.api_calls[1][1]) == 5
+    assert len(transport.api_calls[1][1]) == 3
     assert len(transport.api_calls[3][1]) == 2
     assert transport.device_queries == 0
 

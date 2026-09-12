@@ -39,6 +39,22 @@ fn controller_state_check(state: ControllerState) -> Result<()> {
     )
 }
 
+fn controller_control_parse(control: ControllerControl, value: &[u8]) -> Result<i32> {
+    if value.len() != 3 || value[0] != control as u8 {
+        return Err(MakxdError::Protocol(
+            "controller control response is invalid".into(),
+        ));
+    }
+    let bytes = [value[1], value[2]];
+    Ok(match control {
+        ControllerControl::LeftStickX
+        | ControllerControl::LeftStickY
+        | ControllerControl::RightStickX
+        | ControllerControl::RightStickY => i32::from(i16::from_le_bytes(bytes)),
+        _ => i32::from(u16::from_le_bytes(bytes)),
+    })
+}
+
 fn controller_state_payload(state: ControllerState) -> Vec<u8> {
     let mut payload = Vec::with_capacity(20);
     payload.extend_from_slice(&state.digital_low.to_le_bytes());
@@ -78,18 +94,13 @@ fn controller_state_parse(value: &[u8]) -> Result<ControllerState> {
 impl Device {
     pub fn controller_control_state(&self, control: ControllerControl) -> Result<i32> {
         let value = self.query_api(ApiOpcode::ControllerControl, &[control as u8])?;
-        if value.len() != 5 || value[0] != control as u8 {
-            return Err(MakxdError::Protocol(
-                "controller control response is invalid".into(),
-            ));
-        }
-        Ok(i32::from_le_bytes(value[1..5].try_into().unwrap()))
+        controller_control_parse(control, &value)
     }
 
     pub fn controller_control(&self, control: ControllerControl, value: i32) -> Result<()> {
         controller_value_check(control, value)?;
         let mut payload = vec![control as u8];
-        payload.extend_from_slice(&value.to_le_bytes());
+        payload.extend_from_slice(&(value as u16).to_le_bytes());
 
         self.write_api(ApiOpcode::ControllerControl, &payload)
     }
@@ -123,18 +134,13 @@ impl AsyncDevice {
         let value = self
             .query_api(ApiOpcode::ControllerControl, &[control as u8])
             .await?;
-        if value.len() != 5 || value[0] != control as u8 {
-            return Err(MakxdError::Protocol(
-                "controller control response is invalid".into(),
-            ));
-        }
-        Ok(i32::from_le_bytes(value[1..5].try_into().unwrap()))
+        controller_control_parse(control, &value)
     }
 
     pub async fn controller_control(&self, control: ControllerControl, value: i32) -> Result<()> {
         controller_value_check(control, value)?;
         let mut payload = vec![control as u8];
-        payload.extend_from_slice(&value.to_le_bytes());
+        payload.extend_from_slice(&(value as u16).to_le_bytes());
 
         self.write_api(ApiOpcode::ControllerControl, &payload).await
     }
@@ -194,7 +200,7 @@ mod tests {
             (0x20, &[4]),
             (0x21, &[4]),
             (0x22, &[]),
-            (0x41, &[12, 248, 255, 255, 255]),
+            (0x41, &[12, 248, 255]),
             (0x40, &[0; 20]),
             (0x23, &[4, 10, 0, 0, 0, 5, 0, 0, 0]),
             (0x41, &[0]),
@@ -203,6 +209,24 @@ mod tests {
         for (actual, &(opcode, payload)) in commands.iter().zip(expected) {
             assert_eq!(&actual[..5], &[0xde, 0xad, payload.len() as u8, 0, opcode]);
             assert_eq!(&actual[5..], payload);
+        }
+    }
+
+    #[test]
+    fn control_reply_uses_two_bytes_with_control_specific_signedness() {
+        for (control, bytes, expected) in [
+            (ControllerControl::LeftStickX, [0, 128], -32768),
+            (ControllerControl::RightStickY, [255, 127], 32767),
+            (ControllerControl::LeftTrigger, [255, 255], 65535),
+            (ControllerControl::South, [1, 0], 1),
+        ] {
+            assert_eq!(
+                controller_control_parse(control, &[control as u8, bytes[0], bytes[1]]).unwrap(),
+                expected
+            );
+        }
+        for bytes in [&[][..], &[0, 1], &[0, 1, 0, 0, 0], &[1, 1, 0]] {
+            assert!(controller_control_parse(ControllerControl::South, bytes).is_err());
         }
     }
 

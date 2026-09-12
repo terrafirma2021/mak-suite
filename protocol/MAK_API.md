@@ -185,9 +185,15 @@ signed `-32768..32767`.
 | --- | --- | ---: | --- | --- |
 | GET | `CONTROLLER_STATE` | `0x40` | empty | complete state |
 | SET | `CONTROLLER_STATE` | `0x40` | complete state (20 bytes) | none |
-| GET | `CONTROLLER_CONTROL` | `0x41` | `control:u8` | `control:u8 value:i32` |
-| SET | `CONTROLLER_CONTROL` | `0x41` | `control:u8 value:i32` | none |
+| GET | `CONTROLLER_CONTROL` | `0x41` | `control:u8` | `control:u8 value:16-bit` |
+| SET | `CONTROLLER_CONTROL` | `0x41` | `control:u8 value:16-bit` | none |
 | SET | `CONTROLLER_MASK` | `0x51` | `control:u8 mode:u8` | none |
+
+`CONTROLLER_CONTROL` values occupy exactly two little-endian bytes: `i16`
+for stick axes (IDs 12..15), `u16` for triggers and digital controls. The
+value ranges above still apply. SET payloads and GET results are three bytes;
+GET requests remain one byte. The former five-byte SET/result format is
+rejected. Firmware and SDKs must use the same format when updating.
 
 MAKXD rejects unsupported controls, invalid values or modes, and incorrect
 payload lengths. Controller injection requires a routed controller with a
@@ -224,14 +230,14 @@ response: DE AD 04 00 04 01 00 00 00
 Set `SOUTH=1`:
 
 ```text
-DE AD 05 00 41 00 01 00 00 00
+DE AD 03 00 41 00 01 00
 ```
 
 Read `SOUTH`:
 
 ```text
 request:  DE AD 01 00 41 00
-response: DE AD 05 00 41 00 01 00 00 00
+response: DE AD 03 00 41 00 01 00
 ```
 
 ## COM event streams
