@@ -2,6 +2,9 @@
 
 Official unified Python, Rust, C++, C, and C# clients for MAKCU and MAKXD.
 
+For a concise documentation and source index, typed API entry points, and
+versioned project integration, start with [`llms.txt`](llms.txt).
+
 All SDKs use `MAK_API` for mouse, keyboard, and controller input, including
 masks and complete-state operations.
 

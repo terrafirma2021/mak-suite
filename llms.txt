@@ -1,0 +1,86 @@
+# Mak-suite
+
+> Official Python, Rust, C++, C, and C# clients for MAKCU and MAKXD.
+> Start with the SDK for your language and use its typed MAK_API calls.
+
+## Read for your task
+
+- [Project overview](README.md): supported devices, transports, and migration notes.
+- [MAK_API](protocol/MAK_API.md): complete binary command table, opcodes, payloads, replies, value ranges, device kinds, and events.
+- [KM_API](protocol/KM_API.md): complete legacy ASCII command table, arguments, echo behaviour, errors, and COM event streams.
+- [Python](python/README.md): installation, connection, and typed examples.
+- [Rust](rust/README.md): crate integration and typed examples.
+- [C++ and C](cpp/README.md): CMake build and both language interfaces.
+- [C#](csharp/README.md): source integration and typed examples.
+- [KM NET C++ compatibility client](net/cpp/README.md): supported bridge functions and the separate bridge prerequisite.
+
+## Actual API entry points
+
+The names below are SDK calls. Consult the linked declarations for arguments,
+return values, connection options, errors, masks, and complete-state operations.
+Do not translate method names mechanically between languages.
+
+| SDK | Move | Keyboard input | Controller control | Declarations |
+| --- | --- | --- | --- | --- |
+| Python | `device.move(x, y)` | `device.keyboard_press("A")` | `device.gamepad.control(ControllerControl.SOUTH, 1)` | [Device](python/makxd/controller.py), [gamepad](python/makxd/gamepad.py), [exports](python/makxd/__init__.py) |
+| Rust | `device.move_xy(x, y)` | `device.keyboard_press(KeyboardKey::from("A"))` | `device.controller_control(ControllerControl::South, 1)` | [Device](rust/src/device/mod.rs), [controller](rust/src/device/controller.rs) |
+| C++ | `device.mouseMove(x, y)` | `device.keyboardPress(std::string{"A"})` | `device.controllerControl(makxd::ControllerControl::SOUTH, 1)` | [C++ header](cpp/makxd-cpp/include/makxd.h) |
+| C | `makxd_mouse_move(device, x, y)` | `makxd_keyboard_down(device, 0x04)` / `makxd_keyboard_up(device, 0x04)` | `makxd_controller_control(device, MAKXD_CONTROLLER_SOUTH, 1)` | [C header](cpp/makxd-cpp/include/makxd_c.h) |
+| C# | `device.move(x, y)` | `device.keyboard_press(new KeyboardKey("A"))` | `device.controller_control(ControllerControl.South, 1)` | [C# API](csharp/mouse.cs) |
+
+## Python starting point
+
+Use the installation instructions in the Python README, or install from your
+pinned source checkout as shown below. This example connects and reads metadata;
+input operations require the corresponding routed device kind.
+
+```python
+from makxd import DeviceKind, create_controller
+
+device = create_controller()
+try:
+    kinds = device.device()
+    print(device.firmware_version())
+    if kinds.has(DeviceKind.MOUSE):
+        device.move(40, 0)
+finally:
+    device.disconnect()
+```
+
+COM is auto-detected by default. Pass `connection=ConnectionConfig.com(...)`,
+`connection=ConnectionConfig.udp(...)`, or `connection=ConnectionConfig.ble(...)`
+to `create_controller` for an explicit transport. Ethernet and Wi-Fi use UDP.
+See [connection options](python/makxd/connection_config.py) for exact parameters.
+The SDK caches routed device kinds on connection; reconnect after changing routes.
+
+## Keep the SDK source with your project
+
+A Git submodule gives your application and coding agent the same versioned SDK,
+documentation, and examples. Add it once from your application's repository root:
+
+```sh
+git submodule add https://github.com/terrafirma2021/mak-suite.git vendor/mak-suite
+git submodule update --init --recursive
+python -m pip install ./vendor/mak-suite/python
+```
+
+For a new clone of the application, run `git submodule update --init --recursive`.
+The Python installation step is only for Python applications; other languages use
+their SDK README. A submodule pins a commit; it does not update itself.
+To review a newer SDK version:
+
+```sh
+git -C vendor/mak-suite fetch origin main
+git -C vendor/mak-suite log --oneline HEAD..origin/main
+git -C vendor/mak-suite diff HEAD..origin/main -- protocol python rust cpp csharp
+git -C vendor/mak-suite checkout --detach origin/main
+```
+
+Run your application's compatibility tests, then commit the updated
+`vendor/mak-suite` pointer. Use the matching firmware contract and SDK revision.
+
+For coding-agent context, reference `vendor/mak-suite/llms.txt`, the relevant
+protocol document, and your language's declarations in your project's instructions.
+Load the relevant files for the task instead of pasting the entire protocol into
+every prompt. Resolve documentation/source disagreements before implementing a call;
+do not invent commands, extra timing arguments, or transport framing.
