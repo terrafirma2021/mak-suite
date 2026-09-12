@@ -13,7 +13,7 @@ device.connect();
 device.mouseMove(40, 0);
 device.keyboardPress(std::string{"A"});
 device.controllerControl(makxd::ControllerControl::SOUTH, 1);
-device.controllerControl(makxd::ControllerControl::SOUTH, 0, 250);
+device.controllerControl(makxd::ControllerControl::SOUTH, 0);
 auto kinds = device.device();
 auto firmwareVersion = device.firmwareVersion();
 if (kinds && kinds->has(makxd::DeviceKind::XBOX_GIP)) {

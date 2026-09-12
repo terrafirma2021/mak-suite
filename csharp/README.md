@@ -9,7 +9,7 @@ device.connect();
 device.move(40, 0);
 device.keyboard_press(new KeyboardKey("A"));
 device.controller_control(ControllerControl.South, 1);
-device.controller_control(ControllerControl.South, 0, 250);
+device.controller_control(ControllerControl.South, 0);
 DeviceKinds kinds = device.device_kinds();
 uint firmwareVersion = device.firmware_version();
 bool xboxGip = kinds.Has(DeviceKind.XboxGip);

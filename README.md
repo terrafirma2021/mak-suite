@@ -30,7 +30,7 @@ Controller calls use the same semantic controls in every language: `SOUTH`,
 
 Mouse, keyboard, and controller commands no longer accept a `dt` argument.
 Remove that argument from existing calls and use the ordinary methods in place
-of C/Rust `_dt` methods. Controller SET payloads are now 5 bytes for one control
+of C/Rust `_dt` methods. Controller SET payloads are now 3 bytes for one control
 and 20 bytes for a complete state. Keyboard press durations and input-stream
 timestamps retain their existing meaning.
 
