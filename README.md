@@ -1,6 +1,6 @@
-# MAKXD SDKs
+# Mak-suite: Unified MAKCU and MAKXD APIs
 
-Official Python, Rust, C++, C, and C# clients for MAKXD.
+Official unified Python, Rust, C++, C, and C# clients for MAKCU and MAKXD.
 
 All SDKs use `MAK_API` for mouse, keyboard, and controller input, including
 masks and complete-state operations.
