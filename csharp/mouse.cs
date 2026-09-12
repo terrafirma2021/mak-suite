@@ -364,16 +364,6 @@ namespace Mouse
             internal TaskCompletionSource<byte[]> Completion;
         }
 
-        private static string DtValue(ushort? dtUframes)
-        {
-            if (!dtUframes.HasValue)
-                return "";
-            if (dtUframes.Value > 0x3FFF)
-                throw new ArgumentOutOfRangeException(
-                    nameof(dtUframes), "DT must be in the range 0..16383");
-            return dtUframes.Value.ToString(CultureInfo.InvariantCulture);
-        }
-
         private static ushort ReadUInt16(byte[] bytes, int offset)
             => (ushort)(bytes[offset] | bytes[offset + 1] << 8);
 
@@ -685,9 +675,8 @@ namespace Mouse
             return new DeviceKinds(kinds);
         }
 
-        public static void move(int x, int y, ushort? dtUframes = null)
+        public static void move(int x, int y)
         {
-            DtValue(dtUframes);
             if (!connected)
                 return;
             if (x < short.MinValue || x > short.MaxValue ||
@@ -697,15 +686,12 @@ namespace Mouse
             var payload = new List<byte>();
             AppendInt16(payload, (short)x);
             AppendInt16(payload, (short)y);
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
                 0x18, payload.ToArray());
         }
 
-        public static void mouse_wheel(int delta, ushort? dtUframes = null)
+        public static void mouse_wheel(int delta)
         {
-            DtValue(dtUframes);
             if (!connected)
                 return;
 
@@ -714,8 +700,6 @@ namespace Mouse
                     nameof(delta), "Wheel delta must fit a signed 16-bit value");
             var payload = new List<byte>();
             AppendInt16(payload, (short)delta);
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
                 0x19, payload.ToArray());
         }
@@ -804,15 +788,12 @@ namespace Mouse
         }
 
         public static void controller_control(
-            ControllerControl control, int value, ushort? dtUframes = null)
+            ControllerControl control, int value)
         {
             ValidateControllerControl(control);
             ValidateControllerValue(control, value);
-            ushort dt = dtUframes ?? 0;
-            DtValue(dt);
             var payload = new List<byte> { (byte)control };
             AppendInt32(payload, value);
-            AppendUInt16(payload, dt);
             SendApiCommand(
                 apiControllerControl, payload.ToArray());
         }
@@ -855,10 +836,8 @@ namespace Mouse
         }
 
         public static void controller_state(
-            ControllerState state, ushort? dtUframes = null)
+            ControllerState state)
         {
-            ushort dt = dtUframes ?? 0;
-            DtValue(dt);
             if (state.LeftTrigger > ControllerTriggerMax ||
                 state.RightTrigger > ControllerTriggerMax)
                 throw new ArgumentOutOfRangeException(nameof(state));
@@ -873,28 +852,21 @@ namespace Mouse
             AppendInt16(payload, state.LeftStickY);
             AppendInt16(payload, state.RightStickX);
             AppendInt16(payload, state.RightStickY);
-            AppendUInt16(payload, dt);
             SendApiCommand(
                 apiControllerState, payload.ToArray());
         }
         public static void keyboard_down(
-            KeyboardKey key,
-            ushort? dtUframes = null)
+            KeyboardKey key)
         {
             var payload = new List<byte> { key.ToHidCode() };
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
                 0x20, payload.ToArray());
         }
 
         public static void keyboard_up(
-            KeyboardKey key,
-            ushort? dtUframes = null)
+            KeyboardKey key)
         {
             var payload = new List<byte> { key.ToHidCode() };
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
                 0x21, payload.ToArray());
         }
@@ -933,11 +905,9 @@ namespace Mouse
                 0x24, Encoding.ASCII.GetBytes(text));
         }
 
-        public static void keyboard_init(ushort? dtUframes = null)
+        public static void keyboard_init()
         {
             var payload = new List<byte>();
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
                 0x22, payload.ToArray());
         }
@@ -1002,19 +972,15 @@ namespace Mouse
 
         public static void press(
             MouseButton button,
-            int press,
-            ushort? dtUframes = null)
+            int press)
         {
             if (press != 0 && press != 1)
                 throw new ArgumentOutOfRangeException(
                     nameof(press), "Button state must be 0 or 1");
-            DtValue(dtUframes);
             if(!connected)
                 return;
 
             var payload = new List<byte> { (byte)press };
-            if (dtUframes.HasValue)
-                AppendUInt16(payload, dtUframes.Value);
             SendApiCommand(
                 (byte)(0x10 + (int)button),
                 payload.ToArray());

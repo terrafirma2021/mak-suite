@@ -140,12 +140,9 @@ class Gamepad:
         self,
         control: ControllerControl | int,
         value: int | None = None,
-        dt_uframes: int = 0,
     ) -> int | None:
         semantic = _control(control)
         if value is None:
-            if dt_uframes != 0:
-                raise MakxdCommandError("DT is valid only for SET")
             response = self.transport.send_mak_api(
                 ApiOpcode.CONTROLLER_CONTROL, bytes((semantic,))
             )
@@ -156,11 +153,10 @@ class Gamepad:
             return int((response or "").strip())
 
         checked = _control_value(semantic, value)
-        dt = _integer("dt_uframes", dt_uframes, 0, 0x3FFF)
         payload = (
             bytes((semantic,))
             + checked.to_bytes(4, "little", signed=True)
-            + dt.to_bytes(2, "little")
+
         )
         self.transport.send_mak_api(
             ApiOpcode.CONTROLLER_CONTROL, payload, wait_response=False
@@ -185,11 +181,8 @@ class Gamepad:
     def state(
         self,
         value: ControllerState | None = None,
-        dt_uframes: int = 0,
     ) -> ControllerState | None:
         if value is None:
-            if dt_uframes != 0:
-                raise MakxdCommandError("DT is valid only for SET")
             response = self.transport.send_mak_api(
                 ApiOpcode.CONTROLLER_STATE
             )
@@ -215,7 +208,6 @@ class Gamepad:
             raise MakxdResponseError("invalid MAK_API controller state response")
 
         state = _state_validate(value)
-        dt = _integer("dt_uframes", dt_uframes, 0, 0x3FFF)
         payload = (
             state.digital_low.to_bytes(4, "little")
             + state.digital_high.to_bytes(4, "little")
@@ -225,7 +217,7 @@ class Gamepad:
             + state.left_stick_y.to_bytes(2, "little", signed=True)
             + state.right_stick_x.to_bytes(2, "little", signed=True)
             + state.right_stick_y.to_bytes(2, "little", signed=True)
-            + dt.to_bytes(2, "little")
+
         )
         self.transport.send_mak_api(
             ApiOpcode.CONTROLLER_STATE, payload, wait_response=False

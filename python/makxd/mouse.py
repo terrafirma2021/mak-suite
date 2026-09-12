@@ -7,16 +7,6 @@ from serial.tools import list_ports
 import ctypes
 import time
 
-def _validate_dt(dt_uframes: int | None) -> None:
-    if dt_uframes is None:
-        return
-    if not isinstance(dt_uframes, int) or isinstance(dt_uframes, bool):
-        raise MakxdCommandError("DT must be an integer")
-    if dt_uframes < 0 or dt_uframes > 0x3FFF:
-        raise MakxdCommandError("DT must be in the range 0..16383")
-    return
-
-
 class Mouse:
     _BUTTON_OPCODES = {
         MouseButton.LEFT: ApiOpcode.LEFT,
@@ -40,24 +30,20 @@ class Mouse:
         self,
         button: MouseButton,
         state: int,
-        dt_uframes: int | None = None,
     ) -> None:
         if button not in self._BUTTON_OPCODES:
             raise MakxdCommandError(f"Unsupported button: {button}")
 
         payload = bytes((state,))
-        if dt_uframes is not None:
-            _validate_dt(dt_uframes)
-            payload += dt_uframes.to_bytes(2, "little")
         self.transport.send_mak_api(
             self._BUTTON_OPCODES[button], payload, wait_response=False
         )
 
-    def press(self, button: MouseButton, dt_uframes: int | None = None) -> None:
-        self._send_button_command(button, 1, dt_uframes)
+    def press(self, button: MouseButton) -> None:
+        self._send_button_command(button, 1)
 
-    def release(self, button: MouseButton, dt_uframes: int | None = None) -> None:
-        self._send_button_command(button, 0, dt_uframes)
+    def release(self, button: MouseButton) -> None:
+        self._send_button_command(button, 0)
 
     def button_mask(self, button: MouseButton, enabled: bool) -> None:
         if button not in self._BUTTON_MASK_OPCODES:
@@ -101,7 +87,7 @@ class Mouse:
             ApiOpcode.WHEEL_MASK, bytes(values), wait_response=False
         )
 
-    def move(self, x: int, y: int, dt_uframes: int | None = None) -> None:
+    def move(self, x: int, y: int) -> None:
         if not isinstance(x, int) or isinstance(x, bool) or not -32768 <= x <= 32767:
             raise MakxdCommandError("Mouse X must be in the range -32768..32767")
         if not isinstance(y, int) or isinstance(y, bool) or not -32768 <= y <= 32767:
@@ -109,9 +95,6 @@ class Mouse:
         payload = x.to_bytes(2, "little", signed=True) + y.to_bytes(
             2, "little", signed=True
         )
-        if dt_uframes is not None:
-            _validate_dt(dt_uframes)
-            payload += dt_uframes.to_bytes(2, "little")
         self.transport.send_mak_api(
             ApiOpcode.MOVE, payload, wait_response=False
         )
@@ -156,13 +139,13 @@ class Mouse:
             self.move(move_x, move_y)
             time.sleep(wait_ms / 1000)
 
-    def click(self, button: MouseButton, dt_uframes: int | None = None) -> None:
+    def click(self, button: MouseButton) -> None:
         if button not in self._BUTTON_OPCODES:
             raise MakxdCommandError(f"Unsupported button: {button}")
-        self.press(button, dt_uframes)
-        self.release(button, dt_uframes)
+        self.press(button)
+        self.release(button)
 
-    def scroll(self, delta: int, dt_uframes: int | None = None) -> None:
+    def scroll(self, delta: int) -> None:
         if (
             not isinstance(delta, int)
             or isinstance(delta, bool)
@@ -172,9 +155,6 @@ class Mouse:
                 "Mouse wheel delta must be in the range -32768..32767"
             )
         payload = delta.to_bytes(2, "little", signed=True)
-        if dt_uframes is not None:
-            _validate_dt(dt_uframes)
-            payload += dt_uframes.to_bytes(2, "little")
         self.transport.send_mak_api(
             ApiOpcode.WHEEL, payload, wait_response=False
         )

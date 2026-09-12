@@ -56,37 +56,35 @@ def test_firmware_version_uses_mak_api_get() -> None:
     assert transport.api_calls == [(ApiOpcode.FIRMWARE_VERSION, b"", True)]
 
 
-def test_mouse_single_and_explicit_dt_commands() -> None:
+def test_mouse_commands_have_exact_payloads() -> None:
     transport = CommandTransport()
     mouse = Mouse(transport)
 
     mouse.press(MouseButton.LEFT)
-    mouse.release(MouseButton.LEFT, 0)
-    mouse.move(12, -7, 16383)
-    mouse.scroll(-2, 9)
+    mouse.release(MouseButton.LEFT)
+    mouse.move(12, -7)
+    mouse.scroll(-2)
 
     assert transport.api_calls == [
         (ApiOpcode.LEFT, b"\x01", False),
-        (ApiOpcode.LEFT, b"\x00\x00\x00", False),
-        (ApiOpcode.MOVE, b"\x0c\x00\xf9\xff\xff\x3f", False),
-        (ApiOpcode.WHEEL, b"\xfe\xff\x09\x00", False),
+        (ApiOpcode.LEFT, b"\x00", False),
+        (ApiOpcode.MOVE, b"\x0c\x00\xf9\xff", False),
+        (ApiOpcode.WHEEL, b"\xfe\xff", False),
     ]
 
 
-def test_keyboard_single_and_explicit_dt_commands() -> None:
+def test_keyboard_commands_have_exact_payloads() -> None:
     transport = CommandTransport()
     keyboard = Keyboard(transport)
 
     keyboard.down(4)
-    keyboard.up(4, 0)
+    keyboard.up(4)
     keyboard.init()
-    keyboard.init(16383)
 
     assert transport.api_calls == [
         (ApiOpcode.KEY_DOWN, b"\x04", False),
-        (ApiOpcode.KEY_UP, b"\x04\x00\x00", False),
+        (ApiOpcode.KEY_UP, b"\x04", False),
         (ApiOpcode.KEY_INIT, b"", False),
-        (ApiOpcode.KEY_INIT, b"\xff\x3f", False),
     ]
 
 
@@ -119,7 +117,7 @@ def test_controller_full_single_and_immediate_mask_commands() -> None:
 
     gamepad.state(ControllerState(3, 0, 10, 20, -1, 2, -3, 4))
     gamepad.control(ControllerControl.SOUTH, 1)
-    gamepad.control(ControllerControl.LEFT_STICK_X, -8, 16383)
+    gamepad.control(ControllerControl.LEFT_STICK_X, -8)
     gamepad.mask(ControllerControl.EXTRA_32, ControllerMaskMode.COMPLETE)
     gamepad.mask(ControllerControl.DPAD_UP, ControllerMaskMode.COMPLETE)
     gamepad.mask(ControllerControl.RIGHT_STICK_X, ControllerMaskMode.BOTH)
@@ -133,8 +131,8 @@ def test_controller_full_single_and_immediate_mask_commands() -> None:
         ApiOpcode.CONTROLLER_MASK,
     ]
     assert all(call[2] is False for call in transport.api_calls)
-    assert len(transport.api_calls[0][1]) == 22
-    assert len(transport.api_calls[1][1]) == 7
+    assert len(transport.api_calls[0][1]) == 20
+    assert len(transport.api_calls[1][1]) == 5
     assert len(transport.api_calls[3][1]) == 2
     assert transport.device_queries == 0
 
@@ -176,16 +174,24 @@ def test_controller_stream_decode_canonical_tuple() -> None:
     assert decode_controller_stream(invalid) is None
 
 
-@pytest.mark.parametrize("dt_uframes", [-1, 16384, True, 1.5])
-def test_dt_range_is_rejected(dt_uframes) -> None:
+@pytest.mark.parametrize("dt_uframes", [0, 8, 16383])
+@pytest.mark.parametrize("kind,method,args", [
+    (Mouse, "press", (MouseButton.LEFT,)),
+    (Mouse, "release", (MouseButton.LEFT,)),
+    (Mouse, "move", (12, -7)),
+    (Mouse, "scroll", (-2,)),
+    (Mouse, "click", (MouseButton.LEFT,)),
+    (Keyboard, "down", (4,)),
+    (Keyboard, "up", (4,)),
+    (Keyboard, "init", ()),
+    (Gamepad, "control", (ControllerControl.SOUTH, 1)),
+    (Gamepad, "state", (ControllerState(),)),
+])
+def test_removed_dt_argument_is_rejected_before_sending(kind, method, args, dt_uframes):
     transport = CommandTransport()
-    mouse = Mouse(transport)
-
-    with pytest.raises(MakxdCommandError):
-        mouse.press(MouseButton.LEFT, dt_uframes)
-
-    gamepad = Gamepad(transport)
-    with pytest.raises(MakxdCommandError):
-        gamepad.control(ControllerControl.DPAD_UP, 1, dt_uframes)
-
+    command = getattr(kind(transport), method)
+    with pytest.raises(TypeError):
+        command(*args, dt_uframes)
+    with pytest.raises(TypeError):
+        command(*args, dt_uframes=dt_uframes)
     assert transport.api_calls == []

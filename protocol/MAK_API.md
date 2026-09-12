@@ -71,8 +71,13 @@ an SDK's cached result.
 
 ## Timing
 
-`dt` is an optional `u16` measured in USB microframes and must be `0..16383`.
-One microframe is 125 us. Omitting `dt` selects zero.
+Mouse, keyboard, and controller commands do not accept caller-supplied `dt`.
+Use the exact argument counts and payload lengths below. A legacy DT argument
+or two-byte trailer is rejected, including an explicit zero.
+
+Keyboard press durations (`hold_ms` and `random_range`) remain in milliseconds.
+Input-stream timing fields and the polling intervals returned by `km.device()`
+are unchanged.
 
 ## Mouse
 
@@ -85,11 +90,11 @@ One microframe is 125 us. Omitting `dt` selects zero.
 | GET | `MIDDLE` | `0x13` | empty | `state:u8` |
 | GET | `SIDE1` | `0x14` | empty | `state:u8` |
 | GET | `SIDE2` | `0x15` | empty | `state:u8` |
-| SET | `LEFT..SIDE2` | `0x11..0x15` | `state:u8 [dt:u16]` | none |
+| SET | `LEFT..SIDE2` | `0x11..0x15` | `state:u8` | none |
 | SET | `MOVE_MASK` | `0x16` | `left:u8 right:u8 down:u8 up:u8` | none |
 | SET | `WHEEL_MASK` | `0x17` | `down:u8 up:u8` | none |
-| SET | `MOVE` | `0x18` | `x:i16 y:i16 [dt:u16]` | none |
-| SET | `WHEEL` | `0x19` | `delta:i16 [dt:u16]` | none |
+| SET | `MOVE` | `0x18` | `x:i16 y:i16` | none |
+| SET | `WHEEL` | `0x19` | `delta:i16` | none |
 | SET | `LEFT_MASK` | `0x1A` | `enabled:u8` | none |
 | SET | `RIGHT_MASK` | `0x1B` | `enabled:u8` | none |
 | SET | `MIDDLE_MASK` | `0x1C` | `enabled:u8` | none |
@@ -105,9 +110,9 @@ Keys are USB HID usages `0..255`. SDK key names are converted before framing.
 
 | Operation | Command | Value | Payload | Returned data |
 | --- | --- | ---: | --- | --- |
-| SET | `KEY_DOWN` | `0x20` | `key:u8 [dt:u16]` | none |
-| SET | `KEY_UP` | `0x21` | `key:u8 [dt:u16]` | none |
-| SET | `KEY_INIT` | `0x22` | `[dt:u16]` | none |
+| SET | `KEY_DOWN` | `0x20` | `key:u8` | none |
+| SET | `KEY_UP` | `0x21` | `key:u8` | none |
+| SET | `KEY_INIT` | `0x22` | empty | none |
 | SET | `KEY_PRESS` | `0x23` | `key:u8 [hold_ms:u32 [random_range:u32]]` | none |
 | SET | `KEY_STRING` | `0x24` | `text:ASCII[0..248]` | none |
 | GET | `KEY_IS_DOWN` | `0x25` | `key:u8` | `state:u8` |
@@ -174,18 +179,18 @@ complete is not valid for an axis.
 Trigger fields remain `u16` on the wire but their canonical value range is
 `0..1023` for both injection and input streaming. MAKXD maps that 10-bit value
 to and from the selected controller's native trigger width. Stick axes remain
-signed `-32768..32767`; `dt` is timing metadata and is not rescaled.
+signed `-32768..32767`.
 
 | Operation | Command | Value | Payload | Returned data |
 | --- | --- | ---: | --- | --- |
 | GET | `CONTROLLER_STATE` | `0x40` | empty | complete state |
-| SET | `CONTROLLER_STATE` | `0x40` | complete state + `dt:u16` | none |
+| SET | `CONTROLLER_STATE` | `0x40` | complete state (20 bytes) | none |
 | GET | `CONTROLLER_CONTROL` | `0x41` | `control:u8` | `control:u8 value:i32` |
-| SET | `CONTROLLER_CONTROL` | `0x41` | `control:u8 value:i32 dt:u16` | none |
+| SET | `CONTROLLER_CONTROL` | `0x41` | `control:u8 value:i32` | none |
 | SET | `CONTROLLER_MASK` | `0x51` | `control:u8 mode:u8` | none |
 
-MAKXD rejects unsupported controls, invalid values or modes, and
-`dt > 16383`. Controller injection requires a routed controller with a
+MAKXD rejects unsupported controls, invalid values or modes, and incorrect
+payload lengths. Controller injection requires a routed controller with a
 successfully parsed current report.
 
 ## SDK surface
@@ -193,7 +198,7 @@ successfully parsed current report.
 | SDK | Device kinds | Firmware version | Controller |
 | --- | --- | --- | --- |
 | Python | `device.device()` | `device.firmware_version()` | `device.gamepad.control/mask/state` |
-| Rust | `device()` | `firmware_version()` | `controller_control[_dt]`, `controller_mask`, state methods |
+| Rust | `device()` | `firmware_version()` | `controller_control`, `controller_mask`, state methods |
 | C++ | `device()` | `firmwareVersion()` | `controllerControl`, `controllerMask`, state methods |
 | C | `makxd_get_device_kinds` | `makxd_firmware_version` | `makxd_controller_*` |
 | C# | `device.device_kinds()` | `device.firmware_version()` | `device.controller_*` |
@@ -216,10 +221,10 @@ request:  DE AD 00 00 04
 response: DE AD 04 00 04 01 00 00 00
 ```
 
-Set `SOUTH=1` with `dt=250`:
+Set `SOUTH=1`:
 
 ```text
-DE AD 07 00 41 00 01 00 00 00 FA 00
+DE AD 05 00 41 00 01 00 00 00
 ```
 
 Read `SOUTH`:
@@ -245,13 +250,13 @@ km.version()
 km.device()
 km.echo([0|1])
 km.buttons([0|1])
-km.left([value[,dt]])
-km.right([value[,dt]])
-km.middle([value[,dt]])
-km.side1([value[,dt]])
-km.side2([value[,dt]])
-km.move(x,y[,dt])
-km.wheel(delta[,dt])
+km.left([value])
+km.right([value])
+km.middle([value])
+km.side1([value])
+km.side2([value])
+km.move(x,y)
+km.wheel(delta)
 km.left_mask(enabled)
 km.right_mask(enabled)
 km.middle_mask(enabled)
@@ -259,9 +264,9 @@ km.side1_mask(enabled)
 km.side2_mask(enabled)
 km.move_mask(left,right,down,up)
 km.wheel_mask(down,up)
-km.down(key[,dt])
-km.up(key[,dt])
-km.init([dt])
+km.down(key)
+km.up(key)
+km.init()
 km.press(key[,hold_ms[,random_range]])
 km.string("text")
 km.isdown(key)
@@ -271,9 +276,9 @@ km.multipress(key1,key2,...)
 km.mask(key,mode)
 km.remap(source,target)
 km.keys([0|1])
-km.controller(control[,value[,dt]])
+km.controller(control[,value])
 km.controller_mask(control,mode)
-km.controller_state([low,high,lt,rt,lx,ly,rx,ry,dt])
+km.controller_state([low,high,lt,rt,lx,ly,rx,ry])
 ```
 
 Controller names are lowercase forms of the semantic names above. KM_API

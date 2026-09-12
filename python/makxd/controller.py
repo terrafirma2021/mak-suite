@@ -81,24 +81,24 @@ class MakxdController:
         return self._connected and self.transport.is_connected()
 
     @maybe_async
-    def click(self, button: MouseButton, dt_uframes: int | None = None) -> None:
+    def click(self, button: MouseButton) -> None:
         self._check_connection()
-        self.mouse.press(button, dt_uframes)
-        self.mouse.release(button, dt_uframes)
+        self.mouse.press(button)
+        self.mouse.release(button)
 
     @maybe_async
-    def double_click(self, button: MouseButton, dt_uframes: int | None = None) -> None:
+    def double_click(self, button: MouseButton) -> None:
         self._check_connection()
-        self.mouse.press(button, dt_uframes)
-        self.mouse.release(button, dt_uframes)
+        self.mouse.press(button)
+        self.mouse.release(button)
         time.sleep(0.001)
-        self.mouse.press(button, dt_uframes)
-        self.mouse.release(button, dt_uframes)
+        self.mouse.press(button)
+        self.mouse.release(button)
 
     @maybe_async
-    def move(self, dx: int, dy: int, dt_uframes: int | None = None) -> None:
+    def move(self, dx: int, dy: int) -> None:
         self._check_connection()
-        self.mouse.move(dx, dy, dt_uframes)
+        self.mouse.move(dx, dy)
 
     @maybe_async
     def move_abs(
@@ -116,19 +116,19 @@ class MakxdController:
 
 
     @maybe_async
-    def scroll(self, delta: int, dt_uframes: int | None = None) -> None:
+    def scroll(self, delta: int) -> None:
         self._check_connection()
-        self.mouse.scroll(delta, dt_uframes)
+        self.mouse.scroll(delta)
 
     @maybe_async
-    def press(self, button: MouseButton, dt_uframes: int | None = None) -> None:
+    def press(self, button: MouseButton) -> None:
         self._check_connection()
-        self.mouse.press(button, dt_uframes)
+        self.mouse.press(button)
 
     @maybe_async
-    def release(self, button: MouseButton, dt_uframes: int | None = None) -> None:
+    def release(self, button: MouseButton) -> None:
         self._check_connection()
-        self.mouse.release(button, dt_uframes)
+        self.mouse.release(button)
 
     @maybe_async
     def mouse_button_mask(self, button: MouseButton, enabled: bool) -> None:
@@ -152,14 +152,14 @@ class MakxdController:
         self.mouse.wheel_mask(down, up)
 
     @maybe_async
-    def keyboard_down(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
+    def keyboard_down(self, key: KeyboardKey) -> None:
         self._check_connection()
-        self.keyboard.down(key, dt_uframes)
+        self.keyboard.down(key)
 
     @maybe_async
-    def keyboard_up(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
+    def keyboard_up(self, key: KeyboardKey) -> None:
         self._check_connection()
-        self.keyboard.up(key, dt_uframes)
+        self.keyboard.up(key)
 
     @maybe_async
     def keyboard_press(
@@ -177,9 +177,9 @@ class MakxdController:
         self.keyboard.string(text)
 
     @maybe_async
-    def keyboard_init(self, dt_uframes: int | None = None) -> None:
+    def keyboard_init(self) -> None:
         self._check_connection()
-        self.keyboard.init(dt_uframes)
+        self.keyboard.init()
 
     @maybe_async
     def keyboard_is_down(self, key: KeyboardKey) -> bool:

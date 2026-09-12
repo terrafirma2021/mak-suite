@@ -168,12 +168,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mak_api_move_omits_or_appends_dt_exactly() {
-        let no_dt = mak_api_command(ApiOpcode::Move, &[1, 0, 2, 0]).unwrap();
-        assert_eq!(no_dt, [0xde, 0xad, 4, 0, 0x18, 1, 0, 2, 0]);
-
-        let with_dt = mak_api_command(ApiOpcode::Move, &[1, 0, 2, 0, 0, 0]).unwrap();
-        assert_eq!(with_dt, [0xde, 0xad, 6, 0, 0x18, 1, 0, 2, 0, 0, 0]);
+    fn mak_api_move_has_four_byte_payload() {
+        let frame = mak_api_command(ApiOpcode::Move, &[1, 0, 2, 0]).unwrap();
+        assert_eq!(frame, [0xde, 0xad, 4, 0, 0x18, 1, 0, 2, 0]);
     }
 
     #[test]

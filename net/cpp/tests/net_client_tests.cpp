@@ -220,14 +220,14 @@ int main()
     const std::string bridge_port = std::to_string(bridge.port);
     ok &= expect(kmNet_init("127.0.0.1", bridge_port.c_str(), "12345678") == KMNET_SUCCESS,
                  "connect acknowledgement");
-    ok &= expect(kmNet_mouse_move(12, -7, 16383) == KMNET_SUCCESS,
-                 "timed mouse move acknowledgement");
-    ok &= expect(kmNet_mouse_left(1, 9) == KMNET_SUCCESS,
-                 "timed mouse button acknowledgement");
-    ok &= expect(kmNet_keydown(0x04, 0) == KMNET_SUCCESS,
-                 "timed keyboard acknowledgement");
-    ok &= expect(kmNet_mouse_right(1, 16384) == KMNET_ERR_ARGUMENT,
-                 "invalid DT rejected");
+    ok &= expect(kmNet_mouse_move(12, -7) == KMNET_SUCCESS,
+                 "mouse move acknowledgement");
+    ok &= expect(kmNet_mouse_left(1) == KMNET_SUCCESS,
+                 "mouse button acknowledgement");
+    ok &= expect(kmNet_keydown(0x04) == KMNET_SUCCESS,
+                 "keyboard acknowledgement");
+    ok &= expect(kmNet_mouse_right(2) == KMNET_ERR_ARGUMENT,
+                 "invalid button state rejected");
     ok &= expect(kmNet_monitor(monitor_port) == KMNET_SUCCESS, "monitor enable acknowledgement");
 
     const auto monitor_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
@@ -259,11 +259,11 @@ int main()
                      read_u32_le(packets[1].data() + 12u) == CMD_MOUSE_MOVE &&
                      read_i32_le(packets[1].data() + 20u) == 12 &&
                      read_i32_le(packets[1].data() + 24u) == -7 &&
-                     read_u16_le(packets[1].data() + 32u) == 16383u,
+                     read_u16_le(packets[1].data() + 32u) == 0u,
                      "mouse packet layout");
         ok &= expect(read_u32_le(packets[2].data() + 12u) == CMD_MOUSE_LEFT &&
                      read_u32_le(packets[2].data() + 16u) == 1u &&
-                     read_u16_le(packets[2].data() + 32u) == 9u,
+                     read_u16_le(packets[2].data() + 32u) == 0u,
                      "button shadow layout");
         ok &= expect(packets[3].size() == 30u &&
                      read_u32_le(packets[3].data() + 12u) == CMD_KEYBOARD_ALL &&

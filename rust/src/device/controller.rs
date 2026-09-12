@@ -39,8 +39,8 @@ fn controller_state_check(state: ControllerState) -> Result<()> {
     )
 }
 
-fn controller_state_payload(state: ControllerState, dt_uframes: u16) -> Vec<u8> {
-    let mut payload = Vec::with_capacity(22);
+fn controller_state_payload(state: ControllerState) -> Vec<u8> {
+    let mut payload = Vec::with_capacity(20);
     payload.extend_from_slice(&state.digital_low.to_le_bytes());
     payload.extend_from_slice(&state.digital_high.to_le_bytes());
     payload.extend_from_slice(&state.left_trigger.to_le_bytes());
@@ -49,7 +49,7 @@ fn controller_state_payload(state: ControllerState, dt_uframes: u16) -> Vec<u8> 
     payload.extend_from_slice(&state.left_stick_y.to_le_bytes());
     payload.extend_from_slice(&state.right_stick_x.to_le_bytes());
     payload.extend_from_slice(&state.right_stick_y.to_le_bytes());
-    payload.extend_from_slice(&dt_uframes.to_le_bytes());
+
     payload
 }
 
@@ -87,26 +87,10 @@ impl Device {
     }
 
     pub fn controller_control(&self, control: ControllerControl, value: i32) -> Result<()> {
-        self.controller_control_dt(control, value, 0)
-    }
-
-    pub fn controller_control_dt(
-        &self,
-        control: ControllerControl,
-        value: i32,
-        dt_uframes: u16,
-    ) -> Result<()> {
         controller_value_check(control, value)?;
-        if dt_uframes > 0x3fff {
-            return Err(MakxdError::OutOfRange {
-                value: dt_uframes as i64,
-                min: 0,
-                max: 0x3fff,
-            });
-        }
         let mut payload = vec![control as u8];
         payload.extend_from_slice(&value.to_le_bytes());
-        payload.extend_from_slice(&dt_uframes.to_le_bytes());
+
         self.write_api(ApiOpcode::ControllerControl, &payload)
     }
 
@@ -125,22 +109,8 @@ impl Device {
     }
 
     pub fn set_controller_state(&self, state: ControllerState) -> Result<()> {
-        self.set_controller_state_dt(state, 0)
-    }
-
-    pub fn set_controller_state_dt(&self, state: ControllerState, dt_uframes: u16) -> Result<()> {
         controller_state_check(state)?;
-        if dt_uframes > 0x3fff {
-            return Err(MakxdError::OutOfRange {
-                value: dt_uframes as i64,
-                min: 0,
-                max: 0x3fff,
-            });
-        }
-        self.write_api(
-            ApiOpcode::ControllerState,
-            &controller_state_payload(state, dt_uframes),
-        )
+        self.write_api(ApiOpcode::ControllerState, &controller_state_payload(state))
     }
 }
 
@@ -162,26 +132,10 @@ impl AsyncDevice {
     }
 
     pub async fn controller_control(&self, control: ControllerControl, value: i32) -> Result<()> {
-        self.controller_control_dt(control, value, 0).await
-    }
-
-    pub async fn controller_control_dt(
-        &self,
-        control: ControllerControl,
-        value: i32,
-        dt_uframes: u16,
-    ) -> Result<()> {
         controller_value_check(control, value)?;
-        if dt_uframes > 0x3fff {
-            return Err(MakxdError::OutOfRange {
-                value: dt_uframes as i64,
-                min: 0,
-                max: 0x3fff,
-            });
-        }
         let mut payload = vec![control as u8];
         payload.extend_from_slice(&value.to_le_bytes());
-        payload.extend_from_slice(&dt_uframes.to_le_bytes());
+
         self.write_api(ApiOpcode::ControllerControl, &payload).await
     }
 
@@ -200,27 +154,9 @@ impl AsyncDevice {
     }
 
     pub async fn set_controller_state(&self, state: ControllerState) -> Result<()> {
-        self.set_controller_state_dt(state, 0).await
-    }
-
-    pub async fn set_controller_state_dt(
-        &self,
-        state: ControllerState,
-        dt_uframes: u16,
-    ) -> Result<()> {
         controller_state_check(state)?;
-        if dt_uframes > 0x3fff {
-            return Err(MakxdError::OutOfRange {
-                value: dt_uframes as i64,
-                min: 0,
-                max: 0x3fff,
-            });
-        }
-        self.write_api(
-            ApiOpcode::ControllerState,
-            &controller_state_payload(state, dt_uframes),
-        )
-        .await
+        self.write_api(ApiOpcode::ControllerState, &controller_state_payload(state))
+            .await
     }
 }
 
@@ -228,18 +164,64 @@ impl AsyncDevice {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "mock")]
+    #[test]
+    fn input_commands_send_exact_payloads() {
+        use crate::types::Button;
+        let (device, mock) = Device::mock();
+        device.button_down(Button::Left).unwrap();
+        device.button_up(Button::Left).unwrap();
+        device.move_xy(12, -7).unwrap();
+        device.wheel(-2).unwrap();
+        device.keyboard_down(4u8).unwrap();
+        device.keyboard_up(4u8).unwrap();
+        device.keyboard_init().unwrap();
+        device
+            .controller_control(ControllerControl::LeftStickX, -8)
+            .unwrap();
+        device
+            .set_controller_state(ControllerState::default())
+            .unwrap();
+        device.keyboard_press_randomized(4u8, 10, 5).unwrap();
+        // A query waits for the worker to drain preceding SETs.
+        let _ = device.controller_control_state(ControllerControl::South);
+        let commands = mock.sent_commands();
+        let expected: &[(u8, &[u8])] = &[
+            (0x11, &[1]),
+            (0x11, &[0]),
+            (0x18, &[12, 0, 249, 255]),
+            (0x19, &[254, 255]),
+            (0x20, &[4]),
+            (0x21, &[4]),
+            (0x22, &[]),
+            (0x41, &[12, 248, 255, 255, 255]),
+            (0x40, &[0; 20]),
+            (0x23, &[4, 10, 0, 0, 0, 5, 0, 0, 0]),
+            (0x41, &[0]),
+        ];
+        assert_eq!(commands.len(), expected.len());
+        for (actual, &(opcode, payload)) in commands.iter().zip(expected) {
+            assert_eq!(&actual[..5], &[0xde, 0xad, payload.len() as u8, 0, opcode]);
+            assert_eq!(&actual[5..], payload);
+        }
+    }
+
     #[test]
     fn trigger_is_10_bit_and_stick_is_signed_16_bit() {
-        assert!(controller_value_check(
-            ControllerControl::LeftTrigger,
-            i32::from(CONTROLLER_TRIGGER_MAX),
-        )
-        .is_ok());
-        assert!(controller_value_check(
-            ControllerControl::LeftTrigger,
-            i32::from(CONTROLLER_TRIGGER_MAX) + 1,
-        )
-        .is_err());
+        assert!(
+            controller_value_check(
+                ControllerControl::LeftTrigger,
+                i32::from(CONTROLLER_TRIGGER_MAX),
+            )
+            .is_ok()
+        );
+        assert!(
+            controller_value_check(
+                ControllerControl::LeftTrigger,
+                i32::from(CONTROLLER_TRIGGER_MAX) + 1,
+            )
+            .is_err()
+        );
         assert!(controller_value_check(ControllerControl::RightStickX, -32768).is_ok());
         assert!(controller_value_check(ControllerControl::RightStickX, 32767).is_ok());
     }

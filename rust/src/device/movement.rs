@@ -16,17 +16,6 @@ fn movement_range_check(value: i32) -> Result<()> {
     Ok(())
 }
 
-fn movement_dt_check(dt_uframes: u16) -> Result<()> {
-    if dt_uframes > 0x3fff {
-        return Err(MakxdError::OutOfRange {
-            value: dt_uframes as i64,
-            min: 0,
-            max: 0x3fff,
-        });
-    }
-    Ok(())
-}
-
 impl Device {
     pub fn button_mask(&self, button: Button, enabled: bool) -> Result<()> {
         self.write_api(button_mask_opcode(button), &[enabled as u8])
@@ -74,35 +63,11 @@ impl Device {
         })
     }
 
-    pub fn move_xy_dt(&self, x: i32, y: i32, dt_uframes: u16) -> Result<()> {
-        timed!("move_xy_dt", {
-            movement_range_check(x)?;
-            movement_range_check(y)?;
-            movement_dt_check(dt_uframes)?;
-            let mut payload = Vec::with_capacity(6);
-            payload.extend_from_slice(&(x as i16).to_le_bytes());
-            payload.extend_from_slice(&(y as i16).to_le_bytes());
-            payload.extend_from_slice(&dt_uframes.to_le_bytes());
-            self.write_api(ApiOpcode::Move, &payload)
-        })
-    }
-
     /// Scroll wheel. Range ±127. Positive = up, negative = down.
     pub fn wheel(&self, delta: i32) -> Result<()> {
         timed!("wheel", {
             movement_range_check(delta)?;
             self.write_api(ApiOpcode::Wheel, &(delta as i16).to_le_bytes())
-        })
-    }
-
-    pub fn wheel_dt(&self, delta: i32, dt_uframes: u16) -> Result<()> {
-        timed!("wheel_dt", {
-            movement_range_check(delta)?;
-            movement_dt_check(dt_uframes)?;
-            let mut payload = Vec::with_capacity(4);
-            payload.extend_from_slice(&(delta as i16).to_le_bytes());
-            payload.extend_from_slice(&dt_uframes.to_le_bytes());
-            self.write_api(ApiOpcode::Wheel, &payload)
         })
     }
 }
@@ -160,36 +125,12 @@ impl AsyncDevice {
         })
     }
 
-    pub async fn move_xy_dt(&self, x: i32, y: i32, dt_uframes: u16) -> Result<()> {
-        timed!("move_xy_dt", {
-            movement_range_check(x)?;
-            movement_range_check(y)?;
-            movement_dt_check(dt_uframes)?;
-            let mut payload = Vec::with_capacity(6);
-            payload.extend_from_slice(&(x as i16).to_le_bytes());
-            payload.extend_from_slice(&(y as i16).to_le_bytes());
-            payload.extend_from_slice(&dt_uframes.to_le_bytes());
-            self.write_api(ApiOpcode::Move, &payload).await
-        })
-    }
-
     /// Scroll wheel. Range ±127.
     pub async fn wheel(&self, delta: i32) -> Result<()> {
         timed!("wheel", {
             movement_range_check(delta)?;
             self.write_api(ApiOpcode::Wheel, &(delta as i16).to_le_bytes())
                 .await
-        })
-    }
-
-    pub async fn wheel_dt(&self, delta: i32, dt_uframes: u16) -> Result<()> {
-        timed!("wheel_dt", {
-            movement_range_check(delta)?;
-            movement_dt_check(dt_uframes)?;
-            let mut payload = Vec::with_capacity(4);
-            payload.extend_from_slice(&(delta as i16).to_le_bytes());
-            payload.extend_from_slice(&dt_uframes.to_le_bytes());
-            self.write_api(ApiOpcode::Wheel, &payload).await
         })
     }
 }

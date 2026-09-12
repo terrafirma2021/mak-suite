@@ -255,9 +255,7 @@ MAKXD_C_API makxd_error_t makxd_firmware_version(
 
 // Mouse button control
 MAKXD_C_API makxd_error_t makxd_mouse_down(makxd_device_t* device, makxd_mouse_button_t button);
-MAKXD_C_API makxd_error_t makxd_mouse_down_dt(makxd_device_t* device, makxd_mouse_button_t button, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_mouse_up(makxd_device_t* device, makxd_mouse_button_t button);
-MAKXD_C_API makxd_error_t makxd_mouse_up_dt(makxd_device_t* device, makxd_mouse_button_t button, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_mouse_click(makxd_device_t* device, makxd_mouse_button_t button);
 MAKXD_C_API makxd_error_t makxd_mouse_button_mask(
     makxd_device_t* device, makxd_mouse_button_t button, bool enabled);
@@ -271,30 +269,22 @@ MAKXD_C_API makxd_error_t makxd_mouse_button_state(makxd_device_t* device, makxd
 
 // Mouse movement
 MAKXD_C_API makxd_error_t makxd_mouse_move(makxd_device_t* device, int32_t x, int32_t y);
-MAKXD_C_API makxd_error_t makxd_mouse_move_dt(makxd_device_t* device, int32_t x, int32_t y, uint16_t dt_uframes);
 
 // Mouse drag operations
 MAKXD_C_API makxd_error_t makxd_mouse_drag(makxd_device_t* device, makxd_mouse_button_t button, int32_t x, int32_t y);
 
 // Mouse wheel
 MAKXD_C_API makxd_error_t makxd_mouse_wheel(makxd_device_t* device, int32_t delta);
-MAKXD_C_API makxd_error_t makxd_mouse_wheel_dt(makxd_device_t* device, int32_t delta, uint16_t dt_uframes);
 
 // Keyboard control by USB HID usage.
 MAKXD_C_API makxd_error_t makxd_keyboard_down(makxd_device_t* device, uint8_t key);
-MAKXD_C_API makxd_error_t makxd_keyboard_down_dt(makxd_device_t* device, uint8_t key, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_keyboard_up(makxd_device_t* device, uint8_t key);
-MAKXD_C_API makxd_error_t makxd_keyboard_up_dt(makxd_device_t* device, uint8_t key, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_keyboard_init(makxd_device_t* device);
-MAKXD_C_API makxd_error_t makxd_keyboard_init_dt(makxd_device_t* device, uint16_t dt_uframes);
 
 MAKXD_C_API makxd_error_t makxd_controller_control_get(
     makxd_device_t* device, makxd_controller_control_t control, int32_t* value);
 MAKXD_C_API makxd_error_t makxd_controller_control(
     makxd_device_t* device, makxd_controller_control_t control, int32_t value);
-MAKXD_C_API makxd_error_t makxd_controller_control_dt(
-    makxd_device_t* device, makxd_controller_control_t control,
-    int32_t value, uint16_t dt_uframes);
 MAKXD_C_API makxd_error_t makxd_controller_mask(
     makxd_device_t* device, makxd_controller_control_t control,
     makxd_controller_mask_mode_t mode);
@@ -302,9 +292,6 @@ MAKXD_C_API makxd_error_t makxd_controller_state_get(
     makxd_device_t* device, makxd_controller_state_t* state);
 MAKXD_C_API makxd_error_t makxd_controller_state_set(
     makxd_device_t* device, const makxd_controller_state_t* state);
-MAKXD_C_API makxd_error_t makxd_controller_state_set_dt(
-    makxd_device_t* device, const makxd_controller_state_t* state,
-    uint16_t dt_uframes);
 MAKXD_C_API bool makxd_controller_stream_decode(
     const uint8_t* values, size_t values_size,
     makxd_controller_stream_state_t* state);

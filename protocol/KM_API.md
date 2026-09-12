@@ -99,11 +99,11 @@ MAKXD accepts these 33 command names:
 | --- | --- | --- |
 | Status | `km.version()`, `km.device()`, `km.echo()` | `km.echo(enabled)` |
 | Mouse stream | `km.buttons()` | `km.buttons(enabled)` |
-| Mouse buttons | `km.left()`, `km.right()`, `km.middle()`, `km.side1()`, `km.side2()` | same names with `state[,dt]` |
-| Mouse motion | none | `km.move(x,y[,dt])`, `km.wheel(delta[,dt])` |
+| Mouse buttons | `km.left()`, `km.right()`, `km.middle()`, `km.side1()`, `km.side2()` | same names with `state` |
+| Mouse motion | none | `km.move(x,y)`, `km.wheel(delta)` |
 | Mouse masks | none | `km.left_mask(enabled)`, `km.right_mask(enabled)`, `km.middle_mask(enabled)`, `km.side1_mask(enabled)`, `km.side2_mask(enabled)`, `km.move_mask(left,right,down,up)`, `km.wheel_mask(down,up)` |
-| Keyboard | `km.isdown(key)`, `km.keys()` | `km.down(key[,dt])`, `km.up(key[,dt])`, `km.init([dt])`, `km.press(key[,hold_ms[,random_range]])`, `km.string("text")`, `km.multidown(keys...)`, `km.multiup(keys...)`, `km.multipress(keys...)`, `km.mask(key,enabled)`, `km.remap(source,target)`, `km.keys(enabled)` |
-| Controller | `km.controller(control)`, `km.controller_state()` | `km.controller(control,value[,dt])`, `km.controller_mask(control,mode)`, `km.controller_state(low,high,lt,rt,lx,ly,rx,ry,dt)` |
+| Keyboard | `km.isdown(key)`, `km.keys()` | `km.down(key)`, `km.up(key)`, `km.init()`, `km.press(key[,hold_ms[,random_range]])`, `km.string("text")`, `km.multidown(keys...)`, `km.multiup(keys...)`, `km.multipress(keys...)`, `km.mask(key,enabled)`, `km.remap(source,target)`, `km.keys(enabled)` |
+| Controller | `km.controller(control)`, `km.controller_state()` | `km.controller(control,value)`, `km.controller_mask(control,mode)`, `km.controller_state(low,high,lt,rt,lx,ly,rx,ry)` |
 
 ## Status and settings
 
@@ -138,11 +138,13 @@ response; `km.echo(1)` returns its mutation echo and prompt.
 
 ## Timing
 
-`dt` is a USB scheduling offset measured in microframes. One microframe is
-125 us. Every optional `dt` defaults to zero and must be `0..16383`.
+Mouse, keyboard, and controller commands do not accept caller-supplied `dt`.
+Use the exact argument counts and payload lengths below. A legacy DT argument
+or two-byte trailer is rejected, including an explicit zero.
 
-`dt` schedules the injected report. It is not a blocking command delay and
-does not measure host-side USB or application latency.
+Keyboard press durations (`hold_ms` and `random_range`) remain in milliseconds.
+Input-stream timing fields and the polling intervals returned by `km.device()`
+are unchanged.
 
 ## Mouse
 
@@ -155,13 +157,13 @@ does not measure host-side USB or application latency.
 | GET | `km.middle()` | none | injected state, `0` or `1` |
 | GET | `km.side1()` | none | injected state, `0` or `1` |
 | GET | `km.side2()` | none | injected state, `0` or `1` |
-| SET | `km.left(state[,dt])` | `state`: `0` or `1`; optional `dt` | none |
-| SET | `km.right(state[,dt])` | `state`: `0` or `1`; optional `dt` | none |
-| SET | `km.middle(state[,dt])` | `state`: `0` or `1`; optional `dt` | none |
-| SET | `km.side1(state[,dt])` | `state`: `0` or `1`; optional `dt` | none |
-| SET | `km.side2(state[,dt])` | `state`: `0` or `1`; optional `dt` | none |
-| SET | `km.move(x,y[,dt])` | `x`, `y`: `-32768..32767`; optional `dt` | none |
-| SET | `km.wheel(delta[,dt])` | `delta`: `-32768..32767`; optional `dt` | none |
+| SET | `km.left(state)` | `state`: `0` or `1` | none |
+| SET | `km.right(state)` | `state`: `0` or `1` | none |
+| SET | `km.middle(state)` | `state`: `0` or `1` | none |
+| SET | `km.side1(state)` | `state`: `0` or `1` | none |
+| SET | `km.side2(state)` | `state`: `0` or `1` | none |
+| SET | `km.move(x,y)` | `x`, `y`: `-32768..32767` | none |
+| SET | `km.wheel(delta)` | `delta`: `-32768..32767` | none |
 
 Button queries report the KM injected state tracked by the device, not the live
 physical mouse state. A nonzero button state presses the button; zero releases
@@ -275,9 +277,9 @@ key not in the name table.
 
 | Operation | Command | Arguments | Returned data |
 | --- | --- | --- | --- |
-| SET | `km.down(key[,dt])` | key; optional `dt` | none |
-| SET | `km.up(key[,dt])` | key; optional `dt` | none |
-| SET | `km.init([dt])` | optional `dt` | none |
+| SET | `km.down(key)` | key | none |
+| SET | `km.up(key)` | key | none |
+| SET | `km.init()` | none | none |
 | SET | `km.press(key[,hold_ms[,random_range]])` | key; optional unsigned millisecond values | none |
 | SET | `km.string("text")` | double-quoted ASCII, `0..256` bytes | none |
 | GET | `km.isdown(key)` | key | physical state, `0` or `1` |
@@ -372,7 +374,7 @@ control queries and mutations return `ERR`.
 | Operation | Command | Arguments | Returned data |
 | --- | --- | --- | --- |
 | GET | `km.controller(control)` | supported control name | decimal value |
-| SET | `km.controller(control,value[,dt])` | control, range-valid value, optional `dt` | none |
+| SET | `km.controller(control,value)` | control, range-valid value | none |
 | SET | `km.controller_mask(control,mode)` | control and mask mode | none |
 
 A control mutation updates that field in the complete injected controller
@@ -413,15 +415,14 @@ Digital bit N is control ID N. `digital_low` contains IDs 0..31 and
 | Operation | Command | Arguments | Returned data |
 | --- | --- | --- | --- |
 | GET | `km.controller_state()` | none | `low,high,lt,rt,lx,ly,rx,ry` |
-| SET | `km.controller_state(low,high,lt,rt,lx,ly,rx,ry,dt)` | all nine decimal values are required | none |
+| SET | `km.controller_state(low,high,lt,rt,lx,ly,rx,ry)` | all eight decimal values are required | none |
 
 The two digital words are unsigned decimal values. Trigger and stick ranges
-match the control table. `dt` is required for a complete-state mutation and
-must be `0..16383`; pass zero for immediate scheduling.
+match the control table. A complete-state mutation takes exactly eight values.
 
 The trigger contract is canonical 10-bit for both injection and input
 streaming. MAKXD maps `0..1023` to and from the selected controller's native
-trigger width. Stick axes remain signed 16-bit and `dt` remains unchanged.
+trigger width. Stick axes remain signed 16-bit.
 
 MAKXD rejects contradictory D-pad pairs (`up` with `down`, or `left`
 with `right`), set bits for unsupported digital controls, and nonzero analog
@@ -446,10 +447,10 @@ request:  km.device()\r\n
 response: km.device()\r\nR:MK;M:8uf;K:8uf;C:0uf\r\n>>>\x20
 ```
 
-Move left 120 counts at `dt=250`:
+Move left 120 counts:
 
 ```text
-km.move(-120,0,250)\r\n
+km.move(-120,0)\r\n
 ```
 
 Press Enter for the default 10 ms:
@@ -470,12 +471,12 @@ Read and set the south controller button:
 request:  km.controller(south)\r\n
 response: km.controller(south)\r\n0\r\n>>>\x20
 
-request:  km.controller(south,1,250)\r\n
+request:  km.controller(south,1)\r\n
 response with echo disabled: <no response>
 ```
 
 Set a complete neutral controller state immediately:
 
 ```text
-km.controller_state(0,0,0,0,0,0,0,0,0)\r\n
+km.controller_state(0,0,0,0,0,0,0,0)\r\n
 ```

@@ -78,34 +78,20 @@ def _key_code(key: KeyboardKey) -> int:
         raise MakxdCommandError(f"Unknown keyboard key name: {key}") from error
 
 
-def _dt_value(dt_uframes: int | None) -> str:
-    if dt_uframes is None:
-        return ""
-    if not isinstance(dt_uframes, int) or isinstance(dt_uframes, bool):
-        raise MakxdCommandError("DT must be an integer")
-    if dt_uframes < 0 or dt_uframes > 0x3FFF:
-        raise MakxdCommandError("DT must be in the range 0..16383")
-    return str(dt_uframes)
-
-
 class Keyboard:
     """MAKXD keyboard command surface matching the C++ API contract."""
 
     def __init__(self, transport: SerialTransport) -> None:
         self.transport = transport
 
-    def down(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
+    def down(self, key: KeyboardKey) -> None:
         payload = bytes((_key_code(key),))
-        if dt_uframes is not None:
-            payload += int(_dt_value(dt_uframes)).to_bytes(2, "little")
         self.transport.send_mak_api(
             ApiOpcode.KEY_DOWN, payload, wait_response=False
         )
 
-    def up(self, key: KeyboardKey, dt_uframes: int | None = None) -> None:
+    def up(self, key: KeyboardKey) -> None:
         payload = bytes((_key_code(key),))
-        if dt_uframes is not None:
-            payload += int(_dt_value(dt_uframes)).to_bytes(2, "little")
         self.transport.send_mak_api(
             ApiOpcode.KEY_UP, payload, wait_response=False
         )
@@ -147,10 +133,8 @@ class Keyboard:
             ApiOpcode.KEY_STRING, encoded, wait_response=False
         )
 
-    def init(self, dt_uframes: int | None = None) -> None:
+    def init(self) -> None:
         payload = b""
-        if dt_uframes is not None:
-            payload = int(_dt_value(dt_uframes)).to_bytes(2, "little")
         self.transport.send_mak_api(
             ApiOpcode.KEY_INIT, payload, wait_response=False
         )

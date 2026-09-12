@@ -235,9 +235,7 @@ namespace makxd {
 
         // Mouse button control; success requires Makxd's echoed command.
         [[nodiscard]] bool mouseDown(MouseButton button);
-        [[nodiscard]] bool mouseDown(MouseButton button, uint16_t dt_uframes);
         [[nodiscard]] bool mouseUp(MouseButton button);
-        [[nodiscard]] bool mouseUp(MouseButton button, uint16_t dt_uframes);
         [[nodiscard]] bool click(MouseButton button);  // Combined press+release
         [[nodiscard]] bool mouseButtonMask(MouseButton button, bool enabled);
         [[nodiscard]] bool mouseLeftMask(bool enabled);
@@ -255,7 +253,6 @@ namespace makxd {
 
         // Movement; success requires Makxd's echoed command.
         [[nodiscard]] bool mouseMove(int32_t x, int32_t y);
-        [[nodiscard]] bool mouseMove(int32_t x, int32_t y, uint16_t dt_uframes);
 
         // High-performance drag operations
         [[nodiscard]] bool mouseDrag(MouseButton button, int32_t x, int32_t y);
@@ -263,20 +260,16 @@ namespace makxd {
 
         // Mouse wheel
         [[nodiscard]] bool mouseWheel(int32_t delta);
-        [[nodiscard]] bool mouseWheel(int32_t delta, uint16_t dt_uframes);
 
         // Keyboard control
         [[nodiscard]] bool keyboardDown(const KeyboardKey& key);
-        [[nodiscard]] bool keyboardDown(const KeyboardKey& key, uint16_t dt_uframes);
         [[nodiscard]] bool keyboardUp(const KeyboardKey& key);
-        [[nodiscard]] bool keyboardUp(const KeyboardKey& key, uint16_t dt_uframes);
         [[nodiscard]] bool keyboardPress(const KeyboardKey& key);
         [[nodiscard]] bool keyboardPress(const KeyboardKey& key, uint32_t hold_ms);
         [[nodiscard]] bool keyboardPress(const KeyboardKey& key,
             uint32_t hold_ms, uint32_t rand_ms);
         [[nodiscard]] bool keyboardString(const std::string& text);
         [[nodiscard]] bool keyboardInit();
-        [[nodiscard]] bool keyboardInit(uint16_t dt_uframes);
         [[nodiscard]] bool keyboardIsDown(const KeyboardKey& key);
         [[nodiscard]] bool keyboardMask(const KeyboardKey& key, bool enable);
         [[nodiscard]] bool keyboardRemap(const KeyboardKey& source,
@@ -292,14 +285,10 @@ namespace makxd {
             ControllerControl control);
         [[nodiscard]] bool controllerControl(
             ControllerControl control, int32_t value);
-        [[nodiscard]] bool controllerControl(
-            ControllerControl control, int32_t value, uint16_t dt_uframes);
         [[nodiscard]] bool controllerMask(
             ControllerControl control, ControllerMaskMode mode);
         [[nodiscard]] std::optional<ControllerState> controllerState();
         [[nodiscard]] bool setControllerState(const ControllerState& state);
-        [[nodiscard]] bool setControllerState(
-            const ControllerState& state, uint16_t dt_uframes);
 
         // Button monitoring with optimized processing
         [[nodiscard]] bool enableButtonMonitoring(bool enable = true);

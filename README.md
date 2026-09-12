@@ -28,6 +28,12 @@ Controller calls use the same semantic controls in every language: `SOUTH`,
 `EAST`, `WEST`, `NORTH`, D-pad, shoulder, trigger, stick, system, grip, and
 `EXTRA_1..EXTRA_32`.
 
+Mouse, keyboard, and controller commands no longer accept a `dt` argument.
+Remove that argument from existing calls and use the ordinary methods in place
+of C/Rust `_dt` methods. Controller SET payloads are now 5 bytes for one control
+and 20 bytes for a complete state. Keyboard press durations and input-stream
+timestamps retain their existing meaning.
+
 The complete wire contract, opcode table, payload layouts, values, examples,
 and events are defined in
 [`protocol/MAK_API.md`](protocol/MAK_API.md).

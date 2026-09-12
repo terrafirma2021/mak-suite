@@ -161,6 +161,10 @@ if(BUILD_TESTING AND TARGET ${PROJECT_NAME}_static)
     target_compile_features(makxd-cpp-ble-batch-tests PRIVATE cxx_std_23)
     add_test(NAME makxd-cpp-ble-batch-tests
         COMMAND makxd-cpp-ble-batch-tests)
+    add_executable(makxd-cpp-input-command-tests tests/input_command_tests.cpp)
+    target_link_libraries(makxd-cpp-input-command-tests PRIVATE ${PROJECT_NAME}_static)
+    target_compile_features(makxd-cpp-input-command-tests PRIVATE cxx_std_23)
+    add_test(NAME makxd-cpp-input-command-tests COMMAND makxd-cpp-input-command-tests)
 endif()
 
 # Install targets

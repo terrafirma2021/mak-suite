@@ -12,7 +12,7 @@ device.move(40, 0)
 device.click(MouseButton.LEFT)
 device.keyboard_press("A")
 device.gamepad.control(ControllerControl.SOUTH, 1)
-device.gamepad.control(ControllerControl.SOUTH, 0, dt_uframes=250)
+device.gamepad.control(ControllerControl.SOUTH, 0)
 info = device.device()
 print(device.firmware_version())
 if info.has(DeviceKind.XBOX_GIP):

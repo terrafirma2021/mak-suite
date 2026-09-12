@@ -117,17 +117,17 @@ def test_mak_api_mouse_keyboard_and_controller_payloads() -> None:
     keyboard = Keyboard(transport)
     gamepad = Gamepad(transport)
 
-    mouse.press(MouseButton.LEFT, 7)
+    mouse.press(MouseButton.LEFT)
     mouse.move(-2, 3)
-    keyboard.down("enter", 9)
-    gamepad.control(ControllerControl.LEFT_STICK_X, -4, 11)
+    keyboard.down("enter")
+    gamepad.control(ControllerControl.LEFT_STICK_X, -4)
     gamepad.mask(ControllerControl.EXTRA_32, ControllerMaskMode.COMPLETE)
 
     assert transport.calls == [
-        (0x11, b"\x01\x07\x00", False),
+        (0x11, b"\x01", False),
         (0x18, b"\xFE\xFF\x03\x00", False),
-        (0x20, b"\x28\x09\x00", False),
-        (0x41, b"\x0C\xFC\xFF\xFF\xFF\x0B\x00", False),
+        (0x20, b"\x28", False),
+        (0x41, b"\x0C\xFC\xFF\xFF\xFF", False),
         (0x51, b"\x36\x01", False),
     ]
 
@@ -137,7 +137,7 @@ def test_mak_api_named_controller_button_hat_and_direction_locks() -> None:
     gamepad = Gamepad(transport)
 
     assert gamepad.control(ControllerControl.SOUTH) == 1
-    gamepad.control(ControllerControl.EXTRA_32, 0, 250)
+    gamepad.control(ControllerControl.EXTRA_32, 0)
     assert gamepad.control(ControllerControl.DPAD_LEFT) == 1
     gamepad.control(ControllerControl.DPAD_LEFT, 1)
     gamepad.mask(ControllerControl.DPAD_RIGHT, ControllerMaskMode.COMPLETE)
@@ -145,9 +145,9 @@ def test_mak_api_named_controller_button_hat_and_direction_locks() -> None:
 
     assert transport.calls == [
         (0x41, b"\x00", True),
-        (0x41, b"\x36\x00\x00\x00\x00\xFA\x00", False),
+        (0x41, b"\x36\x00\x00\x00\x00", False),
         (0x41, b"\x06", True),
-        (0x41, b"\x06\x01\x00\x00\x00\x00\x00", False),
+        (0x41, b"\x06\x01\x00\x00\x00", False),
         (0x51, b"\x07\x01", False),
         (0x51, b"\x0C\x04", False),
     ]

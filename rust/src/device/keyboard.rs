@@ -5,20 +5,8 @@ use crate::types::KeyboardKey;
 
 use super::Device;
 
-const KEYBOARD_DT_MAX: u16 = 0x3fff;
 const KEYBOARD_STRING_MAX: usize = 248;
 const KEYBOARD_MULTI_MAX: usize = 14;
-
-fn keyboard_dt_check(dt_uframes: u16) -> Result<()> {
-    if dt_uframes > KEYBOARD_DT_MAX {
-        return Err(MakxdError::OutOfRange {
-            value: dt_uframes as i64,
-            min: 0,
-            max: KEYBOARD_DT_MAX as i64,
-        });
-    }
-    Ok(())
-}
 
 fn keyboard_string_check(text: &str) -> Result<()> {
     if !text.is_ascii() {
@@ -76,32 +64,12 @@ impl Device {
         )
     }
 
-    pub fn keyboard_down_dt<K: Into<KeyboardKey>>(&self, key: K, dt_uframes: u16) -> Result<()> {
-        let key = key.into();
-        timed!("keyboard_down_dt", {
-            keyboard_dt_check(dt_uframes)?;
-            let mut payload = vec![keyboard_code(&key)?];
-            payload.extend_from_slice(&dt_uframes.to_le_bytes());
-            self.write_api(ApiOpcode::KeyDown, &payload)
-        })
-    }
-
     pub fn keyboard_up<K: Into<KeyboardKey>>(&self, key: K) -> Result<()> {
         let key = key.into();
         timed!(
             "keyboard_up",
             self.write_api(ApiOpcode::KeyUp, &[keyboard_code(&key)?])
         )
-    }
-
-    pub fn keyboard_up_dt<K: Into<KeyboardKey>>(&self, key: K, dt_uframes: u16) -> Result<()> {
-        let key = key.into();
-        timed!("keyboard_up_dt", {
-            keyboard_dt_check(dt_uframes)?;
-            let mut payload = vec![keyboard_code(&key)?];
-            payload.extend_from_slice(&dt_uframes.to_le_bytes());
-            self.write_api(ApiOpcode::KeyUp, &payload)
-        })
     }
 
     pub fn keyboard_press<K: Into<KeyboardKey>>(&self, key: K) -> Result<()> {
@@ -143,13 +111,6 @@ impl Device {
 
     pub fn keyboard_init(&self) -> Result<()> {
         timed!("keyboard_init", self.write_api(ApiOpcode::KeyInit, &[]))
-    }
-
-    pub fn keyboard_init_dt(&self, dt_uframes: u16) -> Result<()> {
-        timed!("keyboard_init_dt", {
-            keyboard_dt_check(dt_uframes)?;
-            self.write_api(ApiOpcode::KeyInit, &dt_uframes.to_le_bytes())
-        })
     }
 
     pub fn keyboard_is_down<K: Into<KeyboardKey>>(&self, key: K) -> Result<bool> {
@@ -241,34 +202,10 @@ impl AsyncDevice {
             .await
     }
 
-    pub async fn keyboard_down_dt<K: Into<KeyboardKey>>(
-        &self,
-        key: K,
-        dt_uframes: u16,
-    ) -> Result<()> {
-        let key = key.into();
-        keyboard_dt_check(dt_uframes)?;
-        let mut payload = vec![keyboard_code(&key)?];
-        payload.extend_from_slice(&dt_uframes.to_le_bytes());
-        self.write_api(ApiOpcode::KeyDown, &payload).await
-    }
-
     pub async fn keyboard_up<K: Into<KeyboardKey>>(&self, key: K) -> Result<()> {
         let key = key.into();
         self.write_api(ApiOpcode::KeyUp, &[keyboard_code(&key)?])
             .await
-    }
-
-    pub async fn keyboard_up_dt<K: Into<KeyboardKey>>(
-        &self,
-        key: K,
-        dt_uframes: u16,
-    ) -> Result<()> {
-        let key = key.into();
-        keyboard_dt_check(dt_uframes)?;
-        let mut payload = vec![keyboard_code(&key)?];
-        payload.extend_from_slice(&dt_uframes.to_le_bytes());
-        self.write_api(ApiOpcode::KeyUp, &payload).await
     }
 
     pub async fn keyboard_press<K: Into<KeyboardKey>>(&self, key: K) -> Result<()> {
@@ -312,12 +249,6 @@ impl AsyncDevice {
 
     pub async fn keyboard_init(&self) -> Result<()> {
         self.write_api(ApiOpcode::KeyInit, &[]).await
-    }
-
-    pub async fn keyboard_init_dt(&self, dt_uframes: u16) -> Result<()> {
-        keyboard_dt_check(dt_uframes)?;
-        self.write_api(ApiOpcode::KeyInit, &dt_uframes.to_le_bytes())
-            .await
     }
 
     pub async fn keyboard_is_down<K: Into<KeyboardKey>>(&self, key: K) -> Result<bool> {

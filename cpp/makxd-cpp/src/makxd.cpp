@@ -213,12 +213,6 @@ namespace makxd {
                     static_cast<uint8_t>(value[offset + 3u])) << 24u));
         }
 
-        constexpr uint16_t DT_UFRAMES_MAX = 0x3FFFu;
-
-        bool dtUframesValid(uint16_t dtUframes) {
-            return dtUframes <= DT_UFRAMES_MAX;
-        }
-
     } // namespace
 
     // Constants
@@ -487,59 +481,45 @@ namespace makxd {
         // Optimized move command with buffer reuse and bounds checking
         bool executeMoveCommand(
             int32_t x,
-            int32_t y,
-            std::optional<uint16_t> dtUframes = std::nullopt) {
+            int32_t y) {
             // Validate coordinate ranges to prevent buffer overflow
             constexpr int32_t MAX_COORD = 32767;
             constexpr int32_t MIN_COORD = -32768;
             
-            if (x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD ||
-                (dtUframes.has_value() && !dtUframesValid(*dtUframes))) {
+            if (x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD) {
                 #ifdef DEBUG
                 std::cerr << "Move coordinates out of range: (" << x << "," << y << ")" << std::endl;
                 #endif
                 return false;
             }
             
-            std::array<uint8_t, 6> payload{};
+            std::array<uint8_t, 4> payload{};
             payload[0] = static_cast<uint8_t>(x);
             payload[1] = static_cast<uint8_t>(
                 static_cast<uint16_t>(x) >> 8u);
             payload[2] = static_cast<uint8_t>(y);
             payload[3] = static_cast<uint8_t>(
                 static_cast<uint16_t>(y) >> 8u);
-            const size_t payloadBytes = dtUframes.has_value() ? 6u : 4u;
-            if (dtUframes.has_value()) {
-                payload[4] = static_cast<uint8_t>(*dtUframes);
-                payload[5] = static_cast<uint8_t>(*dtUframes >> 8u);
-            }
             return executeApiCommand(
                 ApiOpcode::MOVE,
-                std::span<const uint8_t>(payload.data(), payloadBytes));
+                payload);
         }
 
         // Optimized wheel command with buffer reuse
         bool executeWheelCommand(
-            int32_t delta,
-            std::optional<uint16_t> dtUframes = std::nullopt) {
+            int32_t delta) {
             // Validate wheel delta range
-            if (delta < -32768 || delta > 32767 ||
-                (dtUframes.has_value() && !dtUframesValid(*dtUframes))) {
+            if (delta < -32768 || delta > 32767) {
                 return false;
             }
             
-            std::array<uint8_t, 4> payload{};
+            std::array<uint8_t, 2> payload{};
             payload[0] = static_cast<uint8_t>(delta);
             payload[1] = static_cast<uint8_t>(
                 static_cast<uint16_t>(delta) >> 8u);
-            const size_t payloadBytes = dtUframes.has_value() ? 4u : 2u;
-            if (dtUframes.has_value()) {
-                payload[2] = static_cast<uint8_t>(*dtUframes);
-                payload[3] = static_cast<uint8_t>(*dtUframes >> 8u);
-            }
             return executeApiCommand(
                 ApiOpcode::WHEEL,
-                std::span<const uint8_t>(payload.data(), payloadBytes));
+                payload);
         }
 
     };
@@ -919,24 +899,6 @@ namespace makxd {
             payload);
     }
 
-    bool Device::mouseDown(MouseButton button, uint16_t dt_uframes) {
-        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
-            return false;
-        }
-        if (std::to_underlying(button) >= 5u) {
-            return false;
-        }
-        const std::array<uint8_t, 3> payload{
-            1u,
-            static_cast<uint8_t>(dt_uframes),
-            static_cast<uint8_t>(dt_uframes >> 8u)};
-        return m_impl->executeApiCommand(
-            static_cast<ApiOpcode>(
-                static_cast<uint8_t>(ApiOpcode::LEFT) +
-                std::to_underlying(button)),
-            payload);
-    }
-
     bool Device::mouseUp(MouseButton button) {
         if (!m_impl->connected.load()) {
             return false;
@@ -946,24 +908,6 @@ namespace makxd {
             return false;
         }
         constexpr std::array<uint8_t, 1> payload{0u};
-        return m_impl->executeApiCommand(
-            static_cast<ApiOpcode>(
-                static_cast<uint8_t>(ApiOpcode::LEFT) +
-                std::to_underlying(button)),
-            payload);
-    }
-
-    bool Device::mouseUp(MouseButton button, uint16_t dt_uframes) {
-        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
-            return false;
-        }
-        if (std::to_underlying(button) >= 5u) {
-            return false;
-        }
-        const std::array<uint8_t, 3> payload{
-            0u,
-            static_cast<uint8_t>(dt_uframes),
-            static_cast<uint8_t>(dt_uframes >> 8u)};
         return m_impl->executeApiCommand(
             static_cast<ApiOpcode>(
                 static_cast<uint8_t>(ApiOpcode::LEFT) +
@@ -1064,13 +1008,6 @@ namespace makxd {
         return m_impl->executeMoveCommand(x, y);
     }
 
-    bool Device::mouseMove(int32_t x, int32_t y, uint16_t dt_uframes) {
-        if (!m_impl->connected.load()) {
-            return false;
-        }
-        return m_impl->executeMoveCommand(x, y, dt_uframes);
-    }
-
     // High-performance drag operations
     bool Device::mouseDrag(MouseButton button, int32_t x, int32_t y) {
         if (!m_impl->connected.load()) {
@@ -1100,13 +1037,6 @@ namespace makxd {
         return m_impl->executeWheelCommand(delta);
     }
 
-    bool Device::mouseWheel(int32_t delta, uint16_t dt_uframes) {
-        if (!m_impl->connected.load()) {
-            return false;
-        }
-        return m_impl->executeWheelCommand(delta, dt_uframes);
-    }
-
     // Keyboard control methods
     bool Device::keyboardDown(const KeyboardKey& key) {
         if (!m_impl->connected.load()) {
@@ -1123,24 +1053,6 @@ namespace makxd {
             payload);
     }
 
-    bool Device::keyboardDown(
-        const KeyboardKey& key, uint16_t dt_uframes) {
-        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
-            return false;
-        }
-        const auto keyCode = keyboardKeyCode(key);
-        if (!keyCode) {
-            return false;
-        }
-        const std::array<uint8_t, 3> payload{
-            *keyCode,
-            static_cast<uint8_t>(dt_uframes),
-            static_cast<uint8_t>(dt_uframes >> 8u)};
-        return m_impl->executeApiCommand(
-            ApiOpcode::KEY_DOWN,
-            payload);
-    }
-
     bool Device::keyboardUp(const KeyboardKey& key) {
         if (!m_impl->connected.load()) {
             return false;
@@ -1151,24 +1063,6 @@ namespace makxd {
             return false;
         }
         const std::array<uint8_t, 1> payload{*keyCode};
-        return m_impl->executeApiCommand(
-            ApiOpcode::KEY_UP,
-            payload);
-    }
-
-    bool Device::keyboardUp(
-        const KeyboardKey& key, uint16_t dt_uframes) {
-        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
-            return false;
-        }
-        const auto keyCode = keyboardKeyCode(key);
-        if (!keyCode) {
-            return false;
-        }
-        const std::array<uint8_t, 3> payload{
-            *keyCode,
-            static_cast<uint8_t>(dt_uframes),
-            static_cast<uint8_t>(dt_uframes >> 8u)};
         return m_impl->executeApiCommand(
             ApiOpcode::KEY_UP,
             payload);
@@ -1247,18 +1141,6 @@ namespace makxd {
 
         return m_impl->executeApiCommand(
             ApiOpcode::KEY_INIT);
-    }
-
-    bool Device::keyboardInit(uint16_t dt_uframes) {
-        if (!m_impl->connected.load() || !dtUframesValid(dt_uframes)) {
-            return false;
-        }
-        const std::array<uint8_t, 2> payload{
-            static_cast<uint8_t>(dt_uframes),
-            static_cast<uint8_t>(dt_uframes >> 8u)};
-        return m_impl->executeApiCommand(
-            ApiOpcode::KEY_INIT,
-            payload);
     }
 
     bool Device::keyboardIsDown(const KeyboardKey& key) {
@@ -1389,19 +1271,13 @@ namespace makxd {
         return static_cast<int32_t>(readU32(*response, 1u));
     }
 
-    bool Device::controllerControl(ControllerControl control, int32_t value) {
-        return controllerControl(control, value, 0u);
-    }
-
     bool Device::controllerControl(
-        ControllerControl control, int32_t value, uint16_t dt_uframes) {
-        if (!controllerValueValid(control, value) ||
-            dt_uframes > 0x3FFFu) return false;
+        ControllerControl control, int32_t value) {
+        if (!controllerValueValid(control, value)) return false;
         std::vector<uint8_t> payload;
-        payload.reserve(7u);
+        payload.reserve(5u);
         payload.push_back(std::to_underlying(control));
         appendU32(payload, static_cast<uint32_t>(value));
-        appendU16(payload, dt_uframes);
         return m_impl->executeApiCommand(
             ApiOpcode::CONTROLLER_CONTROL, payload);
     }
@@ -1436,17 +1312,12 @@ namespace makxd {
         return state;
     }
 
-    bool Device::setControllerState(const ControllerState& state) {
-        return setControllerState(state, 0u);
-    }
-
     bool Device::setControllerState(
-        const ControllerState& state, uint16_t dt_uframes) {
+        const ControllerState& state) {
         if (state.leftTrigger > CONTROLLER_TRIGGER_MAX ||
-            state.rightTrigger > CONTROLLER_TRIGGER_MAX ||
-            dt_uframes > 0x3FFFu) return false;
+            state.rightTrigger > CONTROLLER_TRIGGER_MAX) return false;
         std::vector<uint8_t> payload;
-        payload.reserve(22u);
+        payload.reserve(20u);
         appendU32(payload, state.digitalLow);
         appendU32(payload, state.digitalHigh);
         appendU16(payload, state.leftTrigger);
@@ -1455,7 +1326,6 @@ namespace makxd {
         appendI16(payload, state.leftStickY);
         appendI16(payload, state.rightStickX);
         appendI16(payload, state.rightStickY);
-        appendU16(payload, dt_uframes);
         return m_impl->executeApiCommand(
             ApiOpcode::CONTROLLER_STATE, payload);
     }

@@ -22,8 +22,8 @@ intentionally smaller than the original
 | `kmNet_monitor` and mouse/keyboard monitor queries | enabled |
 | `kmNet_reboot` | enabled as a Bridge session reset |
 
-Not all functions from other KM NET clients are enabled. Every enabled mouse
-and keyboard mutation has an overload with `dt_uframes` in `0..16383`.
+Not all functions from other KM NET clients are enabled. Mouse and keyboard
+mutations do not accept a caller-supplied timing argument.
 Configuration, debug, LCD, masking, and every function not listed above are
 not part of this library. Unsupported functions are omitted instead of
 returning a false success.
@@ -52,15 +52,14 @@ build/Release/makxd-net-tests.exe
 int result = kmNet_init("127.0.0.1", "8338", "12345678");
 if (result == KMNET_SUCCESS) {
     kmNet_mouse_move(20, 0);
-    kmNet_mouse_move(20, 0, 250);
     kmNet_mouse_left(1);
-    kmNet_mouse_left(0, 250);
+    kmNet_mouse_left(0);
     kmNet_close();
 }
 ```
 
-The original overloads remain valid and write DT zero into the Bridge's
-fixed-size packet. Supplying the final argument writes that explicit DT.
+The client preserves the Bridge's fixed-size packets and writes zero in their
+legacy timing slots.
 
 The MAC/UUID string must be exactly eight hexadecimal characters. Its value is
 an identifier echoed by the Bridge, not authentication. When the application
