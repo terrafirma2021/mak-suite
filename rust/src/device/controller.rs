@@ -98,6 +98,9 @@ impl Device {
         controller_state_parse(&value)
     }
 
+    /// Send a complete target state, not a timed move. On MAKCU handoff firmware,
+    /// finish with a zero stick pair / trigger, retaining other active controls.
+    /// Silence is not release. See protocol/MAK_API.md for firmware requirements.
     pub fn set_controller_state(&self, state: ControllerState) -> Result<()> {
         controller_state_check(state)?;
         self.write_api(ApiOpcode::ControllerState, &controller_state_payload(state))
@@ -132,6 +135,9 @@ impl AsyncDevice {
         controller_state_parse(&value)
     }
 
+    /// Send a complete target state, not a timed move. On MAKCU handoff firmware,
+    /// finish with a zero stick pair / trigger, retaining other active controls.
+    /// Silence is not release. See protocol/MAK_API.md for firmware requirements.
     pub async fn set_controller_state(&self, state: ControllerState) -> Result<()> {
         controller_state_check(state)?;
         self.write_api(ApiOpcode::ControllerState, &controller_state_payload(state))

@@ -382,6 +382,10 @@ mask or state mutations return `ERR`.
 | --- | --- | --- | --- |
 | SET | `km.controller_mask(control,mode)` | supported control name and mask mode | none |
 
+For MAKCU zero-state handoff firmware, follow the
+[completion/cancel contract](MAK_API.md#makcu-controller-handoff): send a final
+zero stick pair / trigger when done, preserving other active controls.
+
 Use `km.controller_state` for controller injection. The former
 `km.controller(control[,value])` overload is removed.
 

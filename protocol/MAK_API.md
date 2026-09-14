@@ -195,6 +195,49 @@ The previous named/individual-control command and its 3- or 5-byte payloads
 are removed. Use `CONTROLLER_STATE` for injection and `CONTROLLER_MASK` for
 physical-input masks. Update firmware and SDKs together.
 
+### MAKCU controller handoff
+
+Requires MAKCU firmware with the zero-state handoff fix; older firmware,
+including `355179621`, holds zero analogue values instead. This section does
+not establish support in a MAKXD firmware release.
+
+`CONTROLLER_STATE` sends a complete target state, not a relative movement or a
+timed action. Keep sending the desired state while controlling the pad. When
+a stick's movement finishes, send **both coordinates as zero**. A single zero
+coordinate with the other nonzero still controls the entire stick. Send zero
+for a trigger when its action finishes. Other nonzero controls remain active.
+
+The firmware moves from the last accepted output toward the latest physical
+value using its saved handoff processing, then releases the override after
+the matching final output is accepted. Zero does not command a centre jump.
+With processing disabled, handoff is immediate. An untouched zero group passes
+physical input through. Physical-input masks remain a separate setting.
+
+The caller owns completion: silence, returning from the setter, and sending a
+single nonzero state do not request handoff. There are no trailing duration or
+release bytes. Do not append extra bytes or automatically zero every setter:
+that would interrupt ongoing movement. Send the final zero state from the
+application's movement-complete/cancel path while the connection is available,
+and handle send failures. Setter success does not acknowledge USB completion.
+
+```cpp
+// While this application's right-stick/trigger action is active:
+makxd::ControllerState state{};
+state.rightStickX = x;
+state.rightStickY = y;
+state.rightTrigger = trigger; // 0..1023
+if (!device.setControllerState(state)) {
+    // Handle the transport failure in your application.
+}
+
+// In the action's completion/cancel path, when all its controls are finished:
+if (!device.setControllerState(makxd::ControllerState{})) {
+    // Handoff was not successfully sent; handle the failure.
+}
+// If other controls are still active, retain their values in the final state
+// and zero only the completed stick pair / trigger instead.
+```
+
 MAKXD rejects unsupported controls, invalid values or modes, and incorrect
 payload lengths. Controller injection requires a routed controller with a
 successfully parsed current report.

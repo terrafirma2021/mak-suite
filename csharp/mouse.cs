@@ -844,6 +844,9 @@ namespace Mouse
             return state;
         }
 
+        // Complete state, not a timed move. MAKCU handoff firmware: finish
+        // with a zero stick pair / trigger, retaining other active controls.
+        // Silence is not release; see protocol/MAK_API.md for requirements.
         public static void controller_state(
             ControllerState state)
         {
@@ -1687,5 +1690,4 @@ namespace Mouse
 
     }
 }
-
 

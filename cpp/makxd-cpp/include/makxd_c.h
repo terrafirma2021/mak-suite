@@ -285,6 +285,9 @@ MAKXD_C_API makxd_error_t makxd_controller_mask(
     makxd_controller_mask_mode_t mode);
 MAKXD_C_API makxd_error_t makxd_controller_state_get(
     makxd_device_t* device, makxd_controller_state_t* state);
+/* Complete state, not a timed move. MAKCU handoff firmware: send a final
+ * (0,0) stick pair / zero trigger when done, retaining other active controls.
+ * Silence is not release. See protocol/MAK_API.md for firmware requirements. */
 MAKXD_C_API makxd_error_t makxd_controller_state_set(
     makxd_device_t* device, const makxd_controller_state_t* state);
 // Button monitoring

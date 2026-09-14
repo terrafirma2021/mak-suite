@@ -290,6 +290,10 @@ namespace makxd {
         [[nodiscard]] bool controllerMask(
             ControllerControl control, ControllerMaskMode mode);
         [[nodiscard]] std::optional<ControllerState> controllerState();
+        // Complete state, not a timed move. On MAKCU handoff firmware, finish
+        // a stick action with its pair (0,0), or a trigger with 0; retain other
+        // active controls. Silence is not release. See protocol/MAK_API.md.
+        // Success means sent, not that firmware handoff/USB output completed.
         [[nodiscard]] bool setControllerState(const ControllerState& state);
 
         // Button monitoring with optimized processing

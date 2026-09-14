@@ -26,6 +26,12 @@ Query the installed application version with the SDK's firmware-version method.
 Only issue input operations for available routed kinds. Check errors and return
 values, release any held input, and disconnect when finished.
 
+For MAKCU controller actions, read the firmware requirements and completion
+example in [Controller handoff](protocol/MAK_API.md#makcu-controller-handoff).
+Include an explicit final zero stick pair / trigger in the completion and cancel
+paths; a setter returning or the caller stopping transmission is not handoff.
+Preserve other active controls, and handle failures to send the final state.
+
 COM can be auto-detected. Ethernet and Wi-Fi use UDP. Python can discover BLE by
 service; callback-based adapters receive an empty address for service discovery.
 Queued BLE operations are batched automatically; a single operation is sent

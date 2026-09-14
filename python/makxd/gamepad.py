@@ -158,6 +158,12 @@ class Gamepad:
         self,
         value: ControllerState | None = None,
     ) -> ControllerState | None:
+        """Read or send the complete target state, not a timed move.
+
+        On MAKCU handoff firmware, send (0, 0) for a completed stick action
+        and 0 for a completed trigger; retain other active controls. Silence
+        is not release. See protocol/MAK_API.md for firmware requirements.
+        """
         if value is None:
             response = self.transport.send_mak_api(
                 ApiOpcode.CONTROLLER_STATE
