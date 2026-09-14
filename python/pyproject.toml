@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "makxd"
-version = "2.4.0"
+version = "3.0.0"
 description = "Python API for MAKXD USB HID devices"
 readme = {text = "Official Mak-suite Python SDK for MAKCU and MAKXD. Documentation and integration guide: https://github.com/terrafirma2021/mak-suite", content-type = "text/markdown"}
 requires-python = ">=3.10"

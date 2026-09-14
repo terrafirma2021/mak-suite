@@ -1,8 +1,8 @@
 # KM_API
 
-KM_API is the legacy, lowercase ASCII command interface supported by MAKXD.
+KM_API is the legacy, lowercase ASCII command interface supported by MAKXD and MAKCU.
 It provides mouse, keyboard, and controller injection plus a small
-set of status and COM event-stream controls. New typed integrations should use
+set of status and input-stream controls. New typed integrations should use
 [MAK_API](MAK_API.md); KM_API remains available for compatibility and direct
 serial use.
 
@@ -47,8 +47,8 @@ header. BLE carries the KM record without the `DE AD` length header. Direct
 ASCII COM commands are unavailable while COM transport encryption is enabled;
 use the encrypted framed carrier instead.
 
-`km.buttons()` and `km.keys()` are exceptions: their event streams are
-available only through direct ASCII COM, not framed COM, UDP, or BLE.
+`km.buttons`, `km.keys`, `km.controller`, and `km.stream` work through each
+supported command carrier. All use the same framed input-change events.
 
 ## Responses
 
@@ -93,17 +93,18 @@ prove that a physical USB host has already consumed the resulting report.
 
 ## Complete command index
 
-MAKXD accepts these 33 command names:
+The public interface accepts these 34 command names:
 
 | Area | Query | Mutation |
 | --- | --- | --- |
 | Status | `km.version()`, `km.device()`, `km.echo()` | `km.echo(enabled)` |
+| Any input stream | `km.stream(kind)` | `km.stream(kind,enabled)` |
 | Mouse stream | `km.buttons()` | `km.buttons(enabled)` |
 | Mouse buttons | `km.left()`, `km.right()`, `km.middle()`, `km.side1()`, `km.side2()` | same names with `state` |
 | Mouse motion | none | `km.move(x,y)`, `km.wheel(delta)` |
 | Mouse masks | none | `km.left_mask(enabled)`, `km.right_mask(enabled)`, `km.middle_mask(enabled)`, `km.side1_mask(enabled)`, `km.side2_mask(enabled)`, `km.move_mask(left,right,down,up)`, `km.wheel_mask(down,up)` |
 | Keyboard | `km.isdown(key)`, `km.keys()` | `km.down(key)`, `km.up(key)`, `km.init()`, `km.press(key[,hold_ms[,random_range]])`, `km.string("text")`, `km.multidown(keys...)`, `km.multiup(keys...)`, `km.multipress(keys...)`, `km.mask(key,enabled)`, `km.remap(source,target)`, `km.keys(enabled)` |
-| Controller | `km.controller(control)`, `km.controller_state()` | `km.controller(control,value)`, `km.controller_mask(control,mode)`, `km.controller_state(low,high,lt,rt,lx,ly,rx,ry)` |
+| Controller | `km.controller()`, `km.controller_state()` | `km.controller(enabled)`, `km.controller_mask(control,mode)`, `km.controller_state(low,high,lt,rt,lx,ly,rx,ry)` |
 
 ## Status and settings
 
@@ -143,8 +144,8 @@ Use the exact argument counts and payload lengths below. A legacy DT argument
 or two-byte trailer is rejected, including an explicit zero.
 
 Keyboard press durations (`hold_ms` and `random_range`) remain in milliseconds.
-Input-stream timing fields and the polling intervals returned by `km.device()`
-are unchanged.
+The polling intervals returned by `km.device()` use USB microframes.
+Change events contain only kind, control ID, and value.
 
 ## Mouse
 
@@ -187,24 +188,12 @@ Directional values independently block negative X (`left`), positive X
 or positive wheel (`up`). A mask affects physical input only; values injected
 through KM_API or MAK_API bypass it.
 
-### Mouse COM event stream
+### Mouse event stream
 
-| Operation | Command | Arguments | Returned data |
-| --- | --- | --- | --- |
-| GET | `km.buttons()` | none | `0` or `1` |
-| SET | `km.buttons(enabled)` | `enabled`: `0` or `1` | none |
-
-This control is valid only on direct ASCII COM. When enabled, each change in
-the physical five-button mask emits exactly four unframed bytes:
-
-```text
-6B 6D 2E mask
-```
-
-`mask` uses bit 0 left, bit 1 right, bit 2 middle, bit 3 side1, and bit 4
-side2. Events have no CR/LF or prompt. Enabling this stream disables the
-keyboard KM stream and the general COM input stream. Stream state is not the
-same as `km.echo()`.
+`km.buttons(1)` enables physical mouse-button changes. `km.buttons(0)` disables
+them. `km.buttons()` returns `0` or `1`. This is the mouse alias for
+`km.stream(mouse,enabled)`; keyboard and controller subscriptions are independent.
+See [Input change streams](#input-change-streams) for the common event format.
 
 ## Keyboard
 
@@ -314,27 +303,45 @@ the KM injected state. `km.mask` and `km.remap` also affect physical keyboard
 input only; injected values bypass both policies. A remap replaces `source`
 with `target` in the physical input path.
 
-### Keyboard COM event stream
+### Keyboard event stream
+
+`km.keys(1)` enables physical keyboard changes. `km.keys(0)` disables them.
+`km.keys()` returns `0` or `1`. This is the keyboard alias for
+`km.stream(keyboard,enabled)`.
+
+## Input change streams
 
 | Operation | Command | Arguments | Returned data |
 | --- | --- | --- | --- |
-| GET | `km.keys()` | none | `0` or `1` |
-| SET | `km.keys(enabled)` | `enabled`: `0` or `1` | none |
+| GET | `km.stream(kind)` | `mouse`, `keyboard`, or `controller` | `0` or `1` |
+| SET | `km.stream(kind,enabled)` | kind; `enabled`: `0` or `1` | none |
+| GET | `km.controller()` | none | `0` or `1` |
+| SET | `km.controller(enabled)` | `enabled`: `0` or `1` | none |
 
-This control is valid only on direct ASCII COM. When enabled, each changed
-physical key emits exactly five unframed bytes:
+Use unquoted, lowercase kind names. `km.controller` is only the controller
+stream switch/query. Named-control arguments are rejected.
+
+Kinds are mouse `1`, keyboard `2`, controller `3`. Each subscription is
+independent. Events contain only changed buttons/keys and controller triggers;
+no mouse motion, wheel, or controller stick-axis events are emitted.
 
 ```text
-6B 6D 2E key state
+DE AD 03 00 53 kind id state:u8       # digital state 0/1
+DE AD 04 00 53 03   id trigger:u16le  # trigger IDs 10/11, 0..1023
+DE AD 03 00 53 kind FF FF            # overflow disables this kind
 ```
 
-`key` is the USB HID usage and `state` is `0` for released or `1` for pressed.
-Events have no CR/LF or prompt. Enabling this stream disables the mouse KM
-stream and the general COM input stream.
+Mouse IDs are button positions `0..31`; keyboard IDs are HID usages `0..255`.
+Controller IDs use the table below, excluding stick axes `12..15`. Trigger
+values are normalized to `0..1023`. Events are binary framed records even when
+the subscription was enabled through ASCII KM. They have no prompt or CR/LF.
+
+For enable baselines, detach, overflow recovery, destination ownership, and
+transport parsing, see the complete [MAK_API streaming contract](MAK_API.md#input-change-streams).
 
 ## Controller
 
-Controller commands require an active compatible controller route. A control
+Controller injection and masks require an active compatible controller route. A control
 must be supported by that routed controller.
 Names describe physical position rather than product artwork and are exact,
 lowercase ASCII.
@@ -367,19 +374,16 @@ lowercase ASCII.
 | 23..54 | `extra_1`..`extra_32` | `0` or `1` |
 
 Not every controller family supports every semantic control. Unsupported
-control queries and mutations return `ERR`.
+mask or state mutations return `ERR`.
 
-### Individual control
+### Physical-input masks
 
 | Operation | Command | Arguments | Returned data |
 | --- | --- | --- | --- |
-| GET | `km.controller(control)` | supported control name | decimal value |
-| SET | `km.controller(control,value)` | control, range-valid value | none |
-| SET | `km.controller_mask(control,mode)` | control and mask mode | none |
+| SET | `km.controller_mask(control,mode)` | supported control name and mask mode | none |
 
-A control mutation updates that field in the complete injected controller
-state. The query returns that tracked injected state, not a new physical-
-controller sample. The tracked state resets when the routed controller changes.
+Use `km.controller_state` for controller injection. The former
+`km.controller(control[,value])` overload is removed.
 
 Mask modes are:
 
@@ -465,14 +469,19 @@ Type a line containing a quoted word:
 km.string("say \"hello\"\n")\r\n
 ```
 
-Read and set the south controller button:
+Enable controller buttons and triggers, then query the switch:
 
 ```text
-request:  km.controller(south)\r\n
-response: km.controller(south)\r\n0\r\n>>>\x20
-
-request:  km.controller(south,1)\r\n
+request:  km.controller(1)\r\n
 response with echo disabled: <no response>
+request:  km.controller()\r\n
+response: km.controller()\r\n1\r\n>>>\x20
+```
+
+Enable keyboard changes alongside controller changes:
+
+```text
+km.stream(keyboard,1)\r\n
 ```
 
 Set a complete neutral controller state immediately:

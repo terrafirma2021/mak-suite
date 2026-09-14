@@ -13,13 +13,6 @@ from makxd.gamepad import (
 from makxd.mouse import Mouse
 from makxd.protocol import ApiOpcode, DeviceInfo, DeviceKind
 from makxd.controller import MakxdController
-from makxd.stream import (
-    ControllerStreamState,
-    StreamInputRecord,
-    StreamKind,
-    StreamTiming,
-    decode_controller_stream,
-)
 import struct
 
 
@@ -116,62 +109,37 @@ def test_controller_full_single_and_immediate_mask_commands() -> None:
     gamepad = Gamepad(transport)
 
     gamepad.state(ControllerState(3, 0, 10, 20, -1, 2, -3, 4))
-    gamepad.control(ControllerControl.SOUTH, 1)
-    gamepad.control(ControllerControl.LEFT_STICK_X, -8)
+    gamepad.stream(True)
+    gamepad.stream(False)
     gamepad.mask(ControllerControl.EXTRA_32, ControllerMaskMode.COMPLETE)
     gamepad.mask(ControllerControl.DPAD_UP, ControllerMaskMode.COMPLETE)
     gamepad.mask(ControllerControl.RIGHT_STICK_X, ControllerMaskMode.BOTH)
 
     assert [call[0] for call in transport.api_calls] == [
         ApiOpcode.CONTROLLER_STATE,
-        ApiOpcode.CONTROLLER_CONTROL,
-        ApiOpcode.CONTROLLER_CONTROL,
+        ApiOpcode.CONTROLLER_STREAM,
+        ApiOpcode.CONTROLLER_STREAM,
         ApiOpcode.CONTROLLER_MASK,
         ApiOpcode.CONTROLLER_MASK,
         ApiOpcode.CONTROLLER_MASK,
     ]
     assert all(call[2] is False for call in transport.api_calls)
     assert len(transport.api_calls[0][1]) == 20
-    assert len(transport.api_calls[1][1]) == 3
+    assert transport.api_calls[1][1] == b"\x01"
     assert len(transport.api_calls[3][1]) == 2
     assert transport.device_queries == 0
 
 
-def test_controller_trigger_contract_is_10_bit_and_sticks_remain_i16() -> None:
+def test_controller_trigger_contract_is_10_bit_and_sticks_i16():
     transport = CommandTransport()
     gamepad = Gamepad(transport)
-
-    gamepad.control(ControllerControl.LEFT_TRIGGER, CONTROLLER_TRIGGER_MAX)
-    gamepad.control(ControllerControl.RIGHT_STICK_X, -32768)
-    gamepad.control(ControllerControl.RIGHT_STICK_X, 32767)
-    gamepad.state(ControllerState(left_trigger=CONTROLLER_TRIGGER_MAX,
-                                  right_trigger=CONTROLLER_TRIGGER_MAX))
-
+    gamepad.state(ControllerState(left_trigger=1023, right_trigger=1023,
+                                  left_stick_x=-32768, right_stick_y=32767))
+    assert transport.api_calls[-1][1][8:12] == b"\xff\x03" * 2
     with pytest.raises(MakxdCommandError):
-        gamepad.control(ControllerControl.LEFT_TRIGGER,
-                        CONTROLLER_TRIGGER_MAX + 1)
+        gamepad.state(ControllerState(left_trigger=1024))
     with pytest.raises(MakxdCommandError):
-        gamepad.state(ControllerState(left_trigger=CONTROLLER_TRIGGER_MAX + 1))
-
-
-def test_controller_stream_decode_canonical_tuple() -> None:
-    values = struct.pack("<IBHHhhhhhh", 5, 2, 100, 200,
-                         -1, 2, -3, 4, -5, 6)
-    record = StreamInputRecord(
-        StreamKind.CONTROLLER, 9, StreamTiming.from_raw(7), values
-    )
-    assert decode_controller_stream(record) == ControllerStreamState(
-        5, 2, 100, 200, -1, 2, -3, 4, -5, 6
-    )
-
-    invalid = StreamInputRecord(
-        StreamKind.CONTROLLER,
-        10,
-        StreamTiming.from_raw(7),
-        struct.pack("<IBHHhhhhhh", 5, 2, 1024, 0,
-                    -1, 2, -3, 4, -5, 6),
-    )
-    assert decode_controller_stream(invalid) is None
+        gamepad.stream("south")
 
 
 @pytest.mark.parametrize("dt_uframes", [0, 8, 16383])
@@ -184,7 +152,7 @@ def test_controller_stream_decode_canonical_tuple() -> None:
     (Keyboard, "down", (4,)),
     (Keyboard, "up", (4,)),
     (Keyboard, "init", ()),
-    (Gamepad, "control", (ControllerControl.SOUTH, 1)),
+    (Gamepad, "stream", (True,)),
     (Gamepad, "state", (ControllerState(),)),
 ])
 def test_removed_dt_argument_is_rejected_before_sending(kind, method, args, dt_uframes):

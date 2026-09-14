@@ -1,4 +1,4 @@
-use makxd::{Button, ControllerControl, Device, KeyboardKey, Result};
+use makxd::{Button, Device, KeyboardKey, Result};
 
 fn main() -> Result<()> {
     let device = Device::connect()?;
@@ -10,8 +10,8 @@ fn main() -> Result<()> {
     device.button_down(Button::Left)?;
     device.button_up(Button::Left)?;
     device.keyboard_press(KeyboardKey::from("A"))?;
-    device.controller_control(ControllerControl::South, 1)?;
-    device.controller_control(ControllerControl::South, 0)?;
+    device.controller_stream(true)?;
+    device.controller_stream(false)?;
 
     device.disconnect();
     Ok(())

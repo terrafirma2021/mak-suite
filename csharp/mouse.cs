@@ -330,7 +330,7 @@ namespace Mouse
         public const ushort ControllerTriggerMax = 1023;
         private static readonly int[] baudCandidates = { 115200, 1000000, 4000000 };
         private const byte apiControllerState = 0x40;
-        private const byte apiControllerControl = 0x41;
+        private const byte apiControllerStream = 0x41;
         private const byte apiControllerMask = 0x51;
         private const int baudOpenSettleMs = 180;
         private const int baudCloseSettleMs = 120;
@@ -406,6 +406,8 @@ namespace Mouse
             connectedKinds = null;
             udpRawTransactions.Clear();
             transportReadBytes.Clear();
+                inputFrames = new Makxd.StreamFrameDecoder();
+                while (inputChanges.TryDequeue(out _)) { }
             transportEncryptionEnabled =
                 !string.IsNullOrEmpty(connection.Aes128Key);
             transportEncryptionKey = transportEncryptionEnabled
@@ -768,29 +770,41 @@ namespace Mouse
                 throw new ArgumentOutOfRangeException(nameof(value));
         }
 
-        public static int controller_control(ControllerControl control)
-        {
-            ValidateControllerControl(control);
-            if (!connected)
-                throw new InvalidOperationException("Device is not connected");
-            byte[] response = WriteMakApiInternal(
-                apiControllerControl, true, new byte[] { (byte)control });
-            if (response.Length != 3 || response[0] != (byte)control)
-                throw new InvalidDataException(
-                    "MAK_API controller control response is invalid");
-            return (byte)control >= 12 && (byte)control <= 15
-                ? (int)ReadInt16(response, 1) : (int)ReadUInt16(response, 1);
+        private static readonly ConcurrentQueue<Makxd.InputChange> inputChanges = new ConcurrentQueue<Makxd.InputChange>();
+        private static Makxd.StreamFrameDecoder inputFrames = new Makxd.StreamFrameDecoder();
+        private static bool StreamState(byte[] response) {
+            if (response.Length != 1 || response[0] > 1) throw new InvalidDataException("Invalid stream state");
+            return response[0] != 0;
         }
-
-        public static void controller_control(
-            ControllerControl control, int value)
-        {
-            ValidateControllerControl(control);
-            ValidateControllerValue(control, value);
-            var payload = new List<byte> { (byte)control };
-            AppendUInt16(payload, unchecked((ushort)value));
-            SendApiCommand(
-                apiControllerControl, payload.ToArray());
+        public static void controller_stream(bool enabled) => SendApiCommand(apiControllerStream, new byte[] { (byte)(enabled ? 1 : 0) });
+        public static bool controller_stream() => StreamState(WriteMakApiInternal(apiControllerStream, true, Array.Empty<byte>()));
+        public static void input_stream(Makxd.StreamKind kind, bool enabled) {
+            if ((byte)kind < 1 || (byte)kind > 3) throw new ArgumentOutOfRangeException(nameof(kind));
+            SendApiCommand(0x52, new byte[] { (byte)kind, (byte)(enabled ? 1 : 0) });
+        }
+        public static bool input_stream(Makxd.StreamKind kind) {
+            if ((byte)kind < 1 || (byte)kind > 3) throw new ArgumentOutOfRangeException(nameof(kind));
+            return StreamState(WriteMakApiInternal(0x52, true, new byte[] { (byte)kind }));
+        }
+        // Polls using the configured transport timeout; queued events are returned immediately.
+        public static Makxd.InputChange read_input_change() {
+            if (!connected) throw new InvalidOperationException("Device is not connected");
+            lock (ioLock) {
+                while (true) {
+                    if (inputChanges.TryDequeue(out Makxd.InputChange change)) return change;
+                    if (transportEncryptionEnabled) DecodeEncryptedResponseBytes(ReadEncryptedFrame(), null);
+                    else {
+                        var payload = ReadFrame(0x53, 3);
+                        if (Makxd.StreamProtocol.TryDecodeInputChange(new Makxd.StreamFrame(0x53, payload), out change)) return change;
+                    }
+                }
+            }
+        }
+        private static bool QueueInputEvent(byte[] frame) {
+            if (frame == null || frame.Length < 5 || frame[0] != 0xde || frame[1] != 0xad ||
+                frame[4] != 0x53 || frame.Length != 5 + (frame[2] | frame[3] << 8)) return false;
+            if (Makxd.StreamProtocol.TryDecodeInputChange(new Makxd.StreamFrame(frame[4], frame.Skip(5).ToArray()), out Makxd.InputChange change)) inputChanges.Enqueue(change);
+            return true;
         }
 
         public static void controller_mask(
@@ -1065,8 +1079,7 @@ namespace Mouse
                     WriteTransport(encrypted, waitResponse);
                     if (!waitResponse)
                         return Array.Empty<byte>();
-                    response = DecodeEncryptedResponseBytes(
-                        ReadEncryptedFrame(), transactionNonce);
+                    do { response = DecodeEncryptedResponseBytes(ReadEncryptedFrame(), transactionNonce); } while (response.Length == 0);
                 }
                 else
                 {
@@ -1200,8 +1213,10 @@ namespace Mouse
             }
         }
 
-        private static void ProcessBleCommands(
-            List<BleCommand> commands, int maximumWrite)
+        private static void ProcessBleCommands(List<BleCommand> commands, int maximumWrite) {
+            lock (ioLock) ProcessBleCommandsCore(commands, maximumWrite);
+        }
+        private static void ProcessBleCommandsCore(List<BleCommand> commands, int maximumWrite)
         {
             try
             {
@@ -1210,9 +1225,8 @@ namespace Mouse
                     BleCommand command = commands[0];
                     if (!connectionConfig.BleWrite(command.Record))
                         throw new IOException("BLE command write failed");
-                    byte[] response = command.ResponseExpected
-                        ? connectionConfig.BleRead()
-                        : Array.Empty<byte>();
+                    byte[] response = Array.Empty<byte>();
+                    if (command.ResponseExpected) do { response = connectionConfig.BleRead(); } while (QueueInputEvent(response));
                     command.Completion.TrySetResult(response);
                     return;
                 }
@@ -1243,6 +1257,7 @@ namespace Mouse
                 while (completedCount < commands.Count)
                 {
                     byte[] packet = connectionConfig.BleRead();
+                    if (QueueInputEvent(packet)) continue;
                     if (packet == null || packet.Length < 11 ||
                         !packet.Take(4).SequenceEqual(bleBatchResponseMagic) ||
                         packet[4] != 1 || ReadUInt16(packet, 6) != batchId)
@@ -1358,6 +1373,9 @@ namespace Mouse
                     if (packet.Length < 10)
                         throw new InvalidDataException(
                             "Raw UDP response header is invalid");
+                    bool inputEvent = packet.Length >= 14 && packet[9] == 0xde && packet[10] == 0xad &&
+                        packet[13] == 0x53 && packet.Length == 14 + (packet[11] | packet[12] << 8);
+                    if (!inputEvent) {
                     int transactionIndex = udpRawTransactions.FindIndex(
                         expected => packet
                             .Skip(1)
@@ -1366,6 +1384,7 @@ namespace Mouse
                     if (transactionIndex < 0)
                         continue;
                     udpRawTransactions.RemoveAt(transactionIndex);
+                    }
                     packet = packet.Skip(9).ToArray();
                     break;
                 }
@@ -1448,30 +1467,17 @@ namespace Mouse
             int minimumPayloadLength,
             bool includeFrame = false)
         {
-            byte previous = 0;
-            while (true)
-            {
-                byte current = ReadExact(1)[0];
-                if (previous == 0xDE && current == 0xAD)
-                    break;
-                previous = current;
+            while (true) {
+                Makxd.StreamFrame frame;
+                while (!inputFrames.TryNext(out frame)) inputFrames.Feed(new byte[] { ReadTransportByte() });
+                if (!transportEncryptionEnabled && frame.Command == 0x53 && expectedCommand != 0x53) {
+                    if (Makxd.StreamProtocol.TryDecodeInputChange(frame, out Makxd.InputChange change)) inputChanges.Enqueue(change);
+                    continue;
+                }
+                if (frame.Command != expectedCommand) throw new InvalidDataException("Response frame command is invalid");
+                if (frame.Payload.Length < minimumPayloadLength) throw new InvalidDataException("Response frame length is invalid");
+                return includeFrame ? Makxd.StreamProtocol.EncodeFrame(frame.Command, frame.Payload) : frame.Payload;
             }
-            var remainder = ReadExact(3);
-            var header = new byte[] {
-                0xDE, 0xAD, remainder[0], remainder[1], remainder[2]
-            };
-            if (header[4] != expectedCommand)
-                throw new InvalidDataException("Response frame command is invalid");
-            int payloadLength = header[2] | header[3] << 8;
-            if (payloadLength < minimumPayloadLength || payloadLength > 251)
-                throw new InvalidDataException("Response frame length is invalid");
-            byte[] payload = ReadExact(payloadLength);
-            if (!includeFrame)
-                return payload;
-            var frame = new byte[5 + payloadLength];
-            Buffer.BlockCopy(header, 0, frame, 0, header.Length);
-            Buffer.BlockCopy(payload, 0, frame, 5, payloadLength);
-            return frame;
         }
 
         private static byte[] ReadExact(int length)
@@ -1503,10 +1509,6 @@ namespace Mouse
                 throw new InvalidDataException("Encrypted response envelope is invalid");
             var transactionNonce = new byte[12];
             Buffer.BlockCopy(frame, 7, transactionNonce, 0, transactionNonce.Length);
-            if (!TransportBytesEqual(
-                    transactionNonce, expectedTransactionNonce))
-                throw new InvalidDataException(
-                    "Encrypted response transaction nonce does not match");
             var aad = new byte[14];
             Buffer.BlockCopy(frame, 5, aad, 0, aad.Length);
             var tag = new byte[16];
@@ -1516,8 +1518,11 @@ namespace Mouse
             var nonce = new byte[13];
             nonce[0] = 1;
             Buffer.BlockCopy(transactionNonce, 0, nonce, 1, transactionNonce.Length);
-            return TransportAesCcmOpen(
-                transportEncryptionKey, nonce, aad, ciphertext, tag);
+            byte[] plaintext = TransportAesCcmOpen(transportEncryptionKey, nonce, aad, ciphertext, tag);
+            if (QueueInputEvent(plaintext)) return Array.Empty<byte>();
+            if (expectedTransactionNonce == null || !TransportBytesEqual(transactionNonce, expectedTransactionNonce))
+                throw new InvalidDataException("Encrypted response transaction nonce does not match");
+            return plaintext;
         }
 
         private static byte[] TransportAesCcmSeal(

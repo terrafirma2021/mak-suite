@@ -1,301 +1,189 @@
-//! MAKXD lightweight multi-source input streaming protocol.
-
-use crate::types::CONTROLLER_TRIGGER_MAX;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+//! Independent, on-change input subscriptions. All events use the MAK frame.
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamKind {
     Mouse = 1,
     Keyboard = 2,
     Controller = 3,
 }
-
-pub const STREAM_MASK_MOUSE: u8 = 1 << 0;
-pub const STREAM_MASK_KEYBOARD: u8 = 1 << 1;
-pub const STREAM_MASK_CONTROLLER: u8 = 1 << 2;
-pub const STREAM_MASK_ALL: u8 = STREAM_MASK_MOUSE | STREAM_MASK_KEYBOARD | STREAM_MASK_CONTROLLER;
-pub const STREAM_COMMAND_INPUT: u8 = 0x01;
-pub const STREAM_MAX_BODY_BYTES: usize = 252;
-pub const STREAM_MAX_PAYLOAD_BYTES: usize = STREAM_MAX_BODY_BYTES - 1;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum StreamOperation {
-    Start = 1,
-    Stop = 2,
-    Status = 3,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StreamTiming {
-    pub raw: u16,
-    pub dt_uframes: u16,
-    pub baseline: bool,
-    pub invalid: bool,
-}
-
-impl StreamTiming {
-    pub fn from_raw(raw: u16) -> Self {
-        Self {
-            raw,
-            dt_uframes: raw & 0x3fff,
-            baseline: raw & 0x4000 != 0,
-            invalid: raw & 0x8000 != 0,
-        }
-    }
-}
-
+pub const STREAM_COMMAND: u8 = 0x52;
+pub const STREAM_EVENT: u8 = 0x53;
+pub const STREAM_TRIGGER_MAX: u16 = 1023;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamFrame {
     pub command: u8,
     pub payload: Vec<u8>,
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StreamControl {
-    pub operation: u8,
-    pub status: u8,
-    pub active_mask: u8,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StreamInputRecord {
+pub struct InputChange {
     pub kind: StreamKind,
-    pub sequence: u32,
-    pub timing: StreamTiming,
-    pub values: Vec<u8>,
+    pub control: u8,
+    pub value: u16,
+    pub overflow: bool,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct ControllerStreamState {
-    pub buttons: u32,
-    pub hat: u8,
-    pub lt: u16,
-    pub rt: u16,
-    pub x: i16,
-    pub y: i16,
-    pub rx: i16,
-    pub ry: i16,
-    pub z: i16,
-    pub rz: i16,
+impl InputChange {
+    pub fn is_trigger(self) -> bool {
+        self.kind == StreamKind::Controller && matches!(self.control, 10 | 11)
+    }
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamRequest {
-    pub operation: StreamOperation,
-    pub source_mask: u8,
+    pub kind: StreamKind,
+    pub enabled: Option<bool>,
 }
-
 impl StreamRequest {
-    pub fn start(source_mask: u8) -> Self {
-        Self {
-            operation: StreamOperation::Start,
-            source_mask: source_mask & STREAM_MASK_ALL,
+    pub fn new(kind: StreamKind, enabled: Option<bool>) -> Self {
+        Self { kind, enabled }
+    }
+    pub fn mouse(enabled: bool) -> Self {
+        Self::new(StreamKind::Mouse, Some(enabled))
+    }
+    pub fn keyboard(enabled: bool) -> Self {
+        Self::new(StreamKind::Keyboard, Some(enabled))
+    }
+    pub fn controller(enabled: bool) -> Self {
+        Self::new(StreamKind::Controller, Some(enabled))
+    }
+    pub fn encode(self) -> Vec<u8> {
+        let mut frame = vec![
+            0xde,
+            0xad,
+            1 + u8::from(self.enabled.is_some()),
+            0,
+            STREAM_COMMAND,
+            self.kind as u8,
+        ];
+        if let Some(enabled) = self.enabled {
+            frame.push(u8::from(enabled));
         }
-    }
-
-    pub fn mouse() -> Self {
-        Self::start(STREAM_MASK_MOUSE)
-    }
-    pub fn keyboard() -> Self {
-        Self::start(STREAM_MASK_KEYBOARD)
-    }
-    pub fn controller() -> Self {
-        Self::start(STREAM_MASK_CONTROLLER)
-    }
-    pub fn all() -> Self {
-        Self::start(STREAM_MASK_ALL)
-    }
-
-    pub fn stop() -> Self {
-        Self {
-            operation: StreamOperation::Stop,
-            source_mask: 0,
-        }
-    }
-
-    pub fn status() -> Self {
-        Self {
-            operation: StreamOperation::Status,
-            source_mask: 0,
-        }
-    }
-
-    pub fn encode(&self) -> Vec<u8> {
-        encode_frame(
-            STREAM_COMMAND_INPUT,
-            &[self.operation as u8, self.source_mask & STREAM_MASK_ALL],
-        )
+        frame
     }
 }
-
 #[derive(Default)]
 pub struct StreamFrameDecoder {
     buffer: Vec<u8>,
 }
-
 impl StreamFrameDecoder {
     pub fn new() -> Self {
         Self::default()
     }
-
     pub fn feed(&mut self, bytes: &[u8]) {
         self.buffer.extend_from_slice(bytes);
     }
-
-    pub fn next(&mut self) -> Option<StreamFrame> {
-        loop {
-            if self.buffer.len() < 2 {
-                return None;
-            }
-            if self.buffer[0] != 0xDE || self.buffer[1] != 0xAD {
+}
+impl Iterator for StreamFrameDecoder {
+    type Item = StreamFrame;
+    fn next(&mut self) -> Option<StreamFrame> {
+        while self.buffer.len() >= 2 {
+            if self.buffer[..2] != [0xde, 0xad] {
                 self.buffer.remove(0);
                 continue;
             }
-            if self.buffer.len() < 4 {
+            if self.buffer.len() < 5 {
                 return None;
             }
-            let payload_len = u16::from_le_bytes([self.buffer[2], self.buffer[3]]) as usize;
-            if payload_len == 0 || payload_len > STREAM_MAX_PAYLOAD_BYTES {
+            let len = u16::from_le_bytes([self.buffer[2], self.buffer[3]]) as usize;
+            if len > 251 {
                 self.buffer.remove(0);
                 continue;
             }
-            let frame_len = 5 + payload_len;
-            if self.buffer.len() < frame_len {
+            if self.buffer.len() < len + 5 {
                 return None;
             }
             let frame = StreamFrame {
                 command: self.buffer[4],
-                payload: self.buffer[5..frame_len].to_vec(),
+                payload: self.buffer[5..5 + len].to_vec(),
             };
-            self.buffer.drain(..frame_len);
+            self.buffer.drain(..5 + len);
             return Some(frame);
         }
+        None
     }
 }
-
-pub fn decode_stream_control(frame: &StreamFrame) -> Option<StreamControl> {
-    if frame.command != STREAM_COMMAND_INPUT || frame.payload.len() != 3 {
+pub fn decode_input_change(frame: &StreamFrame) -> Option<InputChange> {
+    let p = &frame.payload;
+    if frame.command != STREAM_EVENT || !(3..=4).contains(&p.len()) {
         return None;
     }
-    Some(StreamControl {
-        operation: frame.payload[0],
-        status: frame.payload[1],
-        active_mask: frame.payload[2],
-    })
-}
-
-pub fn decode_stream_input_record(frame: &StreamFrame) -> Option<StreamInputRecord> {
-    if frame.command != STREAM_COMMAND_INPUT || frame.payload.len() < 8 {
-        return None;
-    }
-    let kind = match frame.payload[0] {
+    let kind = match p[0] {
         1 => StreamKind::Mouse,
         2 => StreamKind::Keyboard,
         3 => StreamKind::Controller,
         _ => return None,
     };
-    Some(StreamInputRecord {
+    let mut event = InputChange {
         kind,
-        sequence: u32::from_le_bytes(frame.payload[3..7].try_into().ok()?),
-        timing: StreamTiming::from_raw(u16::from_le_bytes(frame.payload[1..3].try_into().ok()?)),
-        values: frame.payload[7..].to_vec(),
-    })
-}
-
-pub fn decode_controller_stream(record: &StreamInputRecord) -> Option<ControllerStreamState> {
-    if record.kind != StreamKind::Controller || record.values.len() != 21 {
-        return None;
-    }
-    let u16_at =
-        |offset: usize| u16::from_le_bytes(record.values[offset..offset + 2].try_into().unwrap());
-    let state = ControllerStreamState {
-        buttons: u32::from_le_bytes(record.values[0..4].try_into().ok()?),
-        hat: record.values[4],
-        lt: u16_at(5),
-        rt: u16_at(7),
-        x: u16_at(9) as i16,
-        y: u16_at(11) as i16,
-        rx: u16_at(13) as i16,
-        ry: u16_at(15) as i16,
-        z: u16_at(17) as i16,
-        rz: u16_at(19) as i16,
+        control: p[1],
+        value: u16::from(p[2]),
+        overflow: false,
     };
-    if state.lt > CONTROLLER_TRIGGER_MAX || state.rt > CONTROLLER_TRIGGER_MAX {
+    if p.len() == 3 && p[1..] == [255, 255] {
+        event.overflow = true;
+        return Some(event);
+    }
+    if event.is_trigger() {
+        if p.len() != 4 {
+            return None;
+        }
+        event.value = u16::from_le_bytes([p[2], p[3]]);
+        if event.value > STREAM_TRIGGER_MAX {
+            return None;
+        }
+    } else if p.len() != 3
+        || p[2] > 1
+        || (kind == StreamKind::Mouse && p[1] > 31)
+        || (kind == StreamKind::Controller && (p[1] > 54 || (12..=15).contains(&p[1])))
+    {
         return None;
     }
-    Some(state)
+    Some(event)
 }
-
-fn encode_frame(command: u8, payload: &[u8]) -> Vec<u8> {
-    assert!(!payload.is_empty() && payload.len() <= STREAM_MAX_PAYLOAD_BYTES);
-    let mut frame = Vec::with_capacity(5 + payload.len());
-    frame.extend_from_slice(&[0xDE, 0xAD]);
-    frame.extend_from_slice(&(payload.len() as u16).to_le_bytes());
-    frame.push(command);
-    frame.extend_from_slice(payload);
-    frame
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn encodes_all_source_request() {
-        let bytes = StreamRequest::all().encode();
-        assert_eq!(&bytes[..5], &[0xDE, 0xAD, 2, 0, STREAM_COMMAND_INPUT]);
-        assert_eq!(&bytes[5..], &[1, STREAM_MASK_ALL]);
-    }
-
-    #[test]
-    fn decodes_simultaneous_source_report() {
-        let payload = [2, 0, 0x40, 7, 0, 0, 0, 0x01, 0x02];
-        let mut bytes = vec![0xDE, 0xAD, payload.len() as u8, 0, STREAM_COMMAND_INPUT];
-        bytes.extend_from_slice(&payload);
-        let mut decoder = StreamFrameDecoder::new();
-        decoder.feed(&bytes);
-        let frame = decoder.next().expect("frame");
-        let record = decode_stream_input_record(&frame).expect("report");
-        assert_eq!(record.kind, StreamKind::Keyboard);
-        assert_eq!(record.sequence, 7);
-        assert_eq!(record.timing.dt_uframes, 0);
-        assert!(record.timing.baseline);
-        assert_eq!(record.values, vec![1, 2]);
-    }
-
-    #[test]
-    fn decodes_controller_tuple() {
-        let record = StreamInputRecord {
-            kind: StreamKind::Controller,
-            sequence: 1,
-            timing: StreamTiming::from_raw(0),
-            values: vec![
-                5, 0, 0, 0, 2, 100, 0, 200, 0, 255, 255, 2, 0, 253, 255, 4, 0, 251, 255, 6, 0,
-            ],
-        };
+    fn fragmented_mixed_frames() {
+        let mut d = StreamFrameDecoder::new();
+        let wire = [
+            9, 0xde, 0xad, 3, 0, 0x53, 1, 31, 1, 0xde, 0xad, 4, 0, 0x53, 3, 10, 255, 3, 0xde, 0xad,
+            1, 0, 0x52, 1,
+        ];
+        let mut frames = Vec::new();
+        for b in wire {
+            d.feed(&[b]);
+            frames.extend(d.by_ref());
+        }
+        assert_eq!(frames.len(), 3);
+        assert_eq!(decode_input_change(&frames[0]).unwrap().control, 31);
+        assert_eq!(decode_input_change(&frames[1]).unwrap().value, 1023);
+        assert!(decode_input_change(&frames[2]).is_none());
         assert_eq!(
-            decode_controller_stream(&record),
-            Some(ControllerStreamState {
-                buttons: 5,
-                hat: 2,
-                lt: 100,
-                rt: 200,
-                x: -1,
-                y: 2,
-                rx: -3,
-                ry: 4,
-                z: -5,
-                rz: 6,
-            })
+            StreamRequest::controller(false).encode(),
+            [0xde, 0xad, 2, 0, 0x52, 3, 0]
         );
-
-        let invalid = StreamInputRecord {
-            values: vec![
-                5, 0, 0, 0, 2, 0, 4, 0, 0, 255, 255, 2, 0, 253, 255, 4, 0, 251, 255, 6, 0,
-            ],
-            ..record
-        };
-        assert_eq!(decode_controller_stream(&invalid), None);
+    }
+    #[test]
+    fn invalid_events_and_overflow() {
+        for payload in [
+            vec![3, 12, 1],
+            vec![3, 10, 1],
+            vec![1, 32, 1],
+            vec![2, 4, 2],
+            vec![4, 1, 1],
+        ] {
+            assert!(
+                decode_input_change(&StreamFrame {
+                    command: STREAM_EVENT,
+                    payload
+                })
+                .is_none()
+            );
+        }
+        let event = decode_input_change(&StreamFrame {
+            command: STREAM_EVENT,
+            payload: vec![2, 255, 255],
+        })
+        .unwrap();
+        assert!(event.overflow);
     }
 }

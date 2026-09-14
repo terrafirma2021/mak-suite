@@ -106,18 +106,23 @@ or a library and reference `System.IO.Ports` for your target framework. The
 repository's controller check is a .NET 8 project and provides a working example
 of the source and package references.
 
+Use independent `input_stream(kind, enabled)` subscriptions (language spelling
+varies below). Events are `0x53` frames with kind, control ID, and changed value.
+Buttons are 0/1; triggers are 0..1023. Do not use the removed named-controller
+command or raw `km.` event parser. See [the event contract](protocol/MAK_API.md#input-change-streams).
+
 ## Typed call examples
 
 These are SDK calls, not raw wire commands. See their declarations for exact
 results and failures. Use only the row for your chosen language.
 
-| SDK | Mouse movement | Keyboard input | Controller control |
+| SDK | Mouse movement | Keyboard input | Controller stream |
 | --- | --- | --- | --- |
-| Python | `device.move(x, y)` | `device.keyboard_press("A")` | `device.gamepad.control(ControllerControl.SOUTH, 1)` |
-| Rust | `device.move_xy(x, y)` | `device.keyboard_press(KeyboardKey::from("A"))` | `device.controller_control(ControllerControl::South, 1)` |
-| C++ | `device.mouseMove(x, y)` | `device.keyboardPress(std::string{"A"})` | `device.controllerControl(makxd::ControllerControl::SOUTH, 1)` |
-| C | `makxd_mouse_move(device, x, y)` | `makxd_keyboard_down(device, 0x04)` / `makxd_keyboard_up(device, 0x04)` | `makxd_controller_control(device, MAKXD_CONTROLLER_SOUTH, 1)` |
-| C# | `device.move(x, y)` | `device.keyboard_press(new KeyboardKey("A"))` | `device.controller_control(ControllerControl.South, 1)` |
+| Python | `device.move(x, y)` | `device.keyboard_press("A")` | `device.gamepad.stream(True)` |
+| Rust | `device.move_xy(x, y)` | `device.keyboard_press(KeyboardKey::from("A"))` | `device.controller_stream(true)` |
+| C++ | `device.mouseMove(x, y)` | `device.keyboardPress(std::string{"A"})` | `device.controllerStream(true)` |
+| C | `makxd_mouse_move(device, x, y)` | `makxd_keyboard_down(device, 0x04)` / `makxd_keyboard_up(device, 0x04)` | `makxd_controller_stream(device, true)` |
+| C# | `device.move(x, y)` | `device.keyboard_press(new KeyboardKey("A"))` | `device.controller_stream(true)` |
 
 Minimal Python connection and optional mouse movement:
 

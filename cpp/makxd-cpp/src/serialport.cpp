@@ -699,8 +699,6 @@ void SerialPort::listenerLoop(std::stop_token stopToken) {
 	std::vector<uint8_t> makApiBuffer;
 	makApiBuffer.reserve(BUFFER_SIZE);
 	constexpr std::array<uint8_t, 2> makApiMagic{0xDEu, 0xADu};
-	constexpr std::array<uint8_t, 3> buttonEventPrefix{0x6Bu, 0x6Du, 0x2Eu};
-	size_t buttonEventPrefixMatched = 0u;
 
 	auto lastCleanup = std::chrono::steady_clock::now();
 	constexpr auto cleanupInterval = std::chrono::milliseconds(50);
@@ -732,8 +730,7 @@ void SerialPort::listenerLoop(std::stop_token stopToken) {
 				continue;
 			}
 
-			if (!makApiBuffer.empty() ||
-				(bytesRead > 0 && readBuffer[0] == 0xDEu)) {
+			{
 				makApiBuffer.insert(
 					makApiBuffer.end(),
 					readBuffer.begin(),
@@ -774,25 +771,6 @@ void SerialPort::listenerLoop(std::stop_token stopToken) {
 					makApiBuffer.erase(
 						makApiBuffer.begin(),
 						makApiBuffer.begin() + frameBytes);
-				}
-				continue;
-			}
-
-			for (ssize_t i = 0; i < bytesRead; ++i) {
-				const uint8_t byte = readBuffer[i];
-				if (buttonEventPrefixMatched == buttonEventPrefix.size()) {
-					if (byte < 0x20u) {
-						handleButtonData(byte);
-					}
-					buttonEventPrefixMatched =
-						(byte == buttonEventPrefix[0]) ? 1u : 0u;
-					continue;
-				}
-				if (byte == buttonEventPrefix[buttonEventPrefixMatched]) {
-					buttonEventPrefixMatched++;
-				} else {
-					buttonEventPrefixMatched =
-						(byte == buttonEventPrefix[0]) ? 1u : 0u;
 				}
 			}
 
@@ -872,6 +850,29 @@ void SerialPort::handleButtonData(uint8_t data) {
 void SerialPort::processMakApiResponse(
     std::span<const uint8_t> response,
     const std::array<uint8_t, 12>* transactionNonce) {
+    if (response.size() >= 5 && response[0] == 0xde && response[1] == 0xad) {
+        const auto length = static_cast<size_t>(response[2] | (static_cast<unsigned>(response[3]) << 8));
+        if (response[4] == STREAM_EVENT && response.size() == length + 5)
+            processMakApiResponse(response.subspan(4), transactionNonce);
+        return;
+    }
+    if (!response.empty() && response[0] == STREAM_EVENT) {
+        auto event = decode_input_change(StreamFrame{STREAM_EVENT, {response.begin() + 1, response.end()}});
+        if (!event) return;
+        if (event->kind == StreamKind::Mouse) {
+            auto mask = m_lastButtonMask.load(std::memory_order_acquire);
+            if (event->overflow) mask = 0;
+            else if (event->control < 8) {
+                auto bit = static_cast<uint8_t>(1u << event->control);
+                mask = event->value ? static_cast<uint8_t>(mask | bit) : static_cast<uint8_t>(mask & ~bit);
+            }
+            handleButtonData(mask);
+        }
+        InputCallback callback;
+        { std::lock_guard<std::mutex> lock(m_buttonCallbackMutex); callback = m_inputCallback; }
+        if (callback) { try { callback(*event); } catch (...) {} }
+        return;
+    }
 	if (response.size() < 2u) {
 		return;
 	}
@@ -965,6 +966,11 @@ int SerialPort::generateCommandId() {
 	return -1;
 }
 
+
+void SerialPort::setInputCallback(InputCallback callback) {
+    std::lock_guard<std::mutex> lock(m_buttonCallbackMutex);
+    m_inputCallback = std::move(callback);
+}
 
 void SerialPort::setButtonCallback(ButtonCallback callback) {
 	std::lock_guard<std::mutex> lock(m_buttonCallbackMutex);
@@ -1568,6 +1574,9 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 			if (incomingBytes < 10u) {
 				return 0;
 			}
+            const bool event = incomingBytes >= 14u && incoming[9] == 0xde && incoming[10] == 0xad &&
+                incoming[13] == STREAM_EVENT && incomingBytes == 14u + incoming[11] + (static_cast<size_t>(incoming[12]) << 8);
+            if (!event) {
 			const auto transaction = std::find_if(
 				m_connectionIo->rawTransactions.begin(),
 				m_connectionIo->rawTransactions.end(),
@@ -1580,11 +1589,12 @@ ssize_t SerialPort::platformRead(void* buffer, size_t maxBytes) {
 				return 0;
 			}
 			m_connectionIo->rawTransactions.erase(transaction);
+            }
 			offset = 9u;
 		}
 		const size_t bodyBytes = incomingBytes - offset;
 		std::vector<uint8_t> normalized;
-		if (bodyBytes != 0u &&
+		if (bodyBytes != 0u && !(bodyBytes >= 2u && incoming[offset] == 0xde && incoming[offset+1] == 0xad) &&
 			(m_connectionIo->config.method == ConnectionMethod::BLE ||
 			 incoming[offset] == 0x03u)) {
 			const size_t payloadBytes = bodyBytes - 1u;

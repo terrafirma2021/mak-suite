@@ -14,7 +14,7 @@ payload use `LEN=0`.
 
 There is no GET/SET field. `CMD` and the exact payload shape select the
 operation. Do not treat every empty payload as GET: for example, empty
-`KEY_INIT` is SET, while a `CONTROLLER_CONTROL` GET carries `control:u8`.
+`KEY_INIT` is SET, while `INPUT_STREAM` GET carries `kind:u8`.
 The `Operation` column below defines each valid form.
 
 Successful GET replies use the same frame:
@@ -36,7 +36,8 @@ restore individual replies in request order. A lone command is sent
 immediately. Applications use the normal MAK_API calls and do not select a
 batch size or enable a batching mode.
 
-AES-128 transport encryption is available on COM and UDP. Encryption wraps
+AES-128 transport encryption is available on MAKXD COM and UDP; MAKCU
+uses plaintext COM and supports encrypted UDP. Encryption wraps
 the command record and authenticates replies with the request nonce. BLE uses
 BLE link security and does not accept a MAKXD AES key.
 
@@ -76,8 +77,8 @@ Use the exact argument counts and payload lengths below. A legacy DT argument
 or two-byte trailer is rejected, including an explicit zero.
 
 Keyboard press durations (`hold_ms` and `random_range`) remain in milliseconds.
-Input-stream timing fields and the polling intervals returned by `km.device()`
-are unchanged.
+The polling intervals returned by `km.device()` use USB microframes.
+Change events contain only kind, control ID, and value.
 
 ## Mouse
 
@@ -185,15 +186,14 @@ signed `-32768..32767`.
 | --- | --- | ---: | --- | --- |
 | GET | `CONTROLLER_STATE` | `0x40` | empty | complete state |
 | SET | `CONTROLLER_STATE` | `0x40` | complete state (20 bytes) | none |
-| GET | `CONTROLLER_CONTROL` | `0x41` | `control:u8` | `control:u8 value:16-bit` |
-| SET | `CONTROLLER_CONTROL` | `0x41` | `control:u8 value:16-bit` | none |
+| GET | `CONTROLLER_STREAM` | `0x41` | empty | `enabled:u8` |
+| SET | `CONTROLLER_STREAM` | `0x41` | `enabled:u8` | none |
 | SET | `CONTROLLER_MASK` | `0x51` | `control:u8 mode:u8` | none |
 
-`CONTROLLER_CONTROL` values occupy exactly two little-endian bytes: `i16`
-for stick axes (IDs 12..15), `u16` for triggers and digital controls. The
-value ranges above still apply. SET payloads and GET results are three bytes;
-GET requests remain one byte. The former five-byte SET/result format is
-rejected. Firmware and SDKs must use the same format when updating.
+`CONTROLLER_STREAM` accepts only on/off (`1`/`0`) or an empty query.
+The previous named/individual-control command and its 3- or 5-byte payloads
+are removed. Use `CONTROLLER_STATE` for injection and `CONTROLLER_MASK` for
+physical-input masks. Update firmware and SDKs together.
 
 MAKXD rejects unsupported controls, invalid values or modes, and incorrect
 payload lengths. Controller injection requires a routed controller with a
@@ -203,9 +203,9 @@ successfully parsed current report.
 
 | SDK | Device kinds | Firmware version | Controller |
 | --- | --- | --- | --- |
-| Python | `device.device()` | `device.firmware_version()` | `device.gamepad.control/mask/state` |
-| Rust | `device()` | `firmware_version()` | `controller_control`, `controller_mask`, state methods |
-| C++ | `device()` | `firmwareVersion()` | `controllerControl`, `controllerMask`, state methods |
+| Python | `device.device()` | `device.firmware_version()` | `device.gamepad.stream/mask/state` |
+| Rust | `device()` | `firmware_version()` | `controller_stream`, `controller_mask`, state methods |
+| C++ | `device()` | `firmwareVersion()` | `controllerStream`, `controllerMask`, state methods |
 | C | `makxd_get_device_kinds` | `makxd_firmware_version` | `makxd_controller_*` |
 | C# | `device.device_kinds()` | `device.firmware_version()` | `device.controller_*` |
 
@@ -227,24 +227,88 @@ request:  DE AD 00 00 04
 response: DE AD 04 00 04 01 00 00 00
 ```
 
-Set `SOUTH=1`:
+## Input change streams
+
+Mouse, keyboard, and controller subscriptions are independent. Set one kind
+on/off; query one kind. Enabling a kind does not disable the others.
+
+| Operation | Command | Value | Payload | Returned data |
+| --- | --- | ---: | --- | --- |
+| GET | `INPUT_STREAM` | `0x52` | `kind:u8` | `enabled:u8` |
+| SET | `INPUT_STREAM` | `0x52` | `kind:u8 enabled:u8` | none |
+| EVENT | `INPUT_CHANGE` | `0x53` | `kind:u8 id:u8 value` | unsolicited |
+
+| Kind | ID | On/off alias | Changed controls |
+| --- | ---: | --- | --- |
+| mouse | 1 | `BUTTONS` (`0x10`) | Button IDs 0..31; 0 released, 1 pressed |
+| keyboard | 2 | `KEY_KEYS` (`0x2B`) | HID usages 0..255, including modifiers; 0 released, 1 pressed |
+| controller | 3 | `CONTROLLER_STREAM` (`0x41`) | Canonical button IDs and triggers 10/11 |
+
+Controller IDs use the table above. IDs 12..15 (stick axes) are not emitted.
+D-pad directions and stick clicks are buttons. Extras are emitted where the
+connected controller supports them. Mouse motion and wheel are not emitted.
+
+Every event is a complete MAK frame:
 
 ```text
-DE AD 03 00 41 00 01 00
+DE AD 03 00 53 kind id state:u8          # 8 bytes, digital state 0 or 1
+DE AD 04 00 53 03   id trigger:u16le     # 9 bytes, IDs 10/11, 0..1023
+DE AD 03 00 53 kind FF FF               # overflow for this kind
 ```
 
-Read `SOUTH`:
+`LEN` determines the frame boundary. Dispatch `0x53` separately from command
+replies, then read kind and ID. A trigger value above 1023 is invalid. There
+are no event bitmaps, timestamps, CR/LF, or prompts.
+
+Enable controller changes, observe a full left-trigger press, then disable:
 
 ```text
-request:  DE AD 01 00 41 00
-response: DE AD 03 00 41 00 01 00
+DE AD 01 00 41 01
+DE AD 04 00 53 03 0A FF 03
+DE AD 01 00 41 00
 ```
 
-## COM event streams
+Enable keyboard independently and query controller subscription state:
 
-`BUTTONS` and `KEY_KEYS` control COM-only physical event streams. Mouse button
-changes emit `6B 6D 2E mask:u8`. Key changes emit
-`6B 6D 2E key:u8 state:u8`.
+```text
+request:  DE AD 02 00 52 02 01
+request:  DE AD 01 00 52 03
+response: DE AD 01 00 52 01
+```
+
+Events describe changed physical controls before masks, remaps, or injection.
+Unchanged values emit nothing. Each enable starts from released/zero; the next
+physical report emits held buttons and nonzero triggers. Detach releases known
+active controls. Trigger native ranges are normalized to 0..1023, rounded to the
+nearest integer. An overflow disables only its kind and invalidates its queued
+changes; discard that kind's cached state and explicitly enable it again.
+
+All enabled kinds share one destination: the caller of the last successful
+subscription change. Queries and disabling an already-disabled kind do not
+transfer ownership. Disconnect invalidates the destination. No automatic
+fallback to another transport occurs.
+
+COM, UDP, BLE Command TX, and WebSocket carry the same full event frame.
+BLE command records still omit the length header; event notifications retain it.
+Raw UDP retains the subscription transaction header; events do not consume a
+pending query transaction. WebSocket uses the unsolicited request ID `0xffff`.
+Encrypted MAKXD COM and encrypted UDP events are authenticated using their carried event nonce, which
+is distinct from a command reply nonce. Authenticate before decoding the event;
+continue matching normal replies to the requested opcode and transaction nonce.
+
+| SDK | Set kind | Query kind | Receive changes |
+| --- | --- | --- | --- |
+| Python | `device.input_stream(StreamKind.CONTROLLER, True)` | `device.input_stream(StreamKind.CONTROLLER)` | `set_input_callback(fn)` or `read_input_change(timeout)` |
+| Rust | `device.input_stream(StreamKind::Controller, true)` | `input_stream_state(kind)` | `input_changes()` channel |
+| C++ | `device.inputStream(StreamKind::Controller, true)` | `inputStream(kind)` | `setInputCallback(fn)` |
+| C | `makxd_input_stream(device, MAKXD_STREAM_CONTROLLER, true)` | `makxd_input_stream_get(...)` | `makxd_set_input_callback(...)` |
+| C# | `device.input_stream(StreamKind.Controller, true)` | `device.input_stream(kind)` | `device.read_input_change()` |
+
+Callbacks run on the reader thread; keep them short and send synchronous
+queries from another thread. C# polling uses the configured transport timeout.
+The standalone `StreamFrameDecoder` helpers handle fragmented or concatenated
+frames. The former raw `km.` events and general full-report stream helpers are
+not part of this public subscription contract.
 
 ## KM_API compatibility
 
@@ -282,11 +346,12 @@ km.multipress(key1,key2,...)
 km.mask(key,mode)
 km.remap(source,target)
 km.keys([0|1])
-km.controller(control[,value])
+km.controller([0|1])
+km.stream(mouse|keyboard|controller[,0|1])
 km.controller_mask(control,mode)
 km.controller_state([low,high,lt,rt,lx,ly,rx,ry])
 ```
 
-Controller names are lowercase forms of the semantic names above. KM_API
+Controller mask names are lowercase forms of the semantic names above. KM_API
 queries return through the `>>> ` prompt; successful mutations are silent
 unless KM echo is enabled.

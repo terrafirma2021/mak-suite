@@ -254,6 +254,7 @@ namespace makxd {
         // Callbacks
         Device::MouseButtonCallback mouseButtonCallback;
         Device::ConnectionCallback connectionCallback;
+        Device::InputCallback inputCallback;
         mutable std::mutex callbackMutex;
 
         // Connection monitoring
@@ -292,10 +293,19 @@ namespace makxd {
           
             deviceInfo.isConnected = false;
 
+            bindInputCallback();
             // Set up button callback for serial port
             serialPort->setButtonCallback([this](uint8_t button, bool pressed) {
                 handleButtonEvent(button, pressed);
                 });
+        }
+
+        void bindInputCallback() {
+            serialPort->setInputCallback([this](const InputChange& event) {
+                Device::InputCallback callback;
+                { std::lock_guard<std::mutex> lock(callbackMutex); callback = inputCallback; }
+                if (callback) callback(event);
+            });
         }
 
         ~Impl() = default;
@@ -721,6 +731,7 @@ namespace makxd {
             [impl = m_impl.get()](uint8_t button, bool pressed) {
                 impl->handleButtonEvent(button, pressed);
             });
+        m_impl->bindInputCallback();
         m_impl->connection = connection;
         if (connection.method == ConnectionMethod::COM) {
             return connect(connection.comPort);
@@ -1258,32 +1269,32 @@ namespace makxd {
         }
     }
 
-    std::optional<int32_t> Device::controllerControl(ControllerControl control) {
-        if (std::to_underlying(control) >= 55u) return std::nullopt;
-        const std::array<uint8_t, 1> payload{std::to_underlying(control)};
-        const auto response = m_impl->executeApiQuery(
-            ApiOpcode::CONTROLLER_CONTROL, payload);
-        if (!response) return std::nullopt;
-        if (response->size() != 3u ||
-            static_cast<uint8_t>((*response)[0]) != std::to_underlying(control)) {
-            return std::nullopt;
-        }
-        const uint16_t value = readU16(*response, 1u);
-        return (control >= ControllerControl::LEFT_STICK_X &&
-                control <= ControllerControl::RIGHT_STICK_Y) ?
-            static_cast<int32_t>(static_cast<int16_t>(value)) :
-            static_cast<int32_t>(value);
+    bool Device::controllerStream(bool enabled) {
+        const std::array<uint8_t, 1> payload{static_cast<uint8_t>(enabled)};
+        return m_impl->executeApiCommand(ApiOpcode::CONTROLLER_STREAM, payload);
     }
-
-    bool Device::controllerControl(
-        ControllerControl control, int32_t value) {
-        if (!controllerValueValid(control, value)) return false;
-        std::vector<uint8_t> payload;
-        payload.reserve(3u);
-        payload.push_back(std::to_underlying(control));
-        appendU16(payload, static_cast<uint16_t>(value));
-        return m_impl->executeApiCommand(
-            ApiOpcode::CONTROLLER_CONTROL, payload);
+    std::optional<bool> Device::controllerStream() {
+        const auto response = m_impl->executeApiQuery(ApiOpcode::CONTROLLER_STREAM, {});
+        if (!response || response->size() != 1 || static_cast<uint8_t>((*response)[0]) > 1) return std::nullopt;
+        return (*response)[0] != 0;
+    }
+    bool Device::inputStream(StreamKind kind, bool enabled) {
+        auto id = static_cast<uint8_t>(kind);
+        if (id < 1 || id > 3) return false;
+        const std::array<uint8_t, 2> payload{id, static_cast<uint8_t>(enabled)};
+        return m_impl->executeApiCommand(ApiOpcode::INPUT_STREAM, payload);
+    }
+    std::optional<bool> Device::inputStream(StreamKind kind) {
+        auto id = static_cast<uint8_t>(kind);
+        if (id < 1 || id > 3) return std::nullopt;
+        const std::array<uint8_t, 1> payload{id};
+        const auto response = m_impl->executeApiQuery(ApiOpcode::INPUT_STREAM, payload);
+        if (!response || response->size() != 1 || static_cast<uint8_t>((*response)[0]) > 1) return std::nullopt;
+        return (*response)[0] != 0;
+    }
+    void Device::setInputCallback(InputCallback callback) {
+        std::lock_guard<std::mutex> lock(m_impl->callbackMutex);
+        m_impl->inputCallback = std::move(callback);
     }
 
     bool Device::controllerMask(

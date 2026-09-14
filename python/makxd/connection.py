@@ -15,6 +15,7 @@ from .errors import (
     MakxdTimeoutError,
 )
 from .enums import MouseButton
+from .stream import StreamKind, StreamFrame, InputChange, decode_input_change
 from .protocol import (
     ApiOpcode,
     DeviceInfo,
@@ -126,6 +127,9 @@ class SerialTransport:
         
 
         self._button_callback: Optional[Callable[[MouseButton, bool], None]] = None
+        self._input_callback = None
+        self._input_changes = deque()
+        self._input_condition = threading.Condition()
         self._last_button_mask = 0
         self._button_states = 0
         
@@ -193,7 +197,6 @@ class SerialTransport:
             return
 
         changed_bits = byte_val ^ self._last_button_mask
-        print("\n", end='')
         self._log(f"Button state changed: 0x{self._last_button_mask:02X} -> 0x{byte_val:02X}")
 
         for bit in range(8):
@@ -243,6 +246,26 @@ class SerialTransport:
         plaintext: bytes,
         transaction_nonce: bytes = b"",
     ) -> None:
+        # Authenticated stream events carry their own framed payload and nonce.
+        if plaintext.startswith(b"\xDE\xAD"):
+            self._process_mak_api_frames(plaintext)
+            return
+        if plaintext[:1] == b"\x53":
+            change = decode_input_change(StreamFrame(0x53, bytes(plaintext[1:])))
+            if change is not None:
+                with self._input_condition:
+                    self._input_changes.append(change)
+                    self._input_condition.notify_all()
+                if change.kind == StreamKind.MOUSE:
+                    mask = 0 if change.overflow else ((self._last_button_mask & ~(1 << change.control)) | (change.value << change.control))
+                    self._handle_button_data(mask)
+                callback = self._input_callback
+                if callback is not None:
+                    try:
+                        callback(change)
+                    except Exception:
+                        logger.exception("Input change callback failed")
+            return
         if len(plaintext) < 2:
             self._fail_oldest_pending(
                 MakxdResponseError("Invalid MAK_API response")
@@ -352,8 +375,6 @@ class SerialTransport:
     def _listen(self) -> None:
         self._log("Starting listener thread")
         read_buffer = bytearray(4096)
-        button_event_prefix = bytes((0x6B, 0x6D, 0x2E))
-        button_event_prefix_matched = 0
 
         serial_read = self.serial.read
         serial_in_waiting = lambda: self.serial.in_waiting
@@ -374,24 +395,7 @@ class SerialTransport:
                 if self._transport_encryption.enabled:
                     self._process_encrypted_frames(bytes_read)
                     continue
-                if self._mak_api_frame_buffer or bytes_read.startswith(b"\xDE"):
-                    self._process_mak_api_frames(bytes_read)
-                    continue
-                for byte_val in bytes_read:
-                    if button_event_prefix_matched == len(button_event_prefix):
-                        if byte_val < 0x20:
-                            self._handle_button_data(byte_val)
-                        button_event_prefix_matched = (
-                            1 if byte_val == button_event_prefix[0] else 0
-                        )
-                        continue
-                    if byte_val == button_event_prefix[button_event_prefix_matched]:
-                        button_event_prefix_matched += 1
-                    else:
-                        button_event_prefix_matched = (
-                            1 if byte_val == button_event_prefix[0] else 0
-                        )
-                            
+                self._process_mak_api_frames(bytes_read)
                 current_time = time.time()
                 if current_time - last_cleanup > cleanup_interval:
                     self._cleanup_timed_out_commands()
@@ -721,6 +725,27 @@ class SerialTransport:
     def is_connected(self) -> bool:
         connected = self._is_connected and self.serial is not None and self.serial.is_open
         return connected
+
+    def input_stream(self, kind: StreamKind | int, enabled: bool | None = None) -> bool | None:
+        kind = StreamKind(kind)
+        if enabled is not None and not isinstance(enabled, bool):
+            raise MakxdCommandError("enabled must be bool or None")
+        payload = bytes((kind,)) + (b"" if enabled is None else bytes((enabled,)))
+        response = self.send_mak_api(ApiOpcode.INPUT_STREAM, payload, wait_response=enabled is None)
+        if enabled is None:
+            if response not in (b"\x00", b"\x01"):
+                raise MakxdResponseError("invalid stream status")
+            return response == b"\x01"
+        return None
+
+    def read_input_change(self, timeout: float | None = None) -> InputChange | None:
+        with self._input_condition:
+            if not self._input_condition.wait_for(lambda: bool(self._input_changes), timeout):
+                return None
+            return self._input_changes.popleft()
+
+    def set_input_callback(self, callback) -> None:
+        self._input_callback = callback
 
     def set_button_callback(self, callback: Optional[Callable[[MouseButton, bool], None]]) -> None:
         self._log(f"Setting button callback: {callback is not None}")

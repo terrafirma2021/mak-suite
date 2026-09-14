@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../mouse.cs" />
+    <Compile Include="../makxd_stream.cs" />
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
   </ItemGroup>
 </Project>

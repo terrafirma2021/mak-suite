@@ -50,12 +50,12 @@ int main() {
             return 1;
         }
 
-        if (!device.controllerControl(makxd::ControllerControl::SOUTH, 1)) {
-            std::cout << "controllerControl(South,1) failed\n";
+        if (!device.controllerStream(true)) {
+            std::cout << "controllerStream(true) failed\n";
             return 1;
         }
-        if (!device.controllerControl(makxd::ControllerControl::SOUTH, 0)) {
-            std::cout << "controllerControl(South,0) failed\n";
+        if (!device.controllerStream(false)) {
+            std::cout << "controllerStream(false) failed\n";
             return 1;
         }
 

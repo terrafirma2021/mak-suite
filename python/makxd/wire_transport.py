@@ -97,6 +97,11 @@ class UdpWireTransport:
         if self._config.udp_mode is UdpWireMode.RAW and data[:1] == b"\x55":
             if len(data) < 10:
                 return b""
+            # Unsolicited framed events carry the subscription transaction.
+            # They must not remove or require a pending query transaction.
+            body = data[9:]
+            if len(body) >= 5 and body[:2] == b"\xde\xad" and body[4] == 0x53:
+                return body if len(body) == 5 + int.from_bytes(body[2:4], "little") else b""
             transaction = data[1:9]
             with self._raw_transactions_lock:
                 try:

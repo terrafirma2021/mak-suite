@@ -61,6 +61,7 @@ pub(crate) struct TransportInner {
 
     // Button event subscribers.
     button_subs: Arc<Mutex<Vec<channel::Sender<ButtonMask>>>>,
+    change_subs: Arc<Mutex<Vec<channel::Sender<crate::stream::InputChange>>>>,
 
     // Connection state subscribers.
     pub state_subs: Mutex<Vec<channel::Sender<ConnectionState>>>,
@@ -98,6 +99,7 @@ impl TransportInner {
         // Spawn reader.
         let reader_pending = Arc::clone(&self.pending_responses);
         let reader_buttons = Arc::clone(&self.button_subs);
+        let reader_changes = Arc::clone(&self.change_subs);
         let reader_signal = Arc::clone(&signal);
         let reader_encryption = self.transport_encryption.clone();
         let reader_handle = std::thread::Builder::new()
@@ -107,6 +109,7 @@ impl TransportInner {
                     reader_port,
                     reader_pending,
                     reader_buttons,
+                    reader_changes,
                     reader_signal,
                     reader_encryption,
                 );
@@ -202,6 +205,7 @@ impl TransportHandle {
             pending_responses: Arc::new(Mutex::new(VecDeque::new())),
             transport_encryption,
             button_subs: Arc::new(Mutex::new(Vec::new())),
+            change_subs: Arc::new(Mutex::new(Vec::new())),
             state_subs: Mutex::new(Vec::new()),
             reader_signal: Mutex::new(None),
             threads: Mutex::new(Vec::new()),
@@ -247,6 +251,7 @@ impl TransportHandle {
             pending_responses: Arc::new(Mutex::new(VecDeque::new())),
             transport_encryption: None,
             button_subs: Arc::clone(&button_subs),
+            change_subs: Arc::new(Mutex::new(Vec::new())),
             state_subs: Mutex::new(Vec::new()),
             reader_signal: Mutex::new(None),
             threads: Mutex::new(Vec::new()),
@@ -399,6 +404,12 @@ impl TransportHandle {
     }
 
     /// Subscribe to button events from the device stream.
+    pub fn subscribe_input_changes(&self) -> channel::Receiver<crate::stream::InputChange> {
+        let (tx, rx) = channel::unbounded();
+        self.inner.change_subs.lock().unwrap().push(tx);
+        rx
+    }
+
     pub fn subscribe_buttons(&self) -> channel::Receiver<ButtonMask> {
         let (tx, rx) = channel::unbounded();
         self.inner.button_subs.lock().unwrap().push(tx);

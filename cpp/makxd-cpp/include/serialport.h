@@ -34,6 +34,7 @@
 #include <span>
 #include <stop_token>
 #include "makxd_protocol.h"
+#include "makxd_stream.h"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -116,6 +117,8 @@ namespace makxd {
         // Button callback support
         using ButtonCallback = std::function<void(uint8_t, bool)>;
         void setButtonCallback(ButtonCallback callback);
+        using InputCallback = std::function<void(const InputChange&)>;
+        void setInputCallback(InputCallback callback);
 
         // Get last platform error
         std::string getLastError();
@@ -152,6 +155,7 @@ namespace makxd {
 
         // Button data processing
         ButtonCallback m_buttonCallback;
+        InputCallback m_inputCallback;
         mutable std::mutex m_buttonCallbackMutex;
         std::atomic<uint8_t> m_lastButtonMask{ 0 };
 

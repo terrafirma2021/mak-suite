@@ -133,16 +133,22 @@ impl UdpWirePort {
                     "raw UDP response header is invalid",
                 ));
             }
-            let mut transactions = self.shared.transactions.lock().unwrap();
-            let matching_index = transactions
-                .iter()
-                .position(|transaction| body[1..9] == transaction[..]);
-            if let Some(index) = matching_index {
-                transactions.remove(index);
-            } else {
-                return Ok(());
+            let event = body.len() >= 14
+                && body[9..11] == [0xde, 0xad]
+                && body[13] == 0x53
+                && body.len() == 14 + u16::from_le_bytes([body[11], body[12]]) as usize;
+            if !event {
+                let mut transactions = self.shared.transactions.lock().unwrap();
+                let matching_index = transactions
+                    .iter()
+                    .position(|transaction| body[1..9] == transaction[..]);
+                if let Some(index) = matching_index {
+                    transactions.remove(index);
+                } else {
+                    return Ok(());
+                }
+                drop(transactions);
             }
-            drop(transactions);
             body = &body[9..];
         }
         udp_response_normalize(body, &mut self.pending);

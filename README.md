@@ -5,12 +5,16 @@ SDKs to connect over COM, Ethernet/Wi-Fi UDP, or BLE and work with mouse,
 keyboard, and controller input, physical-input masks, and complete controller state.
 The device's routed kinds determine which operations are available.
 
+Streaming is independent by kind. `km.controller(1)` / `(0)` enables or disables
+changed controller buttons and triggers. Triggers use `0..1023`; every event has
+a frame, kind, and control ID. See [streaming](protocol/MAK_API.md#input-change-streams).
+
 ## Documentation
 
 - [MAK_API](protocol/MAK_API.md): every public binary command, opcode, payload,
   reply, value range, transport rule, and event format used by the SDKs.
 - [KM_API](protocol/KM_API.md): every accepted legacy ASCII `km.*` command,
-  arguments, query/mutation behaviour, echo, errors, and COM events.
+  arguments, query/mutation behaviour, echo, errors, and framed input events.
 - [Agent and integration guide](llm.md): SDK entry points, installation,
   submodules, examples, builds, compatibility checks, and updating safely.
 

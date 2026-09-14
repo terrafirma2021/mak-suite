@@ -1,141 +1,33 @@
 #pragma once
-
 #include <cstdint>
 #include <optional>
 #include <span>
 #include <vector>
-
+#include <stdexcept>
 namespace makxd {
-
-enum class StreamKind : std::uint8_t {
-    Mouse = 1,
-    Keyboard = 2,
-    Controller = 3,
-};
-
-inline constexpr std::uint8_t STREAM_MASK_MOUSE = 1u << 0u;
-inline constexpr std::uint8_t STREAM_MASK_KEYBOARD = 1u << 1u;
-inline constexpr std::uint8_t STREAM_MASK_CONTROLLER = 1u << 2u;
-inline constexpr std::uint8_t STREAM_MASK_ALL =
-    STREAM_MASK_MOUSE | STREAM_MASK_KEYBOARD | STREAM_MASK_CONTROLLER;
-inline constexpr std::uint8_t STREAM_COMMAND_INPUT = 0x01u;
-inline constexpr std::size_t STREAM_MAX_BODY_BYTES = 252u;
-inline constexpr std::size_t STREAM_MAX_PAYLOAD_BYTES =
-    STREAM_MAX_BODY_BYTES - 1u;
+enum class StreamKind : std::uint8_t { Mouse = 1, Keyboard = 2, Controller = 3 };
+inline constexpr std::uint8_t STREAM_COMMAND = 0x52u, STREAM_EVENT = 0x53u;
+inline constexpr std::size_t STREAM_MAX_PAYLOAD_BYTES = 251u;
+inline constexpr std::uint16_t STREAM_TRIGGER_MAX = 1023u;
 inline constexpr std::uint16_t CONTROLLER_TRIGGER_MAX = 1023u;
-
-enum class StreamOperation : std::uint8_t {
-    Start = 1,
-    Stop = 2,
-    Status = 3,
+struct StreamFrame { std::uint8_t command = 0; std::vector<std::uint8_t> payload; };
+struct InputChange {
+    StreamKind kind{}; std::uint8_t control = 0; std::uint16_t value = 0; bool overflow = false;
+    [[nodiscard]] bool isTrigger() const { return kind == StreamKind::Controller && (control == 10 || control == 11); }
 };
-
-struct StreamTiming {
-    std::uint16_t raw = 0u;
-    std::uint16_t dt_uframes = 0u;
-    bool baseline = false;
-    bool invalid = false;
-};
-
-struct StreamFrame {
-    std::uint8_t command = 0u;
-    std::vector<std::uint8_t> payload;
-};
-
-struct StreamControl {
-    StreamOperation operation = StreamOperation::Status;
-    std::uint8_t status = 0u;
-    std::uint8_t active_mask = 0u;
-};
-
-struct StreamInputRecord {
-    StreamKind kind = static_cast<StreamKind>(0u);
-    std::uint32_t sequence = 0u;
-    StreamTiming timing{};
-    std::vector<std::uint8_t> values;
-};
-
-struct ControllerStreamState {
-    std::uint32_t buttons = 0u;
-    std::uint8_t hat = 0u;
-    std::uint16_t lt = 0u;
-    std::uint16_t rt = 0u;
-    std::int16_t x = 0;
-    std::int16_t y = 0;
-    std::int16_t rx = 0;
-    std::int16_t ry = 0;
-    std::int16_t z = 0;
-    std::int16_t rz = 0;
-};
-
-class StreamRequest {
-public:
-    StreamOperation operation = StreamOperation::Status;
-    std::uint8_t source_mask = 0u;
-
-    [[nodiscard]] std::vector<std::uint8_t> encode() const
-    {
-        const std::uint8_t payload[] = {
-            static_cast<std::uint8_t>(operation),
-            static_cast<std::uint8_t>(source_mask & STREAM_MASK_ALL),
-        };
-        return encode_frame(STREAM_COMMAND_INPUT, payload);
-    }
-
-    [[nodiscard]] static StreamRequest start(
-        std::uint8_t selected_mask = STREAM_MASK_ALL)
-    {
-        return {StreamOperation::Start,
-            static_cast<std::uint8_t>(selected_mask & STREAM_MASK_ALL)};
-    }
-
-    [[nodiscard]] static StreamRequest mouse()
-    {
-        return start(STREAM_MASK_MOUSE);
-    }
-
-    [[nodiscard]] static StreamRequest keyboard()
-    {
-        return start(STREAM_MASK_KEYBOARD);
-    }
-
-    [[nodiscard]] static StreamRequest controller()
-    {
-        return start(STREAM_MASK_CONTROLLER);
-    }
-
-    [[nodiscard]] static StreamRequest all()
-    {
-        return start(STREAM_MASK_ALL);
-    }
-
-    [[nodiscard]] static StreamRequest stop()
-    {
-        return {StreamOperation::Stop, 0u};
-    }
-
-    [[nodiscard]] static StreamRequest status()
-    {
-        return {StreamOperation::Status, 0u};
-    }
-
-private:
-    static std::vector<std::uint8_t> encode_frame(
-        std::uint8_t command,
-        std::span<const std::uint8_t> payload)
-    {
-        std::vector<std::uint8_t> frame(5u + payload.size(), 0u);
-        frame[0] = 0xDEu;
-        frame[1] = 0xADu;
-        frame[2] = static_cast<std::uint8_t>(payload.size());
-        frame[3] = static_cast<std::uint8_t>(payload.size() >> 8u);
-        frame[4] = command;
-        for (std::size_t index = 0u; index < payload.size(); ++index)
-            frame[5u + index] = payload[index];
+struct StreamRequest {
+    StreamKind kind; std::optional<bool> enabled;
+    [[nodiscard]] std::vector<std::uint8_t> encode() const {
+        auto id = static_cast<std::uint8_t>(kind);
+        if (id < 1 || id > 3) throw std::invalid_argument("invalid stream kind");
+        std::vector<std::uint8_t> frame{0xde, 0xad, static_cast<std::uint8_t>(enabled ? 2 : 1), 0, STREAM_COMMAND, id};
+        if (enabled) frame.push_back(*enabled ? 1 : 0);
         return frame;
     }
+    [[nodiscard]] static StreamRequest mouse(bool enabled = true) { return {StreamKind::Mouse, enabled}; }
+    [[nodiscard]] static StreamRequest keyboard(bool enabled = true) { return {StreamKind::Keyboard, enabled}; }
+    [[nodiscard]] static StreamRequest controller(bool enabled = true) { return {StreamKind::Controller, enabled}; }
 };
-
 class StreamFrameDecoder {
 public:
     void feed(std::span<const std::uint8_t> bytes)
@@ -154,8 +46,7 @@ public:
                 return std::nullopt;
             const auto payload_size = static_cast<std::size_t>(
                 m_buffer[2] | (static_cast<std::size_t>(m_buffer[3]) << 8u));
-            if (payload_size == 0u ||
-                payload_size > STREAM_MAX_PAYLOAD_BYTES) {
+            if (payload_size > STREAM_MAX_PAYLOAD_BYTES) {
                 m_buffer.erase(m_buffer.begin());
                 continue;
             }
@@ -176,81 +67,18 @@ private:
     std::vector<std::uint8_t> m_buffer;
 };
 
-[[nodiscard]] inline StreamTiming decode_stream_timing(std::uint16_t raw)
-{
-    return {raw, static_cast<std::uint16_t>(raw & 0x3FFFu),
-        (raw & 0x4000u) != 0u, (raw & 0x8000u) != 0u};
-}
 
-[[nodiscard]] inline bool decode_stream_control(
-    const StreamFrame& frame,
-    StreamControl& control)
-{
-    if (frame.command != STREAM_COMMAND_INPUT || frame.payload.size() != 3u)
-        return false;
-    control.operation = static_cast<StreamOperation>(frame.payload[0]);
-    control.status = frame.payload[1];
-    control.active_mask = frame.payload[2];
-    return true;
+[[nodiscard]] inline std::optional<InputChange> decode_input_change(const StreamFrame& frame) {
+    const auto& p = frame.payload;
+    if (frame.command != STREAM_EVENT || p.size() < 3 || p.size() > 4 || p[0] < 1 || p[0] > 3) return std::nullopt;
+    InputChange event{static_cast<StreamKind>(p[0]), p[1], p[2], false};
+    if (p.size() == 3 && p[1] == 255 && p[2] == 255) { event.overflow = true; return event; }
+    if (event.isTrigger()) {
+        if (p.size() != 4) return std::nullopt;
+        event.value = static_cast<std::uint16_t>(p[2] | (static_cast<std::uint16_t>(p[3]) << 8));
+        if (event.value > STREAM_TRIGGER_MAX) return std::nullopt;
+    } else if (p.size() != 3 || p[2] > 1 || (p[0] == 1 && p[1] > 31) ||
+        (p[0] == 3 && (p[1] > 54 || (p[1] >= 12 && p[1] <= 15)))) return std::nullopt;
+    return event;
 }
-
-[[nodiscard]] inline bool decode_stream_input_record(
-    const StreamFrame& frame,
-    StreamInputRecord& record)
-{
-    if (frame.command != STREAM_COMMAND_INPUT || frame.payload.size() < 8u)
-        return false;
-    const auto u16 = [&frame](std::size_t offset) {
-        return static_cast<std::uint16_t>(frame.payload[offset] |
-            (static_cast<std::uint16_t>(frame.payload[offset + 1u]) << 8u));
-    };
-    const auto u32 = [&frame](std::size_t offset) {
-        return static_cast<std::uint32_t>(frame.payload[offset] |
-            (static_cast<std::uint32_t>(frame.payload[offset + 1u]) << 8u) |
-            (static_cast<std::uint32_t>(frame.payload[offset + 2u]) << 16u) |
-            (static_cast<std::uint32_t>(frame.payload[offset + 3u]) << 24u));
-    };
-    const auto source = static_cast<StreamKind>(frame.payload[0]);
-    if (source != StreamKind::Mouse && source != StreamKind::Keyboard &&
-        source != StreamKind::Controller)
-        return false;
-    record.kind = source;
-    record.sequence = u32(3u);
-    record.timing = decode_stream_timing(u16(1u));
-    record.values.assign(frame.payload.begin() + 7u, frame.payload.end());
-    return !record.values.empty();
-}
-
-[[nodiscard]] inline bool decode_controller_stream(
-    const StreamInputRecord& record,
-    ControllerStreamState& state)
-{
-    if (record.kind != StreamKind::Controller || record.values.size() != 21u)
-        return false;
-    const auto u16 = [&record](std::size_t offset) {
-        return static_cast<std::uint16_t>(record.values[offset] |
-            (static_cast<std::uint16_t>(record.values[offset + 1u]) << 8u));
-    };
-    const auto u32 = [&record](std::size_t offset) {
-        return static_cast<std::uint32_t>(record.values[offset] |
-            (static_cast<std::uint32_t>(record.values[offset + 1u]) << 8u) |
-            (static_cast<std::uint32_t>(record.values[offset + 2u]) << 16u) |
-            (static_cast<std::uint32_t>(record.values[offset + 3u]) << 24u));
-    };
-    state.buttons = u32(0u);
-    state.hat = record.values[4u];
-    state.lt = u16(5u);
-    state.rt = u16(7u);
-    if (state.lt > CONTROLLER_TRIGGER_MAX ||
-        state.rt > CONTROLLER_TRIGGER_MAX)
-        return false;
-    state.x = static_cast<std::int16_t>(u16(9u));
-    state.y = static_cast<std::int16_t>(u16(11u));
-    state.rx = static_cast<std::int16_t>(u16(13u));
-    state.ry = static_cast<std::int16_t>(u16(15u));
-    state.z = static_cast<std::int16_t>(u16(17u));
-    state.rz = static_cast<std::int16_t>(u16(19u));
-    return true;
-}
-
 } // namespace makxd

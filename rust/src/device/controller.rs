@@ -39,22 +39,6 @@ fn controller_state_check(state: ControllerState) -> Result<()> {
     )
 }
 
-fn controller_control_parse(control: ControllerControl, value: &[u8]) -> Result<i32> {
-    if value.len() != 3 || value[0] != control as u8 {
-        return Err(MakxdError::Protocol(
-            "controller control response is invalid".into(),
-        ));
-    }
-    let bytes = [value[1], value[2]];
-    Ok(match control {
-        ControllerControl::LeftStickX
-        | ControllerControl::LeftStickY
-        | ControllerControl::RightStickX
-        | ControllerControl::RightStickY => i32::from(i16::from_le_bytes(bytes)),
-        _ => i32::from(u16::from_le_bytes(bytes)),
-    })
-}
-
 fn controller_state_payload(state: ControllerState) -> Vec<u8> {
     let mut payload = Vec::with_capacity(20);
     payload.extend_from_slice(&state.digital_low.to_le_bytes());
@@ -92,17 +76,12 @@ fn controller_state_parse(value: &[u8]) -> Result<ControllerState> {
 }
 
 impl Device {
-    pub fn controller_control_state(&self, control: ControllerControl) -> Result<i32> {
-        let value = self.query_api(ApiOpcode::ControllerControl, &[control as u8])?;
-        controller_control_parse(control, &value)
+    pub fn controller_stream(&self, enabled: bool) -> Result<()> {
+        self.write_api(ApiOpcode::ControllerStream, &[u8::from(enabled)])
     }
-
-    pub fn controller_control(&self, control: ControllerControl, value: i32) -> Result<()> {
-        controller_value_check(control, value)?;
-        let mut payload = vec![control as u8];
-        payload.extend_from_slice(&(value as u16).to_le_bytes());
-
-        self.write_api(ApiOpcode::ControllerControl, &payload)
+    pub fn controller_stream_state(&self) -> Result<bool> {
+        let value = self.query_api(ApiOpcode::ControllerStream, &[])?;
+        super::stream::stream_state_parse(&value)
     }
 
     pub fn controller_mask(
@@ -130,19 +109,13 @@ use super::AsyncDevice;
 
 #[cfg(feature = "async")]
 impl AsyncDevice {
-    pub async fn controller_control_state(&self, control: ControllerControl) -> Result<i32> {
-        let value = self
-            .query_api(ApiOpcode::ControllerControl, &[control as u8])
-            .await?;
-        controller_control_parse(control, &value)
+    pub async fn controller_stream(&self, enabled: bool) -> Result<()> {
+        self.write_api(ApiOpcode::ControllerStream, &[u8::from(enabled)])
+            .await
     }
-
-    pub async fn controller_control(&self, control: ControllerControl, value: i32) -> Result<()> {
-        controller_value_check(control, value)?;
-        let mut payload = vec![control as u8];
-        payload.extend_from_slice(&(value as u16).to_le_bytes());
-
-        self.write_api(ApiOpcode::ControllerControl, &payload).await
+    pub async fn controller_stream_state(&self) -> Result<bool> {
+        let value = self.query_api(ApiOpcode::ControllerStream, &[]).await?;
+        super::stream::stream_state_parse(&value)
     }
 
     pub async fn controller_mask(
@@ -182,15 +155,13 @@ mod tests {
         device.keyboard_down(4u8).unwrap();
         device.keyboard_up(4u8).unwrap();
         device.keyboard_init().unwrap();
-        device
-            .controller_control(ControllerControl::LeftStickX, -8)
-            .unwrap();
+        device.controller_stream(true).unwrap();
         device
             .set_controller_state(ControllerState::default())
             .unwrap();
         device.keyboard_press_randomized(4u8, 10, 5).unwrap();
         // A query waits for the worker to drain preceding SETs.
-        let _ = device.controller_control_state(ControllerControl::South);
+        let _ = device.controller_stream_state();
         let commands = mock.sent_commands();
         let expected: &[(u8, &[u8])] = &[
             (0x11, &[1]),
@@ -200,33 +171,15 @@ mod tests {
             (0x20, &[4]),
             (0x21, &[4]),
             (0x22, &[]),
-            (0x41, &[12, 248, 255]),
+            (0x41, &[1]),
             (0x40, &[0; 20]),
             (0x23, &[4, 10, 0, 0, 0, 5, 0, 0, 0]),
-            (0x41, &[0]),
+            (0x41, &[]),
         ];
         assert_eq!(commands.len(), expected.len());
         for (actual, &(opcode, payload)) in commands.iter().zip(expected) {
             assert_eq!(&actual[..5], &[0xde, 0xad, payload.len() as u8, 0, opcode]);
             assert_eq!(&actual[5..], payload);
-        }
-    }
-
-    #[test]
-    fn control_reply_uses_two_bytes_with_control_specific_signedness() {
-        for (control, bytes, expected) in [
-            (ControllerControl::LeftStickX, [0, 128], -32768),
-            (ControllerControl::RightStickY, [255, 127], 32767),
-            (ControllerControl::LeftTrigger, [255, 255], 65535),
-            (ControllerControl::South, [1, 0], 1),
-        ] {
-            assert_eq!(
-                controller_control_parse(control, &[control as u8, bytes[0], bytes[1]]).unwrap(),
-                expected
-            );
-        }
-        for bytes in [&[][..], &[0, 1], &[0, 1, 0, 0, 0], &[1, 1, 0]] {
-            assert!(controller_control_parse(ControllerControl::South, bytes).is_err());
         }
     }
 
@@ -251,11 +204,17 @@ mod tests {
     }
 
     #[test]
-    fn complete_state_rejects_out_of_range_trigger() {
+    fn complete_state_accepts_full_trigger_range() {
         let state = ControllerState {
-            left_trigger: CONTROLLER_TRIGGER_MAX + 1,
+            left_trigger: 1023,
+            right_trigger: 1023,
             ..ControllerState::default()
         };
-        assert!(controller_state_check(state).is_err());
+        assert_eq!(
+            controller_state_parse(&controller_state_payload(state))
+                .unwrap()
+                .left_trigger,
+            1023
+        );
     }
 }

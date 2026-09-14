@@ -281,10 +281,12 @@ namespace makxd {
         [[nodiscard]] bool setKeyboardKeys(bool enabled);
 
         // Unified semantic controller API.
-        [[nodiscard]] std::optional<int32_t> controllerControl(
-            ControllerControl control);
-        [[nodiscard]] bool controllerControl(
-            ControllerControl control, int32_t value);
+        [[nodiscard]] bool controllerStream(bool enabled);
+        [[nodiscard]] std::optional<bool> controllerStream();
+        [[nodiscard]] bool inputStream(StreamKind kind, bool enabled);
+        [[nodiscard]] std::optional<bool> inputStream(StreamKind kind);
+        using InputCallback = std::function<void(const InputChange&)>;
+        void setInputCallback(InputCallback callback);
         [[nodiscard]] bool controllerMask(
             ControllerControl control, ControllerMaskMode mode);
         [[nodiscard]] std::optional<ControllerState> controllerState();

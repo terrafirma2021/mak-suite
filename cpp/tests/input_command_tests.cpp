@@ -33,15 +33,11 @@ int main() {
                 commands.emplace_back(packet.begin(), packet.end());
                 if (packet.size() == 1u && packet[0] == 0x02u)
                     replies.push_back({0x02u, 0x43u});
-                if (packet.size() == 2u && packet[0] == 0x41u) {
-                    switch (packet[1]) {
-                    case 12: replies.push_back({0x41, 12, 0, 128}); break;
-                    case 15: replies.push_back({0x41, 15, 255, 127}); break;
-                    case 10: replies.push_back({0x41, 10, 255, 255}); break;
-                    // Old five-byte result must fail, even for a valid button.
-                    case 0: replies.push_back({0x41, 0, 1, 0, 0, 0}); break;
-                    }
+                if (packet.size() == 1u && packet[0] == 0x41u) {
+                    replies.push_back({0xde,0xad,4,0,0x53,3,10,255,3});
+                    replies.push_back({0x41,1});
                 }
+                if (packet.size() == 2u && packet[0] == 0x52u) replies.push_back({0x52,1});
             }
             return true;
         },
@@ -56,6 +52,10 @@ int main() {
     makxd::Device device;
     if (!device.connect(connection)) return 1;
     bool ok = true;
+    std::atomic<unsigned> eventCount{0};
+    device.setInputCallback([&](const makxd::InputChange& event) {
+        if (event.kind == makxd::StreamKind::Controller && event.control == 10 && event.value == 1023) ++eventCount;
+    });
     ok &= device.mouseDown(makxd::MouseButton::LEFT);
     ok &= device.mouseUp(makxd::MouseButton::LEFT);
     ok &= device.mouseMove(12, -7);
@@ -63,17 +63,16 @@ int main() {
     ok &= device.keyboardDown(makxd::KeyboardKey{uint8_t{4}});
     ok &= device.keyboardUp(makxd::KeyboardKey{uint8_t{4}});
     ok &= device.keyboardInit();
-    ok &= device.controllerControl(makxd::ControllerControl::LEFT_STICK_X, -8);
-    ok &= device.controllerControl(makxd::ControllerControl::LEFT_STICK_Y, -32768);
-    ok &= device.controllerControl(makxd::ControllerControl::RIGHT_STICK_X, 32767);
-    ok &= device.controllerControl(makxd::ControllerControl::LEFT_TRIGGER, 1023);
+    ok &= device.controllerStream(true);
+    ok &= device.inputStream(makxd::StreamKind::Mouse, true);
+    ok &= device.inputStream(makxd::StreamKind::Keyboard, true);
+    ok &= device.controllerStream(false);
     ok &= device.setControllerState(makxd::ControllerState{});
     ok &= device.keyboardPress(makxd::KeyboardKey{uint8_t{4}}, 10, 5);
     std::vector<std::vector<uint8_t>> expected{
         {0x02}, {0x11, 1}, {0x11, 0}, {0x18, 12, 0, 249, 255},
         {0x19, 254, 255}, {0x20, 4}, {0x21, 4}, {0x22},
-        {0x41, 12, 248, 255},
-        {0x41, 13, 0, 128}, {0x41, 14, 255, 127}, {0x41, 10, 255, 3},
+        {0x41, 1}, {0x52, 1, 1}, {0x52, 2, 1}, {0x41, 0},
         {0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0x23, 4, 10, 0, 0, 0, 5, 0, 0, 0},
     };
@@ -83,11 +82,17 @@ int main() {
         { std::lock_guard lock(mutex); if (commands.size() >= expected.size()) break; }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    ok &= device.controllerControl(makxd::ControllerControl::LEFT_STICK_X) == -32768;
-    ok &= device.controllerControl(makxd::ControllerControl::RIGHT_STICK_Y) == 32767;
-    ok &= device.controllerControl(makxd::ControllerControl::LEFT_TRIGGER) == 65535;
-    ok &= !device.controllerControl(makxd::ControllerControl::SOUTH).has_value();
-    expected.insert(expected.end(), {{0x41, 12}, {0x41, 15}, {0x41, 10}, {0x41, 0}});
+    ok &= device.controllerStream() == true;
+    ok &= device.inputStream(makxd::StreamKind::Keyboard) == true;
+    ok &= eventCount.load() == 1;
+    expected.insert(expected.end(), {{0x41}, {0x52, 2}});
+    makxd::StreamFrameDecoder decoder;
+    const std::array<uint8_t, 9> trigger{0xde,0xad,4,0,0x53,3,11,0,2};
+    for (auto byte : trigger) decoder.feed(std::span<const uint8_t>(&byte, 1));
+    auto frame = decoder.next();
+    ok &= frame && makxd::decode_input_change(*frame)->value == 512;
+    ok &= !makxd::decode_input_change({0x53,{3,10,0,4}});
+    ok &= !makxd::decode_input_change({0x53,{3,12,1}});
     device.disconnect();
     if (!ok || commands != expected) {
         std::cerr << "Input command records differ from the firmware contract; count="

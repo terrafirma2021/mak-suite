@@ -46,7 +46,9 @@ namespace makxd {
         KEY_REMAP = 0x2A,
         KEY_KEYS = 0x2B,
         CONTROLLER_STATE = 0x40,
-        CONTROLLER_CONTROL = 0x41,
+        CONTROLLER_STREAM = 0x41,
+        INPUT_STREAM = 0x52,
+        INPUT_CHANGE = 0x53,
         CONTROLLER_MASK = 0x51,
     };
 

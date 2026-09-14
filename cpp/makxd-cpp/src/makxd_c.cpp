@@ -594,34 +594,43 @@ makxd_error_t makxd_keyboard_init(makxd_device_t* device) {
     }
 }
 
-makxd_error_t makxd_controller_control_get(
-    makxd_device_t* device, makxd_controller_control_t control, int32_t* value) {
-    const auto id = static_cast<int>(control);
-    if (!device || !value || id < 0 || id > 54) {
-        return MAKXD_ERROR_INVALID_PARAMETER;
-    }
+makxd_error_t makxd_controller_stream(makxd_device_t* device, bool enabled) {
+    if (!device) return MAKXD_ERROR_INVALID_DEVICE;
+    try { return device->cpp_device->controllerStream(enabled) ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; }
+    catch (...) { return handle_exception(); }
+}
+makxd_error_t makxd_controller_stream_get(makxd_device_t* device, bool* enabled) {
+    if (!device || !enabled) return MAKXD_ERROR_INVALID_PARAMETER;
+    try { const auto value = device->cpp_device->controllerStream(); if (!value) return MAKXD_ERROR_COMMAND_FAILED;
+        *enabled = *value; return MAKXD_SUCCESS; } catch (...) { return handle_exception(); }
+}
+makxd_error_t makxd_input_stream(makxd_device_t* device, makxd_stream_kind_t kind, bool enabled) {
+    if (!device || kind < MAKXD_STREAM_MOUSE || kind > MAKXD_STREAM_CONTROLLER) return MAKXD_ERROR_INVALID_PARAMETER;
+    try { return device->cpp_device->inputStream(static_cast<makxd::StreamKind>(kind), enabled) ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED; }
+    catch (...) { return handle_exception(); }
+}
+makxd_error_t makxd_input_stream_get(makxd_device_t* device, makxd_stream_kind_t kind, bool* enabled) {
+    if (!device || !enabled || kind < MAKXD_STREAM_MOUSE || kind > MAKXD_STREAM_CONTROLLER) return MAKXD_ERROR_INVALID_PARAMETER;
+    try { const auto value = device->cpp_device->inputStream(static_cast<makxd::StreamKind>(kind)); if (!value) return MAKXD_ERROR_COMMAND_FAILED;
+        *enabled = *value; return MAKXD_SUCCESS; } catch (...) { return handle_exception(); }
+}
+makxd_error_t makxd_set_input_callback(makxd_device_t* device, makxd_input_callback_t callback, void* user_data) {
+    if (!device) return MAKXD_ERROR_INVALID_DEVICE;
     try {
-        const auto result = device->cpp_device->controllerControl(
-            static_cast<makxd::ControllerControl>(static_cast<uint8_t>(id)));
-        if (!result) return MAKXD_ERROR_COMMAND_FAILED;
-        *value = *result;
+        device->cpp_device->setInputCallback(callback ? makxd::Device::InputCallback([callback, user_data](const makxd::InputChange& event) {
+            const makxd_input_change_t value{static_cast<makxd_stream_kind_t>(event.kind), event.control, event.value, event.overflow};
+            callback(&value, user_data);
+        }) : makxd::Device::InputCallback{});
         return MAKXD_SUCCESS;
     } catch (...) { return handle_exception(); }
 }
-
-makxd_error_t makxd_controller_control(
-    makxd_device_t* device, makxd_controller_control_t control,
-    int32_t value) {
-    const auto id = static_cast<int>(control);
-    if (!device || id < 0 || id > 54) {
-        return MAKXD_ERROR_INVALID_PARAMETER;
-    }
-    try {
-        return device->cpp_device->controllerControl(
-            static_cast<makxd::ControllerControl>(static_cast<uint8_t>(id)),
-            value)
-                ? MAKXD_SUCCESS : MAKXD_ERROR_COMMAND_FAILED;
-    } catch (...) { return handle_exception(); }
+bool makxd_input_change_decode(const uint8_t* bytes, size_t length, makxd_input_change_t* change) {
+    if (!bytes || !change || length < 5 || bytes[0] != 0xde || bytes[1] != 0xad ||
+        length != 5u + static_cast<size_t>(bytes[2] | (static_cast<unsigned>(bytes[3]) << 8))) return false;
+    const auto event = makxd::decode_input_change(makxd::StreamFrame{bytes[4], {bytes + 5, bytes + length}});
+    if (!event) return false;
+    *change = {static_cast<makxd_stream_kind_t>(event->kind), event->control, event->value, event->overflow};
+    return true;
 }
 
 makxd_error_t makxd_controller_mask(
@@ -684,31 +693,6 @@ makxd_error_t makxd_controller_state_set(
     } catch (...) { return handle_exception(); }
 }
 
-bool makxd_controller_stream_decode(
-    const uint8_t* values, size_t values_size,
-    makxd_controller_stream_state_t* state) {
-    if (!values || !state || values_size != 21u) {
-        return false;
-    }
-    const auto u16 = [values](size_t offset) {
-        return static_cast<uint16_t>(
-            values[offset] | (static_cast<uint16_t>(values[offset + 1u]) << 8u));
-    };
-    state->buttons = static_cast<uint32_t>(
-        values[0] | (static_cast<uint32_t>(values[1]) << 8u) |
-        (static_cast<uint32_t>(values[2]) << 16u) |
-        (static_cast<uint32_t>(values[3]) << 24u));
-    state->hat = values[4];
-    state->lt = u16(5u);
-    state->rt = u16(7u);
-    state->x = static_cast<int16_t>(u16(9u));
-    state->y = static_cast<int16_t>(u16(11u));
-    state->rx = static_cast<int16_t>(u16(13u));
-    state->ry = static_cast<int16_t>(u16(15u));
-    state->z = static_cast<int16_t>(u16(17u));
-    state->rz = static_cast<int16_t>(u16(19u));
-    return state->hat <= 8u;
-}
 // Button monitoring
 makxd_error_t makxd_enable_button_monitoring(makxd_device_t* device, bool enable) {
     if (!device) return MAKXD_ERROR_INVALID_DEVICE;

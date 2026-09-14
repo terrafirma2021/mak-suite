@@ -193,18 +193,11 @@ typedef struct {
     int16_t right_stick_y;
 } makxd_controller_state_t;
 
-typedef struct {
-    uint32_t buttons;
-    uint8_t hat;
-    uint16_t lt;
-    uint16_t rt;
-    int16_t x;
-    int16_t y;
-    int16_t rx;
-    int16_t ry;
-    int16_t z;
-    int16_t rz;
-} makxd_controller_stream_state_t;
+typedef enum { MAKXD_STREAM_MOUSE = 1, MAKXD_STREAM_KEYBOARD = 2, MAKXD_STREAM_CONTROLLER = 3 } makxd_stream_kind_t;
+#define MAKXD_STREAM_TRIGGER_MAX 1023u
+typedef struct { makxd_stream_kind_t kind; uint8_t control; uint16_t value; bool overflow; } makxd_input_change_t;
+typedef void (*makxd_input_callback_t)(const makxd_input_change_t* change, void* user_data);
+
 
 typedef struct {
     uint8_t kinds;
@@ -281,10 +274,12 @@ MAKXD_C_API makxd_error_t makxd_keyboard_down(makxd_device_t* device, uint8_t ke
 MAKXD_C_API makxd_error_t makxd_keyboard_up(makxd_device_t* device, uint8_t key);
 MAKXD_C_API makxd_error_t makxd_keyboard_init(makxd_device_t* device);
 
-MAKXD_C_API makxd_error_t makxd_controller_control_get(
-    makxd_device_t* device, makxd_controller_control_t control, int32_t* value);
-MAKXD_C_API makxd_error_t makxd_controller_control(
-    makxd_device_t* device, makxd_controller_control_t control, int32_t value);
+MAKXD_C_API makxd_error_t makxd_controller_stream(makxd_device_t* device, bool enabled);
+MAKXD_C_API makxd_error_t makxd_controller_stream_get(makxd_device_t* device, bool* enabled);
+MAKXD_C_API makxd_error_t makxd_input_stream(makxd_device_t* device, makxd_stream_kind_t kind, bool enabled);
+MAKXD_C_API makxd_error_t makxd_input_stream_get(makxd_device_t* device, makxd_stream_kind_t kind, bool* enabled);
+MAKXD_C_API makxd_error_t makxd_set_input_callback(makxd_device_t* device, makxd_input_callback_t callback, void* user_data);
+MAKXD_C_API bool makxd_input_change_decode(const uint8_t* frame, size_t length, makxd_input_change_t* change);
 MAKXD_C_API makxd_error_t makxd_controller_mask(
     makxd_device_t* device, makxd_controller_control_t control,
     makxd_controller_mask_mode_t mode);
@@ -292,10 +287,6 @@ MAKXD_C_API makxd_error_t makxd_controller_state_get(
     makxd_device_t* device, makxd_controller_state_t* state);
 MAKXD_C_API makxd_error_t makxd_controller_state_set(
     makxd_device_t* device, const makxd_controller_state_t* state);
-MAKXD_C_API bool makxd_controller_stream_decode(
-    const uint8_t* values, size_t values_size,
-    makxd_controller_stream_state_t* state);
-
 // Button monitoring
 MAKXD_C_API makxd_error_t makxd_enable_button_monitoring(makxd_device_t* device, bool enable);
 MAKXD_C_API makxd_error_t makxd_is_button_monitoring_enabled(makxd_device_t* device, bool* enabled);

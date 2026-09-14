@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(makxd-cpp VERSION 1.4.0 LANGUAGES CXX)
+project(makxd-cpp VERSION 2.0.0 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -282,3 +282,10 @@ else()
 endif()
 
 include(CPack)
+
+if(BUILD_TESTING AND TARGET makxd-cpp_static)
+    add_executable(makxd-c-input-stream-tests tests/input_stream_c_tests.c)
+    target_link_libraries(makxd-c-input-stream-tests PRIVATE makxd-cpp_static)
+    set_target_properties(makxd-c-input-stream-tests PROPERTIES LINKER_LANGUAGE CXX)
+    add_test(NAME makxd-c-input-stream COMMAND makxd-c-input-stream-tests)
+endif()

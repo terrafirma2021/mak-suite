@@ -257,6 +257,22 @@ class MakxdController:
         self.transport.enable_button_monitoring(enable)
 
     @maybe_async
+    def input_stream(self, kind, enabled=None):
+        self._check_connection()
+        return self.transport.input_stream(kind, enabled)
+
+    @maybe_async
+    def controller_stream(self, enabled=None):
+        self._check_connection()
+        return self.gamepad.stream(enabled)
+
+    def set_input_callback(self, callback):
+        self.transport.set_input_callback(callback)
+
+    def read_input_change(self, timeout=None):
+        return self.transport.read_input_change(timeout)
+
+    @maybe_async
     def set_button_callback(self, callback: Optional[Callable[[MouseButton, bool], None]]) -> None:
         self._check_connection()
         self.transport.set_button_callback(callback)

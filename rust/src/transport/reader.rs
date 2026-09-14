@@ -4,7 +4,9 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use crossbeam_channel as channel;
 
-use crate::protocol::parser::{ParseEvent, StreamParser};
+use crate::stream::{
+    InputChange, StreamFrame, StreamFrameDecoder, StreamKind, decode_input_change,
+};
 use crate::types::ButtonMask;
 
 use super::PendingResponse;
@@ -30,10 +32,15 @@ pub(crate) fn reader_thread(
     mut port: Box<dyn WirePort>,
     pending_responses: Arc<Mutex<VecDeque<PendingResponse>>>,
     button_subs: Arc<Mutex<Vec<channel::Sender<ButtonMask>>>>,
+    change_subs: Arc<Mutex<Vec<channel::Sender<InputChange>>>>,
     signal: Arc<ReaderSignal>,
     transport_encryption: Option<Arc<TransportEncryption>>,
 ) {
-    let mut parser = StreamParser::new();
+    let mut events = EventSink {
+        button_subs,
+        change_subs,
+        mouse: 0,
+    };
     let mut encrypted_decoder = EncryptedFrameDecoder::new();
     let mut parser_buffer = Vec::with_capacity(512);
     let mut buf = [0u8; 256];
@@ -60,29 +67,17 @@ pub(crate) fn reader_thread(
                             &plaintext,
                             Some(&transaction_nonce),
                             &pending_responses,
+                            &mut events,
                         );
                     }
                     continue;
                 }
-                let mak_api_pending = pending_responses
-                    .lock()
-                    .unwrap()
-                    .front()
-                    .is_some_and(|response| response.expected_opcode.is_some());
-                if mak_api_pending || !parser_buffer.is_empty() {
-                    mak_api_frames_feed(&buf[..n], &mut parser_buffer, &pending_responses);
-                    continue;
-                }
-                for &byte in &buf[..n] {
-                    if let Some(event) = parser.feed(byte) {
-                        match event {
-                            ParseEvent::ButtonEvent(mask) => {
-                                let mut subs = button_subs.lock().unwrap();
-                                subs.retain(|sub| sub.send(ButtonMask(mask)).is_ok());
-                            }
-                        }
-                    }
-                }
+                mak_api_frames_feed(
+                    &buf[..n],
+                    &mut parser_buffer,
+                    &pending_responses,
+                    &mut events,
+                );
             }
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
                 // Check if shutdown was requested during the timeout.
@@ -103,11 +98,62 @@ pub(crate) fn reader_thread(
     cvar.notify_all();
 }
 
+struct EventSink {
+    button_subs: Arc<Mutex<Vec<channel::Sender<ButtonMask>>>>,
+    change_subs: Arc<Mutex<Vec<channel::Sender<InputChange>>>>,
+    mouse: u8,
+}
+impl EventSink {
+    fn deliver(&mut self, event: InputChange) {
+        self.change_subs
+            .lock()
+            .unwrap()
+            .retain(|sub| sub.send(event).is_ok());
+        if event.kind == StreamKind::Mouse {
+            if event.overflow {
+                self.mouse = 0;
+            } else if event.control < 8 {
+                let bit = 1u8 << event.control;
+                if event.value != 0 {
+                    self.mouse |= bit;
+                } else {
+                    self.mouse &= !bit;
+                }
+            }
+            self.button_subs
+                .lock()
+                .unwrap()
+                .retain(|sub| sub.send(ButtonMask(self.mouse)).is_ok());
+        }
+    }
+}
+
 fn mak_api_response_deliver(
     body: &[u8],
     transaction_nonce: Option<&[u8; 12]>,
     pending_responses: &Arc<Mutex<VecDeque<PendingResponse>>>,
+    events: &mut EventSink,
 ) {
+    // Encrypted notifications contain an authenticated complete MAK event frame.
+    if body.starts_with(&[0xde, 0xad]) {
+        let mut decoder = StreamFrameDecoder::new();
+        decoder.feed(body);
+        for frame in decoder {
+            if let Some(event) = decode_input_change(&frame) {
+                events.deliver(event);
+            }
+        }
+        return;
+    }
+    if body.first() == Some(&0x53) {
+        if let Some(event) = decode_input_change(&StreamFrame {
+            command: 0x53,
+            payload: body[1..].to_vec(),
+        }) {
+            events.deliver(event);
+        }
+        return;
+    }
     if body.len() < 2 {
         return;
     }
@@ -130,6 +176,7 @@ fn mak_api_frames_feed(
     data: &[u8],
     buffer: &mut Vec<u8>,
     pending_responses: &Arc<Mutex<VecDeque<PendingResponse>>>,
+    events: &mut EventSink,
 ) {
     const MAX_PAYLOAD: usize = 251;
     buffer.extend_from_slice(data);
@@ -162,7 +209,7 @@ fn mak_api_frames_feed(
         body.push(buffer[4]);
         body.extend_from_slice(&buffer[5..frame_len]);
         buffer.drain(..frame_len);
-        mak_api_response_deliver(&body, None, pending_responses);
+        mak_api_response_deliver(&body, None, pending_responses, events);
     }
 }
 
@@ -180,9 +227,42 @@ mod tests {
             expected_opcode: Some(0x25),
         });
         let mut buffer = Vec::new();
-        mak_api_frames_feed(&[0xde, 0xad, 1], &mut buffer, &pending);
+        let mut events = EventSink {
+            button_subs: Arc::new(Mutex::new(Vec::new())),
+            change_subs: Arc::new(Mutex::new(Vec::new())),
+            mouse: 0,
+        };
+        mak_api_frames_feed(&[0xde, 0xad, 1], &mut buffer, &pending, &mut events);
         assert!(rx.try_recv().is_err());
-        mak_api_frames_feed(&[0, 0x25, 1], &mut buffer, &pending);
+        mak_api_frames_feed(&[0, 0x25, 1], &mut buffer, &pending, &mut events);
         assert_eq!(rx.recv().unwrap(), [0x25, 1]);
+    }
+    #[test]
+    fn events_do_not_consume_pending_nonce_or_opcode() {
+        let pending = Arc::new(Mutex::new(VecDeque::new()));
+        let (reply_tx, reply_rx) = channel::bounded(1);
+        let (event_tx, event_rx) = channel::unbounded();
+        let mut events = EventSink {
+            button_subs: Arc::new(Mutex::new(Vec::new())),
+            change_subs: Arc::new(Mutex::new(vec![event_tx])),
+            mouse: 0,
+        };
+        pending.lock().unwrap().push_back(PendingResponse {
+            response_tx: reply_tx,
+            expected_nonce: Some([1; 12]),
+            expected_opcode: Some(0x52),
+        });
+        mak_api_response_deliver(
+            &[0xde, 0xad, 4, 0, 0x53, 3, 10, 255, 3],
+            Some(&[2; 12]),
+            &pending,
+            &mut events,
+        );
+        assert_eq!(event_rx.recv().unwrap().value, 1023);
+        assert!(reply_rx.try_recv().is_err());
+        mak_api_response_deliver(&[0x52, 1], Some(&[2; 12]), &pending, &mut events);
+        assert!(reply_rx.try_recv().is_err());
+        mak_api_response_deliver(&[0x52, 1], Some(&[1; 12]), &pending, &mut events);
+        assert_eq!(reply_rx.recv().unwrap(), [0x52, 1]);
     }
 }

@@ -105,14 +105,6 @@ def _control(value: ControllerControl | int) -> ControllerControl:
         raise MakxdCommandError("invalid controller control") from error
 
 
-def _control_value(control: ControllerControl, value: int) -> int:
-    if control in (ControllerControl.LEFT_TRIGGER, ControllerControl.RIGHT_TRIGGER):
-        return _integer("value", value, 0, CONTROLLER_TRIGGER_MAX)
-    if ControllerControl.LEFT_STICK_X <= control <= ControllerControl.RIGHT_STICK_Y:
-        return _integer("value", value, -0x8000, 0x7FFF)
-    return _integer("value", value, 0, 1)
-
-
 def _state_validate(state: ControllerState) -> ControllerState:
     return ControllerState(
         _integer("digital_low", state.digital_low, 0, 0xFFFFFFFF),
@@ -136,32 +128,15 @@ class Gamepad:
     def device(self) -> DeviceInfo:
         return self._device()
 
-    def control(
-        self,
-        control: ControllerControl | int,
-        value: int | None = None,
-    ) -> int | None:
-        semantic = _control(control)
-        signed = ControllerControl.LEFT_STICK_X <= semantic <= ControllerControl.RIGHT_STICK_Y
-        if value is None:
-            response = self.transport.send_mak_api(
-                ApiOpcode.CONTROLLER_CONTROL, bytes((semantic,))
-            )
-            if isinstance(response, bytes):
-                if len(response) != 3 or response[0] != semantic:
-                    raise MakxdResponseError("invalid controller control response")
-                return int.from_bytes(response[1:3], "little", signed=signed)
-            return int((response or "").strip())
-
-        checked = _control_value(semantic, value)
-        payload = (
-            bytes((semantic,))
-            + checked.to_bytes(2, "little", signed=signed)
-
-        )
-        self.transport.send_mak_api(
-            ApiOpcode.CONTROLLER_CONTROL, payload, wait_response=False
-        )
+    def stream(self, enabled: bool | None = None) -> bool | None:
+        if enabled is not None and not isinstance(enabled, bool):
+            raise MakxdCommandError("enabled must be bool")
+        response = self.transport.send_mak_api(ApiOpcode.CONTROLLER_STREAM,
+            b"" if enabled is None else bytes((enabled,)), wait_response=enabled is None)
+        if enabled is None:
+            if response not in (b"\x00", b"\x01"):
+                raise MakxdResponseError("invalid controller stream state")
+            return response == b"\x01"
         return None
 
     def mask(

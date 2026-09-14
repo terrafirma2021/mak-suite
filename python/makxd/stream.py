@@ -1,197 +1,103 @@
-"""MAKXD lightweight multi-source input streaming protocol."""
-
+"""Framed, on-change physical input: independent mouse/keyboard/controller kinds."""
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
-import struct
-
-from .protocol import CONTROLLER_TRIGGER_MAX
-
 
 class StreamKind(IntEnum):
     MOUSE = 1
     KEYBOARD = 2
     CONTROLLER = 3
 
-
-STREAM_MASK_MOUSE = 1 << 0
-STREAM_MASK_KEYBOARD = 1 << 1
-STREAM_MASK_CONTROLLER = 1 << 2
-STREAM_MASK_ALL = (STREAM_MASK_MOUSE | STREAM_MASK_KEYBOARD |
-                   STREAM_MASK_CONTROLLER)
-STREAM_COMMAND_INPUT = 0x01
-STREAM_MAX_BODY_BYTES = 252
-STREAM_MAX_PAYLOAD_BYTES = STREAM_MAX_BODY_BYTES - 1
-
-
-class StreamOperation(IntEnum):
-    START = 1
-    STOP = 2
-    STATUS = 3
-
-
-@dataclass(frozen=True)
-class StreamTiming:
-    raw: int
-    dt_uframes: int
-    baseline: bool
-    invalid: bool
-
-    @classmethod
-    def from_raw(cls, raw: int) -> "StreamTiming":
-        return cls(raw, raw & 0x3FFF, bool(raw & 0x4000),
-                   bool(raw & 0x8000))
-
+STREAM_COMMAND = 0x52
+STREAM_EVENT = 0x53
+STREAM_TRIGGER_MAX = 1023
 
 @dataclass(frozen=True)
 class StreamFrame:
     command: int
     payload: bytes
 
-
 @dataclass(frozen=True)
-class StreamControl:
-    operation: int
-    status: int
-    active_mask: int
-
-
-@dataclass(frozen=True)
-class StreamInputRecord:
+class InputChange:
     kind: StreamKind
-    sequence: int
-    timing: StreamTiming
-    values: bytes
+    control: int
+    value: int
+    overflow: bool = False
 
-
-@dataclass(frozen=True)
-class ControllerStreamState:
-    buttons: int
-    hat: int
-    lt: int
-    rt: int
-    x: int
-    y: int
-    rx: int
-    ry: int
-    z: int
-    rz: int
-
+    @property
+    def trigger(self) -> bool:
+        return self.kind == StreamKind.CONTROLLER and self.control in (10, 11)
 
 @dataclass(frozen=True)
 class StreamRequest:
-    operation: StreamOperation
-    source_mask: int = 0
+    kind: StreamKind
+    enabled: Optional[bool] = None
 
-    @classmethod
-    def start(cls, source_mask: int = STREAM_MASK_ALL) -> "StreamRequest":
-        return cls(StreamOperation.START, source_mask & STREAM_MASK_ALL)
-
-    @classmethod
-    def mouse(cls) -> "StreamRequest":
-        return cls.start(STREAM_MASK_MOUSE)
-
-    @classmethod
-    def keyboard(cls) -> "StreamRequest":
-        return cls.start(STREAM_MASK_KEYBOARD)
-
-    @classmethod
-    def controller(cls) -> "StreamRequest":
-        return cls.start(STREAM_MASK_CONTROLLER)
-
-    @classmethod
-    def all(cls) -> "StreamRequest":
-        return cls.start(STREAM_MASK_ALL)
-
-    @classmethod
-    def stop(cls) -> "StreamRequest":
-        return cls(StreamOperation.STOP)
-
-    @classmethod
-    def status(cls) -> "StreamRequest":
-        return cls(StreamOperation.STATUS)
+    def __post_init__(self):
+        object.__setattr__(self, "kind", StreamKind(self.kind))
+        if self.enabled is not None and not isinstance(self.enabled, bool):
+            raise ValueError("enabled must be True, False or None (query)")
 
     def encode(self) -> bytes:
-        return _encode_frame(
-            STREAM_COMMAND_INPUT,
-            bytes((int(self.operation), self.source_mask & STREAM_MASK_ALL)),
-        )
+        payload = bytes((self.kind,))
+        if self.enabled is not None:
+            payload += bytes((self.enabled,))
+        return b"\xDE\xAD" + len(payload).to_bytes(2, "little") + bytes((STREAM_COMMAND,)) + payload
 
+    @classmethod
+    def mouse(cls, enabled: Optional[bool] = True):
+        return cls(StreamKind.MOUSE, enabled)
+    @classmethod
+    def keyboard(cls, enabled: Optional[bool] = True):
+        return cls(StreamKind.KEYBOARD, enabled)
+    @classmethod
+    def controller(cls, enabled: Optional[bool] = True):
+        return cls(StreamKind.CONTROLLER, enabled)
 
 class StreamFrameDecoder:
-    def __init__(self) -> None:
+    def __init__(self):
         self._buffer = bytearray()
-
-    def feed(self, data: bytes) -> None:
+    def feed(self, data: bytes):
         self._buffer.extend(data)
-
     def next(self) -> Optional[StreamFrame]:
         while len(self._buffer) >= 2:
             if self._buffer[:2] != b"\xDE\xAD":
                 del self._buffer[0]
                 continue
-            if len(self._buffer) < 4:
+            if len(self._buffer) < 5:
                 return None
-            payload_len = struct.unpack_from("<H", self._buffer, 2)[0]
-            if payload_len < 1 or payload_len > STREAM_MAX_PAYLOAD_BYTES:
+            length = int.from_bytes(self._buffer[2:4], "little")
+            if length > 251:
                 del self._buffer[0]
                 continue
-            frame_len = 5 + payload_len
-            if len(self._buffer) < frame_len:
+            if len(self._buffer) < 5 + length:
                 return None
-            command = self._buffer[4]
-            payload = bytes(self._buffer[5:frame_len])
-            del self._buffer[:frame_len]
-            return StreamFrame(command, payload)
+            frame = StreamFrame(self._buffer[4], bytes(self._buffer[5:5+length]))
+            del self._buffer[:5+length]
+            return frame
         return None
 
-
-def decode_stream_control(frame: StreamFrame) -> Optional[StreamControl]:
-    if frame.command != STREAM_COMMAND_INPUT or len(frame.payload) != 3:
-        return None
-    return StreamControl(frame.payload[0], frame.payload[1], frame.payload[2])
-
-
-def decode_stream_input_record(
-    frame: StreamFrame,
-) -> Optional[StreamInputRecord]:
-    if frame.command != STREAM_COMMAND_INPUT or len(frame.payload) < 8:
+def decode_input_change(frame: StreamFrame) -> Optional[InputChange]:
+    p = frame.payload
+    if frame.command != STREAM_EVENT or len(p) not in (3, 4):
         return None
     try:
-        kind = StreamKind(frame.payload[0])
+        kind = StreamKind(p[0])
     except ValueError:
         return None
-    sequence = struct.unpack_from("<I", frame.payload, 3)[0]
-    timing = StreamTiming.from_raw(struct.unpack_from("<H", frame.payload, 1)[0])
-    return StreamInputRecord(kind, sequence, timing, frame.payload[7:])
-
-
-def decode_controller_stream(
-    record: StreamInputRecord,
-) -> Optional[ControllerStreamState]:
-    if record.kind != StreamKind.CONTROLLER or len(record.values) != 21:
+    control = p[1]
+    if len(p) == 3 and control == 255 and p[2] == 255:
+        return InputChange(kind, control, 255, True)
+    if kind == StreamKind.CONTROLLER and control in (10, 11):
+        value = int.from_bytes(p[2:], "little")
+        return InputChange(kind, control, value) if len(p) == 4 and value <= STREAM_TRIGGER_MAX else None
+    if len(p) != 3 or p[2] > 1:
         return None
-    state = ControllerStreamState(*struct.unpack("<IBHHhhhhhh", record.values))
-    if state.lt > CONTROLLER_TRIGGER_MAX or state.rt > CONTROLLER_TRIGGER_MAX:
+    if kind == StreamKind.MOUSE and control > 31:
         return None
-    return state
+    if kind == StreamKind.CONTROLLER and (control > 54 or 12 <= control <= 15):
+        return None
+    return InputChange(kind, control, p[2])
 
-
-def _encode_frame(command: int, payload: bytes) -> bytes:
-    if not 0 < len(payload) <= STREAM_MAX_PAYLOAD_BYTES:
-        raise ValueError("stream payload must be between 1 and 251 bytes")
-    return (b"\xDE\xAD" + struct.pack("<H", len(payload)) +
-            bytes((command,)) + payload)
-
-
-__all__ = [
-    "StreamKind", "StreamOperation", "StreamTiming", "StreamFrame",
-    "StreamControl", "StreamInputRecord", "ControllerStreamState",
-    "StreamRequest",
-    "StreamFrameDecoder", "decode_stream_control",
-    "decode_stream_input_record", "decode_controller_stream",
-    "STREAM_MASK_MOUSE", "STREAM_MASK_KEYBOARD",
-    "STREAM_MASK_CONTROLLER", "STREAM_MASK_ALL", "STREAM_COMMAND_INPUT",
-    "STREAM_MAX_BODY_BYTES", "STREAM_MAX_PAYLOAD_BYTES",
-    "CONTROLLER_TRIGGER_MAX",
-]
+__all__ = ["StreamKind", "StreamFrame", "InputChange", "StreamRequest", "StreamFrameDecoder",
+           "STREAM_COMMAND", "STREAM_EVENT", "STREAM_TRIGGER_MAX", "decode_input_change"]

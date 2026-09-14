@@ -44,8 +44,8 @@ class MakApiCaptureTransport:
         self.calls.append(
             (int(opcode), payload, kwargs.get("wait_response", True))
         )
-        if int(opcode) == int(ApiOpcode.CONTROLLER_CONTROL) and len(payload) == 1:
-            return payload[:1] + b"\x01\x00"
+        if int(opcode) == int(ApiOpcode.CONTROLLER_STREAM) and len(payload) == 0:
+            return b"\x01"
         return b""
 
 
@@ -120,67 +120,36 @@ def test_mak_api_mouse_keyboard_and_controller_payloads() -> None:
     mouse.press(MouseButton.LEFT)
     mouse.move(-2, 3)
     keyboard.down("enter")
-    gamepad.control(ControllerControl.LEFT_STICK_X, -4)
+    gamepad.stream(True)
     gamepad.mask(ControllerControl.EXTRA_32, ControllerMaskMode.COMPLETE)
 
     assert transport.calls == [
         (0x11, b"\x01", False),
         (0x18, b"\xFE\xFF\x03\x00", False),
         (0x20, b"\x28", False),
-        (0x41, b"\x0C\xFC\xFF", False),
+        (0x41, b"\x01", False),
         (0x51, b"\x36\x01", False),
     ]
 
 
-def test_mak_api_named_controller_button_hat_and_direction_locks() -> None:
+def test_controller_stream_and_masks():
     transport = MakApiCaptureTransport()
     gamepad = Gamepad(transport)
-
-    assert gamepad.control(ControllerControl.SOUTH) == 1
-    gamepad.control(ControllerControl.EXTRA_32, 0)
-    assert gamepad.control(ControllerControl.DPAD_LEFT) == 1
-    gamepad.control(ControllerControl.DPAD_LEFT, 1)
+    assert gamepad.stream() is True
+    gamepad.stream(False)
     gamepad.mask(ControllerControl.DPAD_RIGHT, ControllerMaskMode.COMPLETE)
-    gamepad.mask(ControllerControl.LEFT_STICK_X, ControllerMaskMode.BOTH)
-
-    assert transport.calls == [
-        (0x41, b"\x00", True),
-        (0x41, b"\x36\x00\x00", False),
-        (0x41, b"\x06", True),
-        (0x41, b"\x06\x01\x00", False),
-        (0x51, b"\x07\x01", False),
-        (0x51, b"\x0C\x04", False),
-    ]
-    assert transport.device_queries == 0
+    assert transport.calls == [(0x41, b"", True), (0x41, b"\x00", False), (0x51, b"\x07\x01", False)]
+    with pytest.raises(MakxdCommandError):
+        gamepad.stream("south")
+    assert not hasattr(gamepad, "control")
 
 
-@pytest.mark.parametrize("control,value,encoded", [
-    (ControllerControl.LEFT_STICK_X, -32768, b"\x00\x80"),
-    (ControllerControl.RIGHT_STICK_Y, 32767, b"\xff\x7f"),
-    (ControllerControl.LEFT_TRIGGER, 1023, b"\xff\x03"),
-    (ControllerControl.SOUTH, 1, b"\x01\x00"),
-])
-def test_controller_control_two_byte_round_trip(control, value, encoded) -> None:
-    transport = MakApiCaptureTransport()
-    gamepad = Gamepad(transport)
-    gamepad.control(control, value)
-    assert transport.calls == [(0x41, bytes([control]) + encoded, False)]
-    transport.send_mak_api = lambda *args, **kwargs: bytes([control]) + encoded
-    assert gamepad.control(control) == value
-
-
-def test_controller_trigger_reply_is_unsigned() -> None:
-    transport = MakApiCaptureTransport()
-    transport.send_mak_api = lambda *args, **kwargs: b"\x0a\xff\xff"
-    assert Gamepad(transport).control(ControllerControl.LEFT_TRIGGER) == 65535
-
-
-@pytest.mark.parametrize("response", [b"", b"\x00\x01", b"\x00\x01\x00\x00\x00", b"\x01\x01\x00"])
-def test_controller_control_rejects_wrong_reply_shape(response) -> None:
+@pytest.mark.parametrize("response", [b"", b"\x02", b"\x00\x01", b"\x0a\xff\xff"])
+def test_controller_stream_rejects_wrong_reply_shape(response):
     transport = MakApiCaptureTransport()
     transport.send_mak_api = lambda *args, **kwargs: response
     with pytest.raises(MakxdResponseError):
-        Gamepad(transport).control(ControllerControl.SOUTH)
+        Gamepad(transport).stream()
 
 
 def test_mak_api_set_writes_without_registering_a_pending_response() -> None:
@@ -246,6 +215,10 @@ def test_raw_udp_silent_set_does_not_own_next_get_transaction(
     assert transport.write_no_response(b"\xDE\xAD\x01\x00\x11\x01") == 6
     assert transport.write(b"\xDE\xAD\x00\x00\x11") == 5
     assert list(transport._raw_transactions) == [b"GET_____"]
+    event = b"\xde\xad\x04\x00\x53\x03\x0a\xff\x03"
+    socket_capture.received.append(b"\x55GET_____" + event)
+    assert transport.read(64) == event
+    assert list(transport._raw_transactions) == [b"GET_____"]
 
     socket_capture.received.extend(
         (
@@ -262,7 +235,7 @@ def test_raw_udp_silent_set_does_not_own_next_get_transaction(
 
 def test_mak_api_controller_has_one_semantic_opcode_set() -> None:
     assert int(ApiOpcode.CONTROLLER_STATE) == 0x40
-    assert int(ApiOpcode.CONTROLLER_CONTROL) == 0x41
+    assert int(ApiOpcode.CONTROLLER_STREAM) == 0x41
     assert int(ApiOpcode.CONTROLLER_MASK) == 0x51
 
 

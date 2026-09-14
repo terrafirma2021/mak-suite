@@ -34,7 +34,9 @@ pub enum ApiOpcode {
     KeyRemap = 0x2a,
     KeyKeys = 0x2b,
     ControllerState = 0x40,
-    ControllerControl = 0x41,
+    ControllerStream = 0x41,
+    InputStream = 0x52,
+    InputChange = 0x53,
     ControllerMask = 0x51,
 }
 
@@ -203,7 +205,7 @@ mod tests {
     #[test]
     fn mak_api_controller_has_one_semantic_opcode_set() {
         assert_eq!(ApiOpcode::ControllerState as u8, 0x40);
-        assert_eq!(ApiOpcode::ControllerControl as u8, 0x41);
+        assert_eq!(ApiOpcode::ControllerStream as u8, 0x41);
         assert_eq!(ApiOpcode::ControllerMask as u8, 0x51);
     }
 
