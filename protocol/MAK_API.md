@@ -205,6 +205,11 @@ MAKCU V17 (firmware `1415209727`) introduces zero-state handoff. Earlier MAKCU
 firmware, including `355179621`, holds zero analogue values instead. Update
 the firmware before relying on the completion sequence below.
 
+MAKXD requires **V12 or later for full `CONTROLLER_STATE` zero handoff**.
+V11 and earlier have a separate zero-release path for individual controls;
+their full-state command does not provide the completion semantics below.
+Use matching updated firmware on both units when routing across a MAKXD pair.
+
 `CONTROLLER_STATE` sends a complete target state, not a relative movement or a
 timed action. Keep sending the desired state while controlling the pad. When
 a stick's movement finishes, send **both coordinates as zero**. A single zero
