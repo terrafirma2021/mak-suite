@@ -118,6 +118,7 @@ class SerialTransport:
         self._command_counter = 0
         self._pending_commands: Dict[int, PendingCommand] = {}
         self._command_lock = threading.Lock()
+        self.configuration_lock = threading.RLock()
         
 
         self._parse_buffer = bytearray(1024)
@@ -273,6 +274,9 @@ class SerialTransport:
             return
         opcode = plaintext[0]
         result = bytes(plaintext[1:])
+        # Unsolicited topology changes are not replies to a settings request.
+        if opcode == 0x3e and len(result) == 13 and result[0] == 0x12:
+            return
         with self._command_lock:
             matching_id = next(
                 (
@@ -663,7 +667,13 @@ class SerialTransport:
         self.serial = None
         self._log("Disconnection completed")
 
-    def send_mak_api(
+    def send_mak_api(self, opcode, payload=b"", timeout=DEFAULT_TIMEOUT, *, wait_response=True) -> bytes:
+        if int(opcode) == 0x3e:
+            with self.configuration_lock:
+                return self._send_mak_api(opcode, payload, timeout, wait_response=wait_response)
+        return self._send_mak_api(opcode, payload, timeout, wait_response=wait_response)
+
+    def _send_mak_api(
         self,
         opcode: int | ApiOpcode,
         payload: bytes = b"",

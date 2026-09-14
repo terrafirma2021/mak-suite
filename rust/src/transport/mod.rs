@@ -47,6 +47,7 @@ pub(crate) struct TransportInner {
     pub shutdown: AtomicBool,
     pub port_name: Mutex<String>,
     device_kinds: Mutex<Option<DeviceKinds>>,
+    settings_lock: Mutex<()>,
 
     // Channel for sending commands to the writer thread.
     // Wrapped in Mutex<Option<>> so shutdown() can drop the sender to unblock
@@ -196,6 +197,7 @@ impl TransportHandle {
         let (write_tx, write_rx) = channel::unbounded::<WritePayload>();
 
         let inner = Arc::new(TransportInner {
+            settings_lock: Mutex::new(()),
             conn_state: AtomicU8::new(ConnectionState::Connected as u8),
             shutdown: AtomicBool::new(false),
             port_name: Mutex::new(port_name),
@@ -242,6 +244,7 @@ impl TransportHandle {
         let button_subs = Arc::new(Mutex::new(Vec::new()));
 
         let inner = Arc::new(TransportInner {
+            settings_lock: Mutex::new(()),
             conn_state: AtomicU8::new(ConnectionState::Connected as u8),
             shutdown: AtomicBool::new(false),
             port_name: Mutex::new("mock".into()),
@@ -281,6 +284,9 @@ impl TransportHandle {
         timeout: Duration,
     ) -> Result<Vec<u8>> {
         self.send_mak_api_submit(opcode, payload, false, timeout)
+    }
+    pub(crate) fn settings_guard(&self)->std::sync::MutexGuard<'_,()> {
+        self.inner.settings_lock.lock().unwrap_or_else(|e|e.into_inner())
     }
 
     pub fn device_kinds(&self, timeout: Duration) -> Result<DeviceKinds> {

@@ -132,6 +132,9 @@ const _: () = {
 };
 
 impl Device {
+    pub fn settings(&self)->crate::settings::DeviceConfiguration {
+        crate::settings::DeviceConfiguration::new(self.transport.clone(),self.config.command_timeout)
+    }
     /// Find and connect to the first available MAKXD device.
     pub fn connect() -> Result<Self> {
         Self::with_config(DeviceConfig::default())
@@ -239,6 +242,9 @@ impl std::fmt::Debug for AsyncDevice {
 
 #[cfg(feature = "async")]
 impl AsyncDevice {
+    pub fn settings(&self)->crate::settings::AsyncDeviceConfiguration {
+        crate::settings::AsyncDeviceConfiguration::new(crate::settings::DeviceConfiguration::new(self.transport.clone(),self.config.command_timeout))
+    }
     /// Find and connect to the first available MAKXD device.
     pub async fn connect() -> Result<Self> {
         Self::with_config(DeviceConfig::default()).await

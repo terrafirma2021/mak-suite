@@ -34,6 +34,7 @@ pub enum ApiOpcode {
     KeyRemap = 0x2a,
     KeyKeys = 0x2b,
     ControllerState = 0x40,
+    Connection = 0x3e,
     ControllerStream = 0x41,
     InputStream = 0x52,
     InputChange = 0x53,

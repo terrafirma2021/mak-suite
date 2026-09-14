@@ -7,6 +7,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include "makxd_settings_types.h"
 
 #define MAKXD_CONTROLLER_TRIGGER_MAX 1023u
 
@@ -322,6 +323,18 @@ typedef struct {
 } makxd_perf_stat_t;
 
 MAKXD_C_API int makxd_profiler_get_stats(makxd_perf_stat_t* stats, int max_stats);
+/* Settings calls: 0 success; firmware statuses 1 saving, 2 busy, 3 stale,
+ * 4 invalid, 5 unsupported, 6 storage failure; 255 transport/host failure.
+ * Apply/import are live. Save persists to NOR. Export never requires Save.
+ * sections=0 selects all supported sections. Export buffer requires 789 bytes. */
+#define MAKXD_SETTINGS_PRESET_MAX_BYTES 789u
+MAKXD_C_API uint8_t makxd_settings_info(makxd_device_t*, makxd_settings_info_t*);
+MAKXD_C_API uint8_t makxd_settings_read(makxd_device_t*, makxd_settings_snapshot_t*);
+MAKXD_C_API uint8_t makxd_settings_apply(makxd_device_t*, const makxd_settings_snapshot_t*, uint8_t sections, makxd_settings_snapshot_t* applied);
+MAKXD_C_API uint8_t makxd_settings_save(makxd_device_t*, const makxd_settings_snapshot_t*, uint8_t sections);
+MAKXD_C_API uint8_t makxd_settings_export(makxd_device_t*, const makxd_settings_snapshot_t*, uint8_t sections, uint8_t* file, size_t capacity, size_t* written);
+MAKXD_C_API uint8_t makxd_settings_import(makxd_device_t*, const uint8_t* file, size_t bytes, makxd_settings_snapshot_t* applied);
+MAKXD_C_API makxd_controller_behavior_t* makxd_settings_controller_behavior(makxd_device_settings_t*, uint8_t channel);
 
 #ifdef __cplusplus
 }

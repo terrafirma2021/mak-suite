@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .mouse import Mouse
 from .keyboard import Keyboard, KeyboardKey
 from .gamepad import Gamepad
+from .settings import DeviceConfiguration
 from .connection import SerialTransport
 from .connection_config import ConnectionConfig
 from .errors import MakxdConnectionError, MakxdResponseError
@@ -48,6 +49,7 @@ class MakxdController:
         self.mouse = Mouse(self.transport)
         self.keyboard = Keyboard(self.transport)
         self.gamepad = Gamepad(self.transport)
+        self.settings = DeviceConfiguration(self.transport)
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._connection_callbacks: List[Callable[[bool], None]] = []
         self._connected = False

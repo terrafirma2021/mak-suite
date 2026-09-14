@@ -48,6 +48,7 @@ set(LIBRARY_SOURCES
     makxd-cpp/src/serialport.cpp
     makxd-cpp/src/makxd_c.cpp
     makxd-cpp/src/transport_encryption.cpp
+    makxd-cpp/src/device_settings.cpp
 )
 
 # Public headers (for distribution)
@@ -56,6 +57,8 @@ set(PUBLIC_HEADERS
     makxd-cpp/include/makxd_c.h
     makxd-cpp/include/makxd_protocol.h
     makxd-cpp/include/makxd_stream.h
+    makxd-cpp/include/device_settings.h
+    makxd-cpp/include/makxd_settings_types.h
 )
 
 # All headers (including internal ones for build)
@@ -284,6 +287,13 @@ endif()
 include(CPack)
 
 if(BUILD_TESTING AND TARGET makxd-cpp_static)
+    if(UNIX)
+        add_executable(makxd-settings-tests tests/device_settings_tests.cpp)
+        target_link_libraries(makxd-settings-tests PRIVATE makxd-cpp_static)
+        target_compile_options(makxd-settings-tests PRIVATE -UNDEBUG)
+        add_test(NAME makxd-settings COMMAND makxd-settings-tests)
+        set_tests_properties(makxd-settings PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
     add_executable(makxd-c-input-stream-tests tests/input_stream_c_tests.c)
     target_link_libraries(makxd-c-input-stream-tests PRIVATE makxd-cpp_static)
     set_target_properties(makxd-c-input-stream-tests PROPERTIES LINKER_LANGUAGE CXX)

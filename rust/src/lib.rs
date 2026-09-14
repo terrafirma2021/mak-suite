@@ -16,6 +16,7 @@ mod device;
 pub mod error;
 pub(crate) mod protocol;
 pub mod stream;
+pub mod settings;
 pub(crate) mod transport;
 pub mod types;
 

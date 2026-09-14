@@ -884,4 +884,34 @@ int makxd_profiler_get_stats(makxd_perf_stat_t* stats, int max_stats) {
     }
 }
 
+uint8_t makxd_settings_info(makxd_device_t* device,makxd_settings_info_t* out) {
+    if(!device || !out)return 4;
+    try {*out=device->cpp_device->deviceSettingsInfo();return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+uint8_t makxd_settings_read(makxd_device_t* device,makxd_settings_snapshot_t* out) {
+    if(!device || !out)return 4;
+    try {*out=device->cpp_device->readDeviceSettings();return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+uint8_t makxd_settings_apply(makxd_device_t* device,const makxd_settings_snapshot_t* value,uint8_t sections,makxd_settings_snapshot_t* out) {
+    if(!device || !value || !out)return 4;
+    try {*out=device->cpp_device->applyDeviceSettings(*value,sections);return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+uint8_t makxd_settings_save(makxd_device_t* device,const makxd_settings_snapshot_t* value,uint8_t sections) {
+    if(!device || !value)return 4;
+    try {device->cpp_device->saveDeviceSettings(*value,sections);return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+uint8_t makxd_settings_export(makxd_device_t* device,const makxd_settings_snapshot_t* value,uint8_t sections,uint8_t* file,size_t capacity,size_t* written) {
+    if(written)*written=0;
+    if(!device || !value || !file || !written || capacity<MAKXD_SETTINGS_PRESET_MAX_BYTES)return 4;
+    try {auto bytes=device->cpp_device->exportDeviceSettings(*value,sections);if(bytes.size()>capacity)return 4;
+        std::memcpy(file,bytes.data(),bytes.size());*written=bytes.size();return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+uint8_t makxd_settings_import(makxd_device_t* device,const uint8_t* file,size_t bytes,makxd_settings_snapshot_t* out) {
+    if(!device || !file || !out)return 4;
+    try {*out=device->cpp_device->importDeviceSettings({file,bytes});return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+makxd_controller_behavior_t* makxd_settings_controller_behavior(makxd_device_settings_t* value,uint8_t channel) {
+    if(!value)return nullptr;
+    try {return &makxd::Device::controllerBehavior(*value,channel);}catch(...){return nullptr;}
+}
 } // extern "C"

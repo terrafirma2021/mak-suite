@@ -338,6 +338,11 @@ namespace Mouse
         public static bool connected = false;
         private static SerialPort port = null;
         private static readonly object ioLock = new object();
+        private static readonly object configurationLock = new object();
+        private static readonly Makxd.DeviceConfiguration deviceConfiguration = new Makxd.DeviceConfiguration(
+            payload => WriteMakApiInternal(0x3e, true, payload), configurationLock);
+        /// <summary>Read and tune live settings; Save persists to NOR, Export creates a portable file.</summary>
+        public static Makxd.DeviceConfiguration settings() => deviceConfiguration;
         private static bool transportEncryptionEnabled = false;
         private static byte[] transportEncryptionKey = null;
         private static ConnectionConfig connectionConfig =
@@ -801,6 +806,8 @@ namespace Mouse
             }
         }
         private static bool QueueInputEvent(byte[] frame) {
+            if (frame != null && ((frame.Length == 14 && frame[0] == 0x3e && frame[1] == 0x12) ||
+                (frame.Length == 18 && frame[0] == 0xde && frame[1] == 0xad && frame[2] == 13 && frame[3] == 0 && frame[4] == 0x3e && frame[5] == 0x12))) return true;
             if (frame == null || frame.Length < 5 || frame[0] != 0xde || frame[1] != 0xad ||
                 frame[4] != 0x53 || frame.Length != 5 + (frame[2] | frame[3] << 8)) return false;
             if (Makxd.StreamProtocol.TryDecodeInputChange(new Makxd.StreamFrame(frame[4], frame.Skip(5).ToArray()), out Makxd.InputChange change)) inputChanges.Enqueue(change);
@@ -1477,6 +1484,7 @@ namespace Mouse
                     if (Makxd.StreamProtocol.TryDecodeInputChange(frame, out Makxd.InputChange change)) inputChanges.Enqueue(change);
                     continue;
                 }
+                if (frame.Command == 0x3e && frame.Payload.Length == 13 && frame.Payload[0] == 0x12) continue;
                 if (frame.Command != expectedCommand) throw new InvalidDataException("Response frame command is invalid");
                 if (frame.Payload.Length < minimumPayloadLength) throw new InvalidDataException("Response frame length is invalid");
                 return includeFrame ? Makxd.StreamProtocol.EncodeFrame(frame.Command, frame.Payload) : frame.Payload;
@@ -1690,4 +1698,3 @@ namespace Mouse
 
     }
 }
-

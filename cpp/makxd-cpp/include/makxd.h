@@ -23,6 +23,7 @@
 #include <memory>
 #include <functional>
 #include <cstdint>
+#include "device_settings.h"
 #include <exception>
 #include <unordered_map>
 #include <atomic>
@@ -295,6 +296,16 @@ namespace makxd {
         // active controls. Silence is not release. See protocol/MAK_API.md.
         // Success means sent, not that firmware handoff/USB output completed.
         [[nodiscard]] bool setControllerState(const ControllerState& state);
+        // Live tuning is separate from movement ownership. Apply/import never
+        // save or reboot. Export reads the supplied live snapshot without Save.
+        // Throws SettingsError on firmware rejection; stale revisions are not overwritten.
+        [[nodiscard]] SettingsInfo deviceSettingsInfo();
+        [[nodiscard]] SettingsSnapshot readDeviceSettings();
+        [[nodiscard]] SettingsSnapshot applyDeviceSettings(const SettingsSnapshot&, uint8_t sections = 0);
+        void saveDeviceSettings(const SettingsSnapshot&, uint8_t sections = 0);
+        [[nodiscard]] std::vector<uint8_t> exportDeviceSettings(const SettingsSnapshot&, uint8_t sections = 0);
+        [[nodiscard]] SettingsSnapshot importDeviceSettings(std::span<const uint8_t> file);
+        static makxd_controller_behavior_t& controllerBehavior(DeviceSettings&, uint8_t channel);
 
         // Button monitoring with optimized processing
         [[nodiscard]] bool enableButtonMonitoring(bool enable = true);

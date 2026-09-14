@@ -36,6 +36,7 @@ class ApiOpcode(IntEnum):
     KEY_MASK = 0x29
     KEY_REMAP = 0x2A
     KEY_KEYS = 0x2B
+    CONNECTION = 0x3E
     CONTROLLER_STATE = 0x40
     CONTROLLER_STREAM = 0x41
     INPUT_STREAM = 0x52

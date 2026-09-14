@@ -3,6 +3,10 @@
 MAK_API is the command interface used by the Python, Rust, C++, C, and C#
 SDKs. Multibyte integers are little-endian.
 
+Live WebUI-equivalent tuning, explicit NOR Save and portable encrypted presets
+are documented in [Device settings](DEVICE_SETTINGS.md). These `CONNECTION`
+(`0x3E`) management transactions have explicit replies, including for mutations.
+
 ## Frame
 
 ```text

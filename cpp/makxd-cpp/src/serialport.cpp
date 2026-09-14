@@ -850,6 +850,7 @@ void SerialPort::handleButtonData(uint8_t data) {
 void SerialPort::processMakApiResponse(
     std::span<const uint8_t> response,
     const std::array<uint8_t, 12>* transactionNonce) {
+    if (response.size() == 14 && response[0] == 0x3e && response[1] == 0x12) return;
     if (response.size() >= 5 && response[0] == 0xde && response[1] == 0xad) {
         const auto length = static_cast<size_t>(response[2] | (static_cast<unsigned>(response[3]) << 8));
         if (response[4] == STREAM_EVENT && response.size() == length + 5)

@@ -12,6 +12,8 @@ pub enum MakxdError {
     Disconnected,
     #[error("protocol error: {0}")]
     Protocol(String),
+    #[error("device settings request failed (status {0})")]
+    Settings(u8),
     #[error("value {value} out of range ({min}..={max})")]
     OutOfRange { value: i64, min: i64, max: i64 },
 }

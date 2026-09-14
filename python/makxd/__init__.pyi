@@ -7,6 +7,14 @@ from .gamepad import (
 )
 from .protocol import ApiOpcode, DeviceInfo, DeviceKind
 from .connection_config import ConnectionConfig, ConnectionMethod, UdpWireMode
+from .settings import (
+    ControllerCurve as ControllerCurve, ControllerBehavior as ControllerBehavior,
+    ControllerSettings as ControllerSettings, ControllerTranslation as ControllerTranslation,
+    ControllerChannel as ControllerChannel, DeviceSettings as DeviceSettings,
+    SettingsInfo as SettingsInfo, SettingsSnapshot as SettingsSnapshot,
+    SettingsSection as SettingsSection, SettingsError as SettingsError,
+    DeviceConfiguration as DeviceConfiguration,
+)
 from .stream import (
     StreamKind, StreamOperation, StreamTiming, StreamFrame,
     StreamControl, StreamInputRecord, ControllerStreamState, StreamRequest,

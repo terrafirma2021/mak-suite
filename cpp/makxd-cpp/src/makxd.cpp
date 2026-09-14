@@ -245,6 +245,14 @@ namespace makxd {
         std::atomic<bool> connected;
         std::atomic<bool> highPerformanceMode;
         mutable std::mutex mutex;
+        std::mutex settingsMutex;
+        detail::SettingsQuery settingsQuery() {
+            return [this](std::span<const uint8_t> p) {
+                if (!connected.load(std::memory_order_acquire)) throw std::runtime_error("Device is disconnected");
+                auto result=serialPort->sendTrackedMakApi(ApiOpcode::CONNECTION,p,std::chrono::seconds(2)).get();
+                return std::vector<uint8_t>(result.begin(),result.end());
+            };
+        }
         static std::string lastError;
 
         // Button state tracking
@@ -1451,4 +1459,37 @@ namespace makxd {
         return MouseButton::UNKNOWN;
     }
 
+SettingsInfo Device::deviceSettingsInfo() {
+    std::lock_guard lock(m_impl->settingsMutex);return detail::settingsInfo(m_impl->settingsQuery());
+}
+SettingsSnapshot Device::readDeviceSettings() {
+    std::lock_guard lock(m_impl->settingsMutex);return detail::settingsRead(m_impl->settingsQuery());
+}
+SettingsSnapshot Device::applyDeviceSettings(const SettingsSnapshot& snapshot,uint8_t sections) {
+    std::lock_guard lock(m_impl->settingsMutex);return detail::settingsApply(m_impl->settingsQuery(),snapshot,sections);
+}
+void Device::saveDeviceSettings(const SettingsSnapshot& snapshot,uint8_t sections) {
+    std::lock_guard lock(m_impl->settingsMutex);detail::settingsSave(m_impl->settingsQuery(),snapshot,sections);
+}
+std::vector<uint8_t> Device::exportDeviceSettings(const SettingsSnapshot& snapshot,uint8_t sections) {
+    std::lock_guard lock(m_impl->settingsMutex);return detail::settingsExport(m_impl->settingsQuery(),snapshot,sections);
+}
+SettingsSnapshot Device::importDeviceSettings(std::span<const uint8_t> file) {
+    std::lock_guard lock(m_impl->settingsMutex);return detail::settingsImport(m_impl->settingsQuery(),file);
+}
+makxd_controller_behavior_t& Device::controllerBehavior(DeviceSettings& settings,uint8_t channel) {
+    if(channel>=4)throw SettingsError(4);
+    auto& c=settings.controller;
+    if(c.profile_count<4) {
+        const auto original=c.behaviors[0];if(!original.enabled)throw SettingsError(4);
+        for(unsigned i=0;i<4;i++) {
+            auto& b=c.behaviors[i];if(!b.enabled)b=(i==3 && c.behaviors[2].enabled)?c.behaviors[2]:original;
+            b.curves[i]=original.curves[i];
+            if(!b.strength_present)b.strength_percent=c.legacy_strengths[std::min(i,2u)];
+            b.strength_present=1;b.curve_enabled=uint8_t(b.curve_enabled || c.curve_enabled);
+        }
+        c.profile_count=4;c.selected_profile=0;
+    }
+    return c.behaviors[channel];
+}
 } // namespace makxd

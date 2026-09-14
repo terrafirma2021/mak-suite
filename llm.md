@@ -107,7 +107,7 @@ target_link_libraries(your_target PRIVATE makxd::makxd-cpp)
 C++ includes `<makxd.h>`; C includes `<makxd_c.h>` and links the same library.
 Keep the full SDK checkout when building so packaging can read the root README.
 
-For C#, compile `csharp/mouse.cs` and `csharp/makxd_stream.cs` into your application
+For C#, compile `csharp/mouse.cs`, `csharp/makxd_stream.cs` and `csharp/makxd_settings.cs` into your application
 or a library and reference `System.IO.Ports` for your target framework. The
 repository's controller check is a .NET 8 project and provides a working example
 of the source and package references.
@@ -199,6 +199,21 @@ git commit -m "Update Mak-suite SDK"
 When changing SDK code itself, make and push the SDK commit first, then update
 the application's submodule pointer. Do not publish firmware, packages, or changes
 to another repository as a side effect of running local build/test commands.
+
+## Live tuning and portable presets
+
+Read [Device settings](protocol/DEVICE_SETTINGS.md) before implementing sliders,
+presets or firmware configuration. Apply each slider change to the MCU live;
+coalesce pending values behind one configuration transaction. Save is explicit
+NOR persistence. Export reads the current MCU values into an encrypted file
+without saving settings; import validates the whole file and applies live.
+Flush pending slider changes before Save or Export. Never reboot for processing
+changes. An edited host snapshot has no effect until Apply succeeds.
+
+Tuning does not release injected movement: send stick `(0,0)` on completion or
+cancellation, and trigger `0` on completion. Firmware performs the handoff.
+Do not add automatic host-side zeroing in every state packet or change unrelated
+channels to simulate per-channel updates.
 
 ## KM NET compatibility client
 

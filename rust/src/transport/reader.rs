@@ -158,6 +158,7 @@ fn mak_api_response_deliver(
         return;
     }
     let opcode = body[0];
+    if body.len()==14 && opcode==0x3e && body[1]==0x12 { return; }
     let mut pending = pending_responses.lock().unwrap();
     let index = pending.iter().position(|response| {
         response.expected_opcode == Some(opcode)
