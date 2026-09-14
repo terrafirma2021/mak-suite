@@ -197,9 +197,9 @@ physical-input masks. Update firmware and SDKs together.
 
 ### MAKCU controller handoff
 
-Requires MAKCU firmware with the zero-state handoff fix; older firmware,
-including `355179621`, holds zero analogue values instead. This section does
-not establish support in a MAKXD firmware release.
+MAKCU V17 (firmware `1415209727`) introduces zero-state handoff. Earlier MAKCU
+firmware, including `355179621`, holds zero analogue values instead. Update
+the firmware before relying on the completion sequence below.
 
 `CONTROLLER_STATE` sends a complete target state, not a relative movement or a
 timed action. Keep sending the desired state while controlling the pad. When
