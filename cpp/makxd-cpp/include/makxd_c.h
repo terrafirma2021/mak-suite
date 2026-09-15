@@ -194,6 +194,14 @@ typedef struct {
     int16_t right_stick_y;
 } makxd_controller_state_t;
 
+typedef struct {
+    makxd_controller_state_t state;
+    uint32_t sequence;
+    uint32_t usb_timestamp;
+    uint16_t timing;
+    uint16_t report_uframes;
+} makxd_controller_snapshot_t;
+
 typedef enum { MAKXD_STREAM_MOUSE = 1, MAKXD_STREAM_KEYBOARD = 2, MAKXD_STREAM_CONTROLLER = 3 } makxd_stream_kind_t;
 #define MAKXD_STREAM_TRIGGER_MAX 1023u
 typedef struct { makxd_stream_kind_t kind; uint8_t control; uint16_t value; bool overflow; } makxd_input_change_t;
@@ -286,6 +294,8 @@ MAKXD_C_API makxd_error_t makxd_controller_mask(
     makxd_controller_mask_mode_t mode);
 MAKXD_C_API makxd_error_t makxd_controller_state_get(
     makxd_device_t* device, makxd_controller_state_t* state);
+MAKXD_C_API makxd_error_t makxd_controller_physical_get(
+    makxd_device_t* device, makxd_controller_snapshot_t* snapshot);
 /* Complete state, not a timed move. MAKCU handoff firmware: send a final
  * (0,0) stick pair / zero trigger when done, retaining other active controls.
  * Silence is not release. See protocol/MAK_API.md for firmware requirements. */

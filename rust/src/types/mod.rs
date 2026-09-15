@@ -8,7 +8,7 @@ mod keyboard;
 pub use button::{Button, ButtonMask};
 pub use connection::{BleConnectionIo, ConnectionConfig, UdpWireMode};
 pub use controller::{
-    CONTROLLER_TRIGGER_MAX, ControllerControl, ControllerMaskMode, ControllerState,
+    CONTROLLER_TRIGGER_MAX, ControllerControl, ControllerMaskMode, ControllerState, ControllerSnapshot,
 };
 pub use device_info::{ConnectionState, DeviceInfo};
 pub(crate) use device_kinds::device_kinds_parse;

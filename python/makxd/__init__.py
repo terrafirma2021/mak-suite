@@ -10,6 +10,7 @@ from .gamepad import (
     ControllerControl,
     ControllerMaskMode,
     ControllerState,
+    ControllerSnapshot,
     Gamepad,
 )
 from .errors import MakxdConnectionError
@@ -37,6 +38,7 @@ __all__ = [
     'ControllerControl',
     'ControllerMaskMode',
     'ControllerState',
+    'ControllerSnapshot',
     'CONTROLLER_TRIGGER_MAX',
     'Gamepad',
     'MakxdConnectionError',

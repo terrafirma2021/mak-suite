@@ -144,3 +144,16 @@ pub struct ControllerState {
     pub right_stick_x: i16,
     pub right_stick_y: i16,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ControllerSnapshot {
+    pub state: ControllerState,
+    pub sequence: u32,
+    pub usb_timestamp: u32,
+    pub timing: u16,
+    pub report_uframes: u16,
+}
+
+impl ControllerSnapshot {
+    pub fn dt_uframes(&self) -> u16 { self.timing & 0x3fff }
+}

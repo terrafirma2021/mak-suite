@@ -5,6 +5,10 @@ SDKs to connect over COM, Ethernet/Wi-Fi UDP, or BLE and work with mouse,
 keyboard, and controller input, physical-input masks, and complete controller state.
 The device's routed kinds determine which operations are available.
 
+Read the user's actual sticks, triggers and buttons with the
+[physical controller snapshot](protocol/CONTROLLER_PHYSICAL.md), including measured
+DT and cadence. Thanks to evol for reporting the controller-state bug.
+
 Streaming is independent by kind. `km.controller(1)` / `(0)` enables or disables
 changed controller buttons and triggers. Triggers use `0..1023`; every event has
 a frame, kind, and control ID. See [streaming](protocol/MAK_API.md#input-change-streams).

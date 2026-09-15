@@ -668,6 +668,24 @@ makxd_error_t makxd_controller_state_get(
     } catch (...) { return handle_exception(); }
 }
 
+makxd_error_t makxd_controller_physical_get(
+    makxd_device_t* device, makxd_controller_snapshot_t* snapshot) {
+    if (!device || !snapshot) return MAKXD_ERROR_INVALID_PARAMETER;
+    try {
+        const auto result = device->cpp_device->controllerPhysical();
+        if (!result) return MAKXD_ERROR_COMMAND_FAILED;
+        const auto& state = result->state;
+        snapshot->state = {static_cast<uint64_t>(state.digitalLow) |
+            (static_cast<uint64_t>(state.digitalHigh) << 32u), state.leftTrigger,
+            state.rightTrigger, state.leftStickX, state.leftStickY, state.rightStickX, state.rightStickY};
+        snapshot->sequence = result->sequence;
+        snapshot->usb_timestamp = result->usbTimestamp;
+        snapshot->timing = result->timing;
+        snapshot->report_uframes = result->reportUframes;
+        return MAKXD_SUCCESS;
+    } catch (...) { return handle_exception(); }
+}
+
 static makxd::ControllerState makxd_controller_state_read(
     const makxd_controller_state_t& state) {
     return {

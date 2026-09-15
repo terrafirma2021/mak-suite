@@ -1335,6 +1335,28 @@ namespace makxd {
         return state;
     }
 
+    std::optional<ControllerSnapshot> Device::controllerPhysical() {
+        const auto response = m_impl->executeApiQuery(ApiOpcode::CONTROLLER_PHYSICAL);
+        if (!response || response->size() != 32u) return std::nullopt;
+        ControllerSnapshot snapshot{};
+        auto& state = snapshot.state;
+        state.digitalLow = readU32(*response, 0u);
+        state.digitalHigh = readU32(*response, 4u);
+        state.leftTrigger = readU16(*response, 8u);
+        state.rightTrigger = readU16(*response, 10u);
+        if (state.leftTrigger > CONTROLLER_TRIGGER_MAX || state.rightTrigger > CONTROLLER_TRIGGER_MAX)
+            return std::nullopt;
+        state.leftStickX = static_cast<int16_t>(readU16(*response, 12u));
+        state.leftStickY = static_cast<int16_t>(readU16(*response, 14u));
+        state.rightStickX = static_cast<int16_t>(readU16(*response, 16u));
+        state.rightStickY = static_cast<int16_t>(readU16(*response, 18u));
+        snapshot.sequence = readU32(*response, 20u);
+        snapshot.usbTimestamp = readU32(*response, 24u);
+        snapshot.timing = readU16(*response, 28u);
+        snapshot.reportUframes = readU16(*response, 30u);
+        return snapshot;
+    }
+
     bool Device::setControllerState(
         const ControllerState& state) {
         if (state.leftTrigger > CONTROLLER_TRIGGER_MAX ||

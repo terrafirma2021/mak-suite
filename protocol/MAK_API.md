@@ -3,6 +3,11 @@
 MAK_API is the command interface used by the Python, Rust, C++, C, and C#
 SDKs. Multibyte integers are little-endian.
 
+Physical controller snapshot: `DE AD 00 00 54` returns 32 bytes containing
+physical controls, sequence, USB timestamp, measured DT/flags and cadence.
+See [the full wire layout and platform timing](CONTROLLER_PHYSICAL.md).
+This is separate from the software-commanded state returned by `0x40`.
+
 Live WebUI-equivalent tuning, explicit NOR Save and portable encrypted presets
 are documented in [Device settings](DEVICE_SETTINGS.md). These `CONNECTION`
 (`0x3E`) management transactions have explicit replies, including for mutations.

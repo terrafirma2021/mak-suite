@@ -11,6 +11,7 @@ int main() {
     std::mutex mutex;
     std::deque<std::vector<uint8_t>> replies;
     std::vector<std::vector<uint8_t>> commands;
+    unsigned physicalQueries = 0;
     auto connection = makxd::ConnectionConfig::ble(
         {}, [](std::string_view) { return true; },
         [&](std::span<const uint8_t> packet) {
@@ -38,6 +39,11 @@ int main() {
                     replies.push_back({0x41,1});
                 }
                 if (packet.size() == 2u && packet[0] == 0x52u) replies.push_back({0x52,1});
+                if (packet.size() == 1u && packet[0] == 0x54u) {
+                    std::vector<uint8_t> response(33u);
+                    response[0]=0x54; response[14]=0x80; response[21]=7; response[29]=8; response[31]=8;
+                    replies.push_back(physicalQueries++ == 0 ? response : std::vector<uint8_t>{0x54,0xff});
+                }
             }
             return true;
         },
@@ -86,6 +92,11 @@ int main() {
     ok &= device.inputStream(makxd::StreamKind::Keyboard) == true;
     ok &= eventCount.load() == 1;
     expected.insert(expected.end(), {{0x41}, {0x52, 2}});
+    const auto physical = device.controllerPhysical();
+    ok &= physical && physical->state.leftStickX == -32768 && physical->sequence == 7 &&
+        physical->dtUframes() == 8 && physical->reportUframes == 8;
+    ok &= !device.controllerPhysical();
+    expected.insert(expected.end(), {{0x54}, {0x54}});
     makxd::StreamFrameDecoder decoder;
     const std::array<uint8_t, 9> trigger{0xde,0xad,4,0,0x53,3,11,0,2};
     for (auto byte : trigger) decoder.feed(std::span<const uint8_t>(&byte, 1));

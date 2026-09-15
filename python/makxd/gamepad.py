@@ -90,6 +90,19 @@ class ControllerState:
     right_stick_y: int = 0
 
 
+@dataclass(frozen=True)
+class ControllerSnapshot:
+    state: ControllerState
+    sequence: int
+    usb_timestamp: int
+    timing: int
+    report_uframes: int
+
+    @property
+    def dt_uframes(self) -> int:
+        return self.timing & 0x3FFF
+
+
 def _integer(name: str, value: int, minimum: int, maximum: int) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise MakxdCommandError(f"{name} must be an integer")
@@ -127,6 +140,17 @@ class Gamepad:
 
     def device(self) -> DeviceInfo:
         return self._device()
+
+    def physical_state(self) -> ControllerSnapshot:
+        """Latest physical controls, before firmware processing or injection."""
+        import struct
+        response = self.transport.send_mak_api(ApiOpcode.CONTROLLER_PHYSICAL)
+        if not isinstance(response, bytes) or len(response) != 32:
+            raise MakxdResponseError("physical controller snapshot unavailable or invalid")
+        values = struct.unpack('<IIHHhhhhIIHH', response)
+        if values[2] > CONTROLLER_TRIGGER_MAX or values[3] > CONTROLLER_TRIGGER_MAX:
+            raise MakxdResponseError("physical controller trigger is outside 0..1023")
+        return ControllerSnapshot(ControllerState(*values[:8]), *values[8:])
 
     def stream(self, enabled: bool | None = None) -> bool | None:
         if enabled is not None and not isinstance(enabled, bool):
@@ -212,5 +236,6 @@ __all__ = [
     "ControllerControl",
     "ControllerMaskMode",
     "ControllerState",
+    "ControllerSnapshot",
     "Gamepad",
 ]

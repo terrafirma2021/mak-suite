@@ -312,6 +312,18 @@ namespace Mouse
         public short RightStickY { get; }
     }
 
+    public readonly struct ControllerSnapshot
+    {
+        public ControllerSnapshot(ControllerState state, uint sequence, uint usbTimestamp, ushort timing, ushort reportUframes)
+        { State = state; Sequence = sequence; UsbTimestamp = usbTimestamp; Timing = timing; ReportUframes = reportUframes; }
+        public ControllerState State { get; }
+        public uint Sequence { get; }
+        public uint UsbTimestamp { get; }
+        public ushort Timing { get; }
+        public ushort ReportUframes { get; }
+        public ushort DtUframes => (ushort)(Timing & 0x3fff);
+    }
+
     public readonly struct DeviceKinds
     {
         internal DeviceKinds(DeviceKind kinds)
@@ -849,6 +861,21 @@ namespace Mouse
                 throw new InvalidDataException(
                     "MAK_API controller trigger response is outside 0..1023");
             return state;
+        }
+
+        public static ControllerSnapshot controller_physical()
+        {
+            if (!connected) throw new InvalidOperationException("Device is not connected");
+            byte[] response = WriteMakApiInternal(0x54, true, Array.Empty<byte>());
+            if (response.Length != 32)
+                throw new InvalidDataException("Physical controller snapshot unavailable or invalid");
+            var state = new ControllerState(ReadUInt32(response, 0) | ((ulong)ReadUInt32(response, 4) << 32),
+                ReadUInt16(response, 8), ReadUInt16(response, 10), ReadInt16(response, 12),
+                ReadInt16(response, 14), ReadInt16(response, 16), ReadInt16(response, 18));
+            if (state.LeftTrigger > ControllerTriggerMax || state.RightTrigger > ControllerTriggerMax)
+                throw new InvalidDataException("Physical controller trigger is outside 0..1023");
+            return new ControllerSnapshot(state, ReadUInt32(response, 20), ReadUInt32(response, 24),
+                ReadUInt16(response, 28), ReadUInt16(response, 30));
         }
 
         // Complete state, not a timed move. MAKCU handoff firmware: finish

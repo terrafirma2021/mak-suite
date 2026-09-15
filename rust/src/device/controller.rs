@@ -1,7 +1,7 @@
 use crate::error::{MakxdError, Result};
 use crate::protocol::api::ApiOpcode;
 use crate::types::{
-    CONTROLLER_TRIGGER_MAX, ControllerControl, ControllerMaskMode, ControllerState,
+    CONTROLLER_TRIGGER_MAX, ControllerControl, ControllerMaskMode, ControllerState, ControllerSnapshot,
 };
 
 use super::Device;
@@ -75,7 +75,23 @@ fn controller_state_parse(value: &[u8]) -> Result<ControllerState> {
     Ok(state)
 }
 
+fn controller_snapshot_parse(value: &[u8]) -> Result<ControllerSnapshot> {
+    if value.len() != 32 {
+        return Err(MakxdError::Protocol("physical controller snapshot unavailable or invalid".into()));
+    }
+    Ok(ControllerSnapshot {
+        state: controller_state_parse(&value[..20])?,
+        sequence: u32::from_le_bytes(value[20..24].try_into().unwrap()),
+        usb_timestamp: u32::from_le_bytes(value[24..28].try_into().unwrap()),
+        timing: u16::from_le_bytes(value[28..30].try_into().unwrap()),
+        report_uframes: u16::from_le_bytes(value[30..32].try_into().unwrap()),
+    })
+}
+
 impl Device {
+    pub fn controller_physical(&self) -> Result<ControllerSnapshot> {
+        controller_snapshot_parse(&self.query_api(ApiOpcode::ControllerPhysical, &[])?)
+    }
     pub fn controller_stream(&self, enabled: bool) -> Result<()> {
         self.write_api(ApiOpcode::ControllerStream, &[u8::from(enabled)])
     }
@@ -112,6 +128,9 @@ use super::AsyncDevice;
 
 #[cfg(feature = "async")]
 impl AsyncDevice {
+    pub async fn controller_physical(&self) -> Result<ControllerSnapshot> {
+        controller_snapshot_parse(&self.query_api(ApiOpcode::ControllerPhysical, &[]).await?)
+    }
     pub async fn controller_stream(&self, enabled: bool) -> Result<()> {
         self.write_api(ApiOpcode::ControllerStream, &[u8::from(enabled)])
             .await
@@ -148,6 +167,26 @@ impl AsyncDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn physical_snapshot_layout_and_errors() {
+        let state = ControllerState { left_trigger: 1023, left_stick_x: -32768,
+            right_stick_y: 32767, ..Default::default() };
+        let mut raw = controller_state_payload(state);
+        raw.extend_from_slice(&u32::MAX.to_le_bytes());
+        raw.extend_from_slice(&1234u32.to_le_bytes());
+        raw.extend_from_slice(&8u16.to_le_bytes());
+        raw.extend_from_slice(&8u16.to_le_bytes());
+        let snapshot = controller_snapshot_parse(&raw).unwrap();
+        assert_eq!(snapshot.state, state);
+        assert_eq!(snapshot.sequence, u32::MAX);
+        assert_eq!(snapshot.usb_timestamp, 1234);
+        assert_eq!(snapshot.dt_uframes(), 8);
+        assert!(controller_snapshot_parse(&[255]).is_err());
+        assert!(controller_snapshot_parse(&raw[..27]).is_err());
+        raw[8] = 0; raw[9] = 4;
+        assert!(controller_snapshot_parse(&raw).is_err());
+    }
 
     #[cfg(feature = "mock")]
     #[test]

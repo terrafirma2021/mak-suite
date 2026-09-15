@@ -47,6 +47,7 @@ namespace makxd {
         KEY_KEYS = 0x2B,
         CONNECTION = 0x3E,
         CONTROLLER_STATE = 0x40,
+        CONTROLLER_PHYSICAL = 0x54,
         CONTROLLER_STREAM = 0x41,
         INPUT_STREAM = 0x52,
         INPUT_CHANGE = 0x53,

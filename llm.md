@@ -5,6 +5,12 @@ application. [README](README.md) describes the repository.
 [MAK_API](protocol/MAK_API.md) and [KM_API](protocol/KM_API.md) are the complete
 command contracts. Keep command tables in those two files.
 
+To read the user's physical sticks, use the [physical snapshot query](protocol/CONTROLLER_PHYSICAL.md),
+not the software-commanded controller state. Preserve measured DT and its flags:
+MAKXD has 125 us resolution; MAKCU has USB-derived 1 ms resolution (encoded as 8
+in shared 125 us units). API polling time is not report DT. Thanks to evol for
+reporting the controller-state bug.
+
 ## Start with the actual source
 
 Read the relevant contract and declarations before writing a call. Method names,

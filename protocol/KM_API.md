@@ -9,6 +9,12 @@ serial use.
 This document lists every accepted `km.*` command and the exact argument,
 result, timing, and failure rules.
 
+`km.controller_physical()` is a read-only physical snapshot query. It returns
+twelve comma-separated integers (digital low/high, LT, RT, LX, LY, RX, RY,
+sequence, USB timestamp, timing, cadence), or `ERR` when unavailable.
+It accepts no arguments. See [physical controller snapshots](CONTROLLER_PHYSICAL.md)
+for DT units, flags, firmware/platform limits and binary opcode `0x54`.
+
 ## Command record
 
 A command is one ASCII record with this shape:

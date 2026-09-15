@@ -50,6 +50,15 @@ namespace makxd {
     };
 
 
+    struct ControllerSnapshot {
+        ControllerState state;
+        uint32_t sequence{};
+        uint32_t usbTimestamp{};
+        uint16_t timing{};
+        uint16_t reportUframes{};
+        [[nodiscard]] uint16_t dtUframes() const { return timing & 0x3fffu; }
+    };
+
     // Forward declaration
     class SerialPort;
 
@@ -291,6 +300,7 @@ namespace makxd {
         [[nodiscard]] bool controllerMask(
             ControllerControl control, ControllerMaskMode mode);
         [[nodiscard]] std::optional<ControllerState> controllerState();
+        [[nodiscard]] std::optional<ControllerSnapshot> controllerPhysical();
         // Complete state, not a timed move. On MAKCU handoff firmware, finish
         // a stick action with its pair (0,0), or a trigger with 0; retain other
         // active controls. Silence is not release. See protocol/MAK_API.md.

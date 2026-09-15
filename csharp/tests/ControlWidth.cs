@@ -8,7 +8,7 @@ using Makxd;
 class ControlWidth {
     static void Check(bool ok) { if (!ok) throw new Exception("Streaming contract mismatch"); }
     static void Main() {
-        var sent = new List<byte[]>(); var replies = new ConcurrentQueue<byte[]>();
+        var sent = new List<byte[]>(); var replies = new ConcurrentQueue<byte[]>(); int physicalQueries = 0;
         var trigger = StreamProtocol.EncodeFrame(0x53, new byte[] {3,10,255,3});
         device.connect(ConnectionConfig.Ble("", _ => true, packet => {
             lock (sent) sent.Add(packet);
@@ -17,6 +17,11 @@ class ControlWidth {
                 replies.Enqueue(trigger); replies.Enqueue(new byte[] {0x41,1});
             }
             if (packet.SequenceEqual(new byte[] {0x52,2})) replies.Enqueue(new byte[] {0x52,0});
+            if (packet.SequenceEqual(new byte[] {0x54})) {
+                var response = new byte[33]; response[0] = 0x54; response[14] = 0x80;
+                response[21] = 7; response[29] = 8; response[31] = 8;
+                replies.Enqueue(physicalQueries++ == 0 ? response : new byte[] {0x54,0xff});
+            }
             return true;
         }, () => replies.TryDequeue(out var reply) ? reply : throw new TimeoutException()));
         try {
@@ -31,6 +36,11 @@ class ControlWidth {
             device.controller_stream(false);
             var expected = new byte[][] {new byte[] {2},new byte[] {0x41,1},new byte[] {0x52,2,1},new byte[] {0x41},new byte[] {0x52,2},new byte[] {0x41,0}};
             lock(sent) Check(sent.Count == expected.Length && !sent.Where((v,i) => !v.SequenceEqual(expected[i])).Any());
+            var snapshot = device.controller_physical();
+            Check(snapshot.State.LeftStickX == -32768 && snapshot.Sequence == 7 && snapshot.DtUframes == 8 && snapshot.ReportUframes == 8);
+            bool unavailable = false;
+            try { device.controller_physical(); } catch (InvalidDataException) { unavailable = true; }
+            Check(unavailable);
             var decoder = new StreamFrameDecoder(); int count = 0;
             foreach (byte b in trigger.Concat(StreamProtocol.EncodeFrame(0x53,new byte[]{3,255,255}))) {
                 decoder.Feed(new byte[]{b}); if (decoder.TryNext(out var frame)) { Check(StreamProtocol.TryDecodeInputChange(frame,out change)); count++; }

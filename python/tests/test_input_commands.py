@@ -16,6 +16,23 @@ from makxd.controller import MakxdController
 import struct
 
 
+def test_physical_controller_snapshot():
+    from makxd.errors import MakxdResponseError
+    transport = CommandTransport()
+    raw = struct.pack('<IIHHhhhhIIHH', 1, 0, 1023, 512, -32768, 32767, -5, 6, 0xFFFFFFFF, 1234, 8, 8)
+    def read(opcode, payload=b'', **kwargs):
+        assert opcode == ApiOpcode.CONTROLLER_PHYSICAL and payload == b''
+        return raw
+    transport.send_mak_api = read
+    gamepad = Gamepad(transport)
+    snapshot = gamepad.physical_state()
+    assert snapshot.state.left_stick_x == -32768 and snapshot.state.right_stick_y == 6
+    assert snapshot.sequence == 0xFFFFFFFF and snapshot.usb_timestamp == 1234
+    for raw in (b'\xff', b'', raw[:-1], raw + b'\0', raw[:8] + b'\x00\x04' + raw[10:]):
+        with pytest.raises(MakxdResponseError):
+            gamepad.physical_state()
+
+
 class CommandTransport:
     def __init__(self) -> None:
         self.api_calls: list[tuple[ApiOpcode, bytes, bool]] = []
