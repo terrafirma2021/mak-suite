@@ -1,5 +1,7 @@
 # Physical controller snapshot
 
+Requires **MAKCU V19+** or **MAKXD V13+**. Update both units of a linked MAKXD pair.
+
 Thanks to evol for reporting the controller-state bug: reading the software-commanded
 state did not reveal the user's physical joystick position. The separate physical
 query below addresses that report while preserving existing callers of `0x40`.
