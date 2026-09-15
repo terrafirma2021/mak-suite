@@ -14,7 +14,7 @@ from .gamepad import (
     Gamepad,
 )
 from .errors import MakxdConnectionError
-from .settings import (DeviceConfiguration, DeviceSettings, SettingsSnapshot, SettingsInfo,
+from .settings import (ControllerPreset, DeviceConfiguration, DeviceSettings, SettingsSnapshot, SettingsInfo,
     SettingsSection, SettingsError, ControllerSettings, ControllerBehavior,
     ControllerCurve, ControllerTranslation, ControllerChannel)
 from .protocol import ApiOpcode, CONTROLLER_TRIGGER_MAX, DeviceInfo, DeviceKind
@@ -28,7 +28,7 @@ __author__ = "terrafirma2021"
 
 # Main exports
 __all__ = [
-    'DeviceConfiguration', 'DeviceSettings', 'SettingsSnapshot', 'SettingsInfo',
+    'ControllerPreset', 'DeviceConfiguration', 'DeviceSettings', 'SettingsSnapshot', 'SettingsInfo',
     'SettingsSection', 'SettingsError', 'ControllerSettings', 'ControllerBehavior',
     'ControllerCurve', 'ControllerTranslation', 'ControllerChannel',
     'MakxdController',

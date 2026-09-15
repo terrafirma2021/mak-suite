@@ -23,6 +23,14 @@ unsent changes in a host object. An external edit or a changed device route
 invalidates an old snapshot; read again, show the new values, and let the caller
 decide which changes to retain. Do not blindly retry an outdated snapshot.
 
+## Persistent controller presets
+
+Use [controller presets](CONTROLLER_PRESETS.md) for hash-addressed controller
+configurations and startup selection. These persist separately from the legacy
+global Save and encrypted settings-file operations described here. An enabled
+controller preset is restored at startup after global settings. WebUI controller
+saves use named presets. Mouse spread continues to use global settings.
+
 ## Capabilities and parameters
 
 `sections` reports the settings available on the connected unit. `kinds` reports

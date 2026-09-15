@@ -906,6 +906,22 @@ uint8_t makxd_settings_info(makxd_device_t* device,makxd_settings_info_t* out) {
     if(!device || !out)return 4;
     try {*out=device->cpp_device->deviceSettingsInfo();return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
 }
+uint8_t makxd_controller_preset_read(makxd_device_t* device,const uint8_t hash[16],makxd_controller_preset_t* out) {
+    if(!device || !device->cpp_device || !hash || !out)return 4;
+    try {auto value=device->cpp_device->readControllerPreset(std::span<const uint8_t,16>(hash,16));out->controller=value.controller;
+        for(unsigned i=0;i<4;i++)out->translation[i]=value.translation[i];return 0;}
+    catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+uint8_t makxd_controller_preset_save(makxd_device_t* device,const uint8_t hash[16],const makxd_settings_snapshot_t* value) {
+    if(!device || !device->cpp_device || !hash || !value)return 4;
+    try {device->cpp_device->saveControllerPreset(std::span<const uint8_t,16>(hash,16),*value);return 0;}
+    catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
+uint8_t makxd_controller_preset_load(makxd_device_t* device,const uint8_t hash[16],makxd_settings_snapshot_t* out) {
+    if(!device || !device->cpp_device || !hash || !out)return 4;
+    try {*out=device->cpp_device->loadControllerPreset(std::span<const uint8_t,16>(hash,16));return 0;}
+    catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}
+}
 uint8_t makxd_settings_read(makxd_device_t* device,makxd_settings_snapshot_t* out) {
     if(!device || !out)return 4;
     try {*out=device->cpp_device->readDeviceSettings();return 0;}catch(const makxd::SettingsError& e){return e.status;}catch(...){return 255;}

@@ -30,3 +30,5 @@ typedef struct {
 } makxd_device_settings_t;
 typedef struct { uint8_t sections,kinds,save_state;uint32_t revision; } makxd_settings_info_t;
 typedef struct { makxd_settings_info_t info;makxd_device_settings_t settings; } makxd_settings_snapshot_t;
+
+typedef struct { makxd_controller_settings_t controller;makxd_controller_translation_t translation[4]; } makxd_controller_preset_t;

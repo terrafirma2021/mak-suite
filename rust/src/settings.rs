@@ -77,6 +77,47 @@ pub struct SettingsSnapshot {
     pub info: SettingsInfo,
     pub settings: DeviceSettings,
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ControllerPreset {
+    pub controller: ControllerSettings,
+    pub translation: [ControllerTranslation; 4],
+}
+fn preset_key(hash: &[u8;16]) -> Result<Vec<u8>> {
+    check(hash.iter().any(|b| *b != 0))?;
+    let mut key=vec![2];key.extend(hash);Ok(key)
+}
+fn preset_complete(q: &mut Query<'_>, response: Vec<u8>) -> Result<()> {
+    check(response.len()==11)?;
+    let deadline=Instant::now()+Duration::from_secs(30);
+    loop {
+        let p=command(q,0x1e,6,&response[3..7],true)?;
+        if p[2]==0 {return Ok(());}
+        if Instant::now()>=deadline {return Err(MakxdError::Timeout);}
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+fn preset_read(q: &mut Query<'_>, hash: &[u8;16]) -> Result<ControllerPreset> {
+    let key=preset_key(hash)?;let mut image=vec![0;400];let mut revision=None;
+    for offset in (0..396usize).step_by(96) {
+        let length=(396-offset).min(96);let mut body=key.clone();
+        body.extend((offset as u16).to_le_bytes());body.push(length as u8);
+        let p=command(q,0x1e,2,&body,false)?;
+        check(p.len()==9+length && u16::from_le_bytes([p[7],p[8]]) as usize==offset)?;
+        let current=u32::from_le_bytes(p[3..7].try_into().unwrap());
+        if revision.is_some_and(|r|r!=current) {return Err(MakxdError::Settings(3));}
+        revision=Some(current);image[offset..offset+length].copy_from_slice(&p[9..]);
+    }
+    let value=DeviceSettings::decode(&image)?;
+    Ok(ControllerPreset{controller:value.controller,translation:value.translation})
+}
+fn preset_save(q: &mut Query<'_>, hash: &[u8;16], snapshot: &SettingsSnapshot) -> Result<()> {
+    let mut body=preset_key(hash)?;body.extend(snapshot.info.revision.to_le_bytes());body.push(0);
+    let response=command(q,0x1e,3,&body,true)?;preset_complete(q,response)
+}
+fn preset_load(q: &mut Query<'_>, hash: &[u8;16]) -> Result<SettingsSnapshot> {
+    let body=preset_key(hash)?;let response=command(q,0x1e,4,&body,true)?;
+    preset_complete(q,response)?;read(q)
+}
 fn check(value: bool) -> Result<()> {
     if value {
         Ok(())
@@ -568,6 +609,17 @@ mod tests {
             assert!(s.settings.controller.buffer_ms >= 1);
             eprintln!("RUST_IMPORT={source}");
         }
+        let hash=[17u8;16];let mut snapshot=read(&mut query).unwrap();
+        snapshot.settings.controller.buffer_ms=27;
+        snapshot=apply(&mut query,&snapshot,CONTROLLER).unwrap();
+        preset_save(&mut query,&hash,&snapshot).unwrap();
+        assert_eq!(preset_read(&mut query,&hash).unwrap().controller.buffer_ms,27);
+        assert_eq!(query(&[0x1e,0]).unwrap()[5],0);
+        snapshot.settings.controller.buffer_ms=28;
+        snapshot=apply(&mut query,&snapshot,CONTROLLER).unwrap();
+        assert_eq!(preset_read(&mut query,&hash).unwrap().controller.buffer_ms,27);
+        preset_save(&mut query,&hash,&snapshot).unwrap();query(&[0xf0]).unwrap();
+        assert_eq!(preset_load(&mut query,&hash).unwrap().settings.controller.buffer_ms,28);
         drop(query);
         drop(input);
         assert!(child.wait().unwrap().success());
@@ -600,6 +652,15 @@ impl DeviceConfiguration {
     }
     pub fn save(&self, value: &SettingsSnapshot, sections: u8) -> Result<()> {
         self.run(|q| save(q, value, sections))
+    }
+    pub fn read_controller_preset(&self, hash: &[u8;16]) -> Result<ControllerPreset> {
+        self.run(|q| preset_read(q,hash))
+    }
+    pub fn save_controller_preset(&self, hash: &[u8;16], snapshot: &SettingsSnapshot) -> Result<()> {
+        self.run(|q| preset_save(q,hash,snapshot))
+    }
+    pub fn load_controller_preset(&self, hash: &[u8;16]) -> Result<SettingsSnapshot> {
+        self.run(|q| preset_load(q,hash))
     }
     pub fn export_preset(&self, value: &SettingsSnapshot, sections: u8) -> Result<Vec<u8>> {
         self.run(|q| export(q, value, sections))
@@ -635,6 +696,15 @@ impl AsyncDeviceConfiguration {
     }
     pub async fn save(&self, value: SettingsSnapshot, sections: u8) -> Result<()> {
         self.run(move |s| s.save(&value, sections)).await
+    }
+    pub async fn read_controller_preset(&self, hash: [u8;16]) -> Result<ControllerPreset> {
+        self.run(move |s|s.read_controller_preset(&hash)).await
+    }
+    pub async fn save_controller_preset(&self, hash: [u8;16], snapshot: SettingsSnapshot) -> Result<()> {
+        self.run(move |s|s.save_controller_preset(&hash,&snapshot)).await
+    }
+    pub async fn load_controller_preset(&self, hash: [u8;16]) -> Result<SettingsSnapshot> {
+        self.run(move |s|s.load_controller_preset(&hash)).await
     }
     pub async fn export_preset(&self, value: SettingsSnapshot, sections: u8) -> Result<Vec<u8>> {
         self.run(move |s| s.export_preset(&value, sections)).await

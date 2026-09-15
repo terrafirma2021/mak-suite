@@ -310,6 +310,9 @@ namespace makxd {
         // save or reboot. Export reads the supplied live snapshot without Save.
         // Throws SettingsError on firmware rejection; stale revisions are not overwritten.
         [[nodiscard]] SettingsInfo deviceSettingsInfo();
+    ControllerPreset readControllerPreset(std::span<const uint8_t,16> hash);
+    void saveControllerPreset(std::span<const uint8_t,16> hash,const SettingsSnapshot& snapshot);
+    SettingsSnapshot loadControllerPreset(std::span<const uint8_t,16> hash);
         [[nodiscard]] SettingsSnapshot readDeviceSettings();
         [[nodiscard]] SettingsSnapshot applyDeviceSettings(const SettingsSnapshot&, uint8_t sections = 0);
         void saveDeviceSettings(const SettingsSnapshot&, uint8_t sections = 0);

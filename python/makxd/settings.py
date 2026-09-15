@@ -214,6 +214,12 @@ class SettingsSnapshot:
     settings: DeviceSettings
 
 
+@dataclass
+class ControllerPreset:
+    controller: ControllerSettings
+    translation: list[ControllerTranslation]
+
+
 class DeviceConfiguration:
     def __init__(self, transport):
         self._transport = transport
@@ -292,6 +298,57 @@ class DeviceConfiguration:
                 if time.monotonic() >= deadline:
                     raise TimeoutError("Settings save is still pending; read info before retrying")
                 time.sleep(.02)
+
+    @staticmethod
+    def _preset_key(hash_id):
+        if not isinstance(hash_id, (bytes, bytearray)) or len(hash_id) != 16 or not any(hash_id):
+            raise ValueError("Preset hash must be 16 nonzero identifier bytes")
+        return b"\x02" + bytes(hash_id)
+
+    def _preset_complete(self, response):
+        if len(response) != 11:
+            raise SettingsError(4, "Invalid preset transaction")
+        deadline = time.monotonic() + 30
+        while True:
+            status = self._request(0x1e, 6, response[3:7], pending=True)[2]
+            if not status:
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Preset operation is still pending")
+            time.sleep(.02)
+
+    def read_controller_preset(self, hash_id: bytes) -> ControllerPreset:
+        """Read a saved controller preset by its hash; does not enable it."""
+        key = self._preset_key(hash_id)
+        with self._lock:
+            image, revision = bytearray(), None
+            for offset in range(0, 396, 96):
+                length = min(96, 396-offset)
+                p = self._request(0x1e, 2, key + struct.pack("<HB", offset, length))
+                if len(p) != 9+length or struct.unpack_from("<H", p, 7)[0] != offset:
+                    raise SettingsError(4)
+                current = struct.unpack_from("<I", p, 3)[0]
+                if revision is not None and current != revision:
+                    raise SettingsError(3, "Preset changed during read")
+                revision = current
+                image.extend(p[9:])
+            value = DeviceSettings._decode(bytes(image) + bytes(4))
+            return ControllerPreset(value.controller, value.translation)
+
+    def save_controller_preset(self, hash_id: bytes, snapshot: SettingsSnapshot | None = None) -> None:
+        """Save current controller tuning to NOR. Same hash overwrites its preset."""
+        key = self._preset_key(hash_id)
+        with self._lock:
+            snapshot = snapshot or self.read()
+            self._preset_complete(self._request(0x1e, 3,
+                key + struct.pack("<IB", snapshot.info.revision, 0), pending=True))
+
+    def load_controller_preset(self, hash_id: bytes) -> SettingsSnapshot:
+        """Enable the hashed preset and remember it for startup; unknown hash errors."""
+        key = self._preset_key(hash_id)
+        with self._lock:
+            self._preset_complete(self._request(0x1e, 4, key, pending=True))
+            return self.read()
 
     def _seal(self, plain):
         digest = hashlib.sha256(plain).digest()

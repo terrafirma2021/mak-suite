@@ -339,6 +339,9 @@ MAKXD_C_API int makxd_profiler_get_stats(makxd_perf_stat_t* stats, int max_stats
  * sections=0 selects all supported sections. Export buffer requires 789 bytes. */
 #define MAKXD_SETTINGS_PRESET_MAX_BYTES 789u
 MAKXD_C_API uint8_t makxd_settings_info(makxd_device_t*, makxd_settings_info_t*);
+MAKXD_C_API uint8_t makxd_controller_preset_read(makxd_device_t*,const uint8_t hash[16],makxd_controller_preset_t*);
+MAKXD_C_API uint8_t makxd_controller_preset_save(makxd_device_t*,const uint8_t hash[16],const makxd_settings_snapshot_t*);
+MAKXD_C_API uint8_t makxd_controller_preset_load(makxd_device_t*,const uint8_t hash[16],makxd_settings_snapshot_t*);
 MAKXD_C_API uint8_t makxd_settings_read(makxd_device_t*, makxd_settings_snapshot_t*);
 MAKXD_C_API uint8_t makxd_settings_apply(makxd_device_t*, const makxd_settings_snapshot_t*, uint8_t sections, makxd_settings_snapshot_t* applied);
 MAKXD_C_API uint8_t makxd_settings_save(makxd_device_t*, const makxd_settings_snapshot_t*, uint8_t sections);

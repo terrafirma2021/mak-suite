@@ -136,6 +136,38 @@ SettingsInfo settingsInfo(const SettingsQuery& query) {
     auto p=command(query,0x1d,0);check(p.size()==14 && p[3]==1 && !(p[4]&~7) && !(p[5]&~7) && !p[7] && u16(p,12)==400);
     return {p[4],p[5],p[6],u32(p,8)};
 }
+namespace {
+std::vector<uint8_t> presetKey(std::span<const uint8_t,16> hash) {
+    check(std::any_of(hash.begin(),hash.end(),[](uint8_t b){return b!=0;}));
+    std::vector<uint8_t> key{2};key.insert(key.end(),hash.begin(),hash.end());return key;
+}
+void presetComplete(const SettingsQuery& query,const std::vector<uint8_t>& response) {
+    check(response.size()==11);const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while(command(query,0x1e,6,std::span(response).subspan(3,4),true)[2]) {
+        if(std::chrono::steady_clock::now()>=deadline)throw std::runtime_error("Preset operation is still pending");
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+}
+}
+ControllerPreset controllerPresetRead(const SettingsQuery& query,std::span<const uint8_t,16> hash) {
+    auto key=presetKey(hash);std::array<uint8_t,400> image{};uint32_t revision=0;
+    for(unsigned offset=0;offset<396;offset+=96) {
+        unsigned length=std::min(96u,396u-offset);auto body=key;
+        body.push_back(uint8_t(offset));body.push_back(uint8_t(offset>>8));body.push_back(uint8_t(length));
+        auto p=command(query,0x1e,2,body);check(p.size()==9+length && u16(p,7)==offset);
+        if(offset && revision!=u32(p,3))throw SettingsError(3);
+        revision=u32(p,3);std::copy(p.begin()+9,p.end(),image.begin()+offset);
+    }
+    auto decoded=settingsDecode(image);ControllerPreset result{};result.controller=decoded.controller;
+    std::copy(std::begin(decoded.translation),std::end(decoded.translation),result.translation.begin());return result;
+}
+void controllerPresetSave(const SettingsQuery& query,std::span<const uint8_t,16> hash,const SettingsSnapshot& snapshot) {
+    auto body=presetKey(hash);body.resize(22);put32(body,17,snapshot.info.revision);
+    presetComplete(query,command(query,0x1e,3,body,true));
+}
+SettingsSnapshot controllerPresetLoad(const SettingsQuery& query,std::span<const uint8_t,16> hash) {
+    auto body=presetKey(hash);presetComplete(query,command(query,0x1e,4,body,true));return settingsRead(query);
+}
 SettingsSnapshot settingsRead(const SettingsQuery& query) {
     auto info=settingsInfo(query);std::array<uint8_t,400> image{};
     for(unsigned offset=0;offset<400;offset+=96){auto length=std::min(96u,400-offset);std::array<uint8_t,7> p{};

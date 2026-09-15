@@ -7,6 +7,7 @@
 #include <vector>
 namespace makxd {
 using DeviceSettings=makxd_device_settings_t;
+struct ControllerPreset { makxd_controller_settings_t controller; std::array<makxd_controller_translation_t,4> translation; };
 using SettingsInfo=makxd_settings_info_t;
 using SettingsSnapshot=makxd_settings_snapshot_t;
 class SettingsError: public std::runtime_error {
@@ -18,6 +19,9 @@ namespace detail {
 using SettingsQuery=std::function<std::vector<uint8_t>(std::span<const uint8_t>)>;
 std::array<uint8_t,400> settingsEncode(const DeviceSettings& value);
 DeviceSettings settingsDecode(std::span<const uint8_t> image);
+ControllerPreset controllerPresetRead(const SettingsQuery& query,std::span<const uint8_t,16> hash);
+void controllerPresetSave(const SettingsQuery& query,std::span<const uint8_t,16> hash,const SettingsSnapshot& snapshot);
+SettingsSnapshot controllerPresetLoad(const SettingsQuery& query,std::span<const uint8_t,16> hash);
 SettingsInfo settingsInfo(const SettingsQuery& query);
 SettingsSnapshot settingsRead(const SettingsQuery& query);
 SettingsSnapshot settingsApply(const SettingsQuery& query,const SettingsSnapshot& snapshot,uint8_t sections);

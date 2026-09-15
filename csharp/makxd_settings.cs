@@ -151,6 +151,11 @@ namespace Makxd
         }
     }
     /// <summary>MCU-owned live tuning. Apply/import affect output immediately. Save alone persists settings to NOR.</summary>
+    public sealed class ControllerPreset
+    {
+        public ControllerSettings Controller;
+        public ControllerTranslation[] Translation;
+    }
     public sealed class DeviceConfiguration
     {
         private readonly Func<byte[], byte[]> query;
@@ -164,6 +169,48 @@ namespace Makxd
             byte[] p=query(new byte[] {record, operation}.Concat(data ?? Array.Empty<byte>()).ToArray());
             if (p == null || p.Length < 3 || p[0] != record || p[1] != operation) throw new SettingsException(5);
             if (p[2] != 0 && !(pending && p[2] == 1)) throw new SettingsException(p[2]); return p;
+        }
+        private static byte[] PresetKey(byte[] hash)
+        {
+            if (hash == null || hash.Length != 16 || !hash.Any(v => v != 0)) throw new ArgumentException("Preset hash must be 16 bytes and nonzero", nameof(hash));
+            return new byte[] {2}.Concat(hash).ToArray();
+        }
+        private void PresetComplete(byte[] response)
+        {
+            SettingsCodec.Check(response.Length == 11); var timer=Stopwatch.StartNew();
+            while (Request(0x1e, 6, SettingsCodec.Part(response, 3, 4), true)[2] != 0) {
+                if (timer.Elapsed.TotalSeconds >= 30) throw new TimeoutException("Preset operation is still pending");
+                Thread.Sleep(20);
+            }
+        }
+        public ControllerPreset ReadControllerPreset(byte[] hash)
+        {
+            var key=PresetKey(hash);
+            lock (sync) {
+                var image=new byte[400]; uint? revision=null;
+                for (int offset=0; offset<396; offset+=96) {
+                    int length=Math.Min(96,396-offset);
+                    var p=Request(0x1e,2,key.Concat(new byte[] {(byte)offset,(byte)(offset>>8),(byte)length}).ToArray());
+                    SettingsCodec.Check(p.Length==9+length && SettingsCodec.U16(p,7)==offset);
+                    uint current=SettingsCodec.U32(p,3); if (revision.HasValue && current!=revision.Value) throw new SettingsException(3);
+                    revision=current;Array.Copy(p,9,image,offset,length);
+                }
+                var value=SettingsCodec.Decode(image);
+                return new ControllerPreset { Controller=value.Controller, Translation=value.Translation };
+            }
+        }
+        public void SaveControllerPreset(byte[] hash, SettingsSnapshot snapshot=null)
+        {
+            var key=PresetKey(hash);
+            lock(sync) {
+                snapshot=snapshot??Read();
+                PresetComplete(Request(0x1e,3,key.Concat(Word(snapshot.Info.Revision)).Concat(new byte[] {0}).ToArray(),true));
+            }
+        }
+        public SettingsSnapshot LoadControllerPreset(byte[] hash)
+        {
+            var key=PresetKey(hash);
+            lock(sync) {PresetComplete(Request(0x1e,4,key,true));return Read();}
         }
         private static byte[] Word(uint value) { var p=new byte[4]; SettingsCodec.Put(p, 0, value); return p; }
         private static byte Mask(SettingsSnapshot s, SettingsSection? sections)

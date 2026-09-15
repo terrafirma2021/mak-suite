@@ -38,6 +38,26 @@ class DeviceSettingsTests(unittest.TestCase):
     def saved_count(self):
         return int.from_bytes(self.wire.send_mak_api(0x3e, b"\xf1"), "little")
 
+    def test_controller_hash_presets_persist_and_stay_hidden(self):
+        key=bytes.fromhex("0102030405060708090a0b0c0d0e0f10")
+        value=self.api.read();value.settings.controller.buffer_ms=21
+        value=self.api.apply(value,SettingsSection.CONTROLLER)
+        self.api.save_controller_preset(key,value)
+        self.assertEqual(self.api.read_controller_preset(key).controller.buffer_ms,21)
+        public=self.wire.send_mak_api(0x3e,b"\x1e\x00")
+        self.assertEqual(public[5:10],bytes(5))
+        value.settings.controller.buffer_ms=24
+        value=self.api.apply(value,SettingsSection.CONTROLLER)
+        self.assertEqual(self.api.read_controller_preset(key).controller.buffer_ms,21)
+        self.api.save_controller_preset(key,value)
+        self.wire.send_mak_api(0x3e,b"\xf0")
+        self.assertEqual(self.api.read().settings.controller.buffer_ms,24)
+        self.assertEqual(self.api.load_controller_preset(key).settings.controller.buffer_ms,24)
+        with self.assertRaises(SettingsError) as missing:
+            self.api.load_controller_preset(bytes([2])*16)
+        self.assertEqual(missing.exception.status,7)
+        with self.assertRaises(ValueError):self.api.save_controller_preset(bytes(16))
+
     def test_live_save_and_export_are_separate(self):
         original = self.api.read()
         tuned = deepcopy(original)

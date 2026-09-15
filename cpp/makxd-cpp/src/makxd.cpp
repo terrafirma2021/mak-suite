@@ -1481,6 +1481,15 @@ namespace makxd {
         return MouseButton::UNKNOWN;
     }
 
+ControllerPreset Device::readControllerPreset(std::span<const uint8_t,16> hash) {
+    std::lock_guard lock(m_impl->settingsMutex);return detail::controllerPresetRead(m_impl->settingsQuery(),hash);
+}
+void Device::saveControllerPreset(std::span<const uint8_t,16> hash,const SettingsSnapshot& snapshot) {
+    std::lock_guard lock(m_impl->settingsMutex);detail::controllerPresetSave(m_impl->settingsQuery(),hash,snapshot);
+}
+SettingsSnapshot Device::loadControllerPreset(std::span<const uint8_t,16> hash) {
+    std::lock_guard lock(m_impl->settingsMutex);return detail::controllerPresetLoad(m_impl->settingsQuery(),hash);
+}
 SettingsInfo Device::deviceSettingsInfo() {
     std::lock_guard lock(m_impl->settingsMutex);return detail::settingsInfo(m_impl->settingsQuery());
 }

@@ -25,6 +25,14 @@ int main() {
     s=detail::settingsImport(query,file);assert(s.settings.controller.buffer_ms==29);
     auto bad=file;bad.back()^=1;bool rejected=false;try{detail::settingsImport(query,bad);}catch(const SettingsError&){rejected=true;}assert(rejected);
     detail::settingsSave(query,s,MAKXD_SETTINGS_CONTROLLER);query(reset);assert(detail::settingsRead(query).settings.controller.buffer_ms==29);
+    std::array<uint8_t,16> presetHash{};presetHash[0]=17;
+    s=detail::settingsRead(query);s.settings.controller.buffer_ms=25;s=detail::settingsApply(query,s,1);
+    detail::controllerPresetSave(query,presetHash,s);assert(detail::controllerPresetRead(query,presetHash).controller.buffer_ms==25);
+    const uint8_t catalog[]={0x1e,0};assert(query(catalog)[5]==0);
+    s.settings.controller.buffer_ms=26;s=detail::settingsApply(query,s,1);
+    assert(detail::controllerPresetRead(query,presetHash).controller.buffer_ms==25);
+    detail::controllerPresetSave(query,presetHash,s);query(reset);
+    assert(detail::controllerPresetLoad(query,presetHash).settings.controller.buffer_ms==26);
     std::filesystem::path folder(std::getenv("MAKXD_SETTINGS_ARTIFACTS"));std::ofstream exported(folder/"cpp.makxd-settings",std::ios::binary);exported.write(reinterpret_cast<const char*>(file.data()),file.size());exported.close();
     for(const char* source:{"python","web","rust","csharp"}) {auto name=folder/(std::string(source)+".makxd-settings");if(!std::filesystem::exists(name))continue;
         std::ifstream stream(name,std::ios::binary);std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(stream)),{});assert(detail::settingsImport(query,bytes).settings.controller.buffer_ms>=1);printf("CPP_IMPORT=%s\n",source);}

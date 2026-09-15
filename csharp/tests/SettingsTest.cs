@@ -26,6 +26,16 @@ internal static class SettingsTest
                 s=api.ImportPreset(File.ReadAllBytes(path)); Check(s.Settings.Controller.BufferMs >= 1);
                 Console.WriteLine("CSHARP_IMPORT="+source);
             }
+            var hash=Enumerable.Range(1,16).Select(i=>(byte)i).ToArray();
+            s=api.Read();s.Settings.Controller.BufferMs=22;s=api.Apply(s,SettingsSection.Controller);
+            api.SaveControllerPreset(hash,s);Check(api.ReadControllerPreset(hash).Controller.BufferMs==22);
+            Check(Query(new byte[] {0x1e,0})[5]==0);
+            s.Settings.Controller.BufferMs=23;s=api.Apply(s,SettingsSection.Controller);
+            Check(api.ReadControllerPreset(hash).Controller.BufferMs==22);api.SaveControllerPreset(hash,s);
+            Query(new byte[] {0xf0});Check(api.Read().Settings.Controller.BufferMs==23);
+            Check(api.LoadControllerPreset(hash).Settings.Controller.BufferMs==23);
+            try {api.LoadControllerPreset(Enumerable.Repeat((byte)99,16).ToArray());throw new Exception("Unknown hash loaded");}
+            catch(SettingsException error) {Check(error.Status==7);}
             Console.WriteLine("CSHARP_SETTINGS=success live=1 export_unsaved=1 save_reboot=1 corrupt_rejected=1"); return 0;
         } finally { peer.StandardInput.Close(); peer.WaitForExit(5000); }
     }
